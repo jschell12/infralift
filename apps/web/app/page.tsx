@@ -161,6 +161,7 @@ export default function Home() {
               </div>
               <p>Keep the dashboard after migration</p>
               <ul>
+                <li>Unlimited users</li>
                 <li>Drift detection & alerts</li>
                 <li>IaC standards enforcement</li>
                 <li>Workspace management</li>
