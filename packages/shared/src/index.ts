@@ -1,6 +1,12 @@
 // Shared types for infralift — used by api, dashboard, and web.
 
-export const PROVIDERS = ["vercel", "cloudflare", "heroku", "aws"] as const;
+export const PROVIDERS = [
+  "vercel",
+  "cloudflare",
+  "heroku",
+  "aws",
+  "firebase",
+] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
 export const PROVIDER_LABELS: Record<Provider, string> = {
@@ -8,6 +14,7 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
   cloudflare: "Cloudflare",
   heroku: "Heroku",
   aws: "AWS",
+  firebase: "Firebase / GCP",
 };
 
 export type AssessmentStatus =

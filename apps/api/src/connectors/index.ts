@@ -4,12 +4,14 @@ import { vercelConnector } from "./vercel.js";
 import { cloudflareConnector } from "./cloudflare.js";
 import { herokuConnector } from "./heroku.js";
 import { awsConnector } from "./aws.js";
+import { firebaseConnector } from "./firebase.js";
 
 const connectors: Record<Provider, Connector> = {
   vercel: vercelConnector,
   cloudflare: cloudflareConnector,
   heroku: herokuConnector,
   aws: awsConnector,
+  firebase: firebaseConnector,
 };
 
 export function getConnector(provider: Provider): Connector {

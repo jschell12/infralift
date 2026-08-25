@@ -24,7 +24,7 @@ export default function Home() {
         <section className="hero">
           <div className="badge">Fixed fee. No hourly billing. Ever.</div>
           <h1>
-            Get off Vercel, Heroku, or AWS.
+            Get off Vercel, Heroku, Firebase, or AWS.
             <br />
             Keep everything as Terraform.
           </h1>
@@ -53,9 +53,10 @@ export default function Home() {
               <div className="step-num">1</div>
               <h3>Connect read-only</h3>
               <p>
-                Create a read-only API token for Vercel, Heroku, Cloudflare, or
-                an AWS ReadOnlyAccess role. Tokens are encrypted at rest and
-                never used to change anything.
+                Create a read-only API token for Vercel, Heroku, or Cloudflare,
+                an AWS ReadOnlyAccess role, or a Firebase/GCP Viewer service
+                account. Credentials are encrypted at rest and never used to
+                change anything.
               </p>
             </div>
             <div className="card">

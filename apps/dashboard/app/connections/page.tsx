@@ -42,6 +42,16 @@ const SCOPE_HELP: Record<Provider, React.ReactNode> = {
       <code>{"{"}&quot;roleArn&quot;, &quot;externalId&quot;{"}"}</code>).
     </>
   ),
+  firebase: (
+    <>
+      Create a service account in{" "}
+      <code>console.cloud.google.com/iam-admin/serviceaccounts</code> with the{" "}
+      <code>Viewer</code> role (or granular: <code>Firebase Viewer</code>,{" "}
+      <code>Cloud Functions Viewer</code>, <code>Cloud Datastore Viewer</code>),
+      generate a JSON key, and paste the full JSON here. We inventory Hosting
+      sites, Cloud Functions, and Firestore databases — read-only.
+    </>
+  ),
 };
 
 export default function ConnectionsPage() {
@@ -123,19 +133,33 @@ export default function ConnectionsPage() {
             />
 
             <label>
-              {provider === "aws" ? "Role ARN" : "Read-only API token"}
+              {provider === "aws"
+                ? "Role ARN"
+                : provider === "firebase"
+                  ? "Service account JSON key"
+                  : "Read-only API token"}
             </label>
-            <input
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              type={provider === "aws" ? "text" : "password"}
-              placeholder={
-                provider === "aws"
-                  ? "arn:aws:iam::123456789012:role/infralift-readonly"
-                  : "paste token"
-              }
-              required
-            />
+            {provider === "firebase" ? (
+              <textarea
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                rows={6}
+                placeholder='{"type": "service_account", "project_id": "…", …}'
+                required
+              />
+            ) : (
+              <input
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                type={provider === "aws" ? "text" : "password"}
+                placeholder={
+                  provider === "aws"
+                    ? "arn:aws:iam::123456789012:role/infralift-readonly"
+                    : "paste token"
+                }
+                required
+              />
+            )}
 
             <div className="help">{SCOPE_HELP[provider]}</div>
 
