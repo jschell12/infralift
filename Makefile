@@ -4,10 +4,10 @@ DASHBOARD_URL ?= https://api.infralift.dev
 .PHONY: build-api build-dashboard build deploy-images deploy
 
 build-api:
-	docker build -t infralift-api:local -f apps/api/Dockerfile .
+	docker build --platform linux/amd64 -t infralift-api:local -f apps/api/Dockerfile .
 
 build-dashboard:
-	docker build -t infralift-dashboard:local \
+	docker build --platform linux/amd64 -t infralift-dashboard:local \
 		--build-arg NEXT_PUBLIC_API_URL=$(DASHBOARD_URL) \
 		-f apps/dashboard/Dockerfile .
 
