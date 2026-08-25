@@ -284,3 +284,96 @@ model AppProfile {
 
   @@index([orgId])
 }
+
+// ---------------------------------------------------------------------------
+// Terraform code generation. Templates are versioned snapshots (body + JSON
+// Schema stored in the DB so renders stay reproducible), Projects bind a
+// template version to a destination repo/path, Renderings are generated .tf
+// files, and Jobs run the staged pipeline:
+//   queued -> render -> commit -> workspace -> complete
+// ---------------------------------------------------------------------------
+
+model TfTemplate {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String
+  language    String   @default("hcl")
+  createdAt   DateTime @default(now())
+
+  versions TfTemplateVersion[]
+}
+
+model TfTemplateVersion {
+  id           String   @id @default(cuid())
+  templateId   String
+  releaseTag   String
+  // Full template body snapshot; placeholders + conditional blocks.
+  templateBody String
+  // JSON Schema (draft 2020-12) describing render inputs.
+  inputSchema  Json
+  createdAt    DateTime @default(now())
+
+  template   TfTemplate  @relation(fields: [templateId], references: [id])
+  projects   TfProject[]
+  renderings TfRendering[]
+
+  @@unique([templateId, releaseTag])
+}
+
+model TfProject {
+  id                String   @id @default(cuid())
+  orgId             String
+  name              String
+  templateVersionId String
+  destRepo          String // owner/repo
+  destPath          String   @default("") // work dir inside repo, "" = root
+  destBranch        String   @default("main")
+  // Provider pinning for the generated provider.tf (name, source, version, region)
+  providerConfig    Json
+  createdAt         DateTime @default(now())
+
+  templateVersion TfTemplateVersion @relation(fields: [templateVersionId], references: [id])
+  renderings      TfRendering[]
+  jobs            TfJob[]
+
+  @@unique([orgId, name])
+}
+
+model TfRendering {
+  id            String   @id @default(cuid())
+  projectId     String
+  templateVersionId String
+  fileName      String
+  argumentsJson Json
+  renderedBody  String
+  commitSha     String?
+  managed       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  project         TfProject         @relation(fields: [projectId], references: [id])
+  templateVersion TfTemplateVersion @relation(fields: [templateVersionId], references: [id])
+  jobs            TfJob[]
+
+  @@unique([projectId, fileName])
+}
+
+model TfJob {
+  id            String   @id @default(cuid())
+  projectId     String
+  // queued | render | commit | workspace | complete
+  stage         String   @default("queued")
+  // pending | running | errored | success
+  status        String   @default("pending")
+  statusMessage String   @default("") // short human-readable, <= 280 chars
+  argumentsJson Json
+  renderingId   String?
+  workspaceName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project   TfProject    @relation(fields: [projectId], references: [id])
+  rendering TfRendering? @relation(fields: [renderingId], references: [id])
+
+  @@index([projectId, createdAt])
+}

@@ -628,6 +628,146 @@ const programs: SeedProgram[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Terraform generation starter templates. Body syntax: {{var}} interpolation,
+// {{#if var}}...{{/if}} optional blocks (see src/lib/tf/render.ts).
+// ---------------------------------------------------------------------------
+
+interface SeedTfTemplate {
+  slug: string;
+  name: string;
+  description: string;
+  releaseTag: string;
+  templateBody: string;
+  inputSchema: object;
+}
+
+const tfTemplates: SeedTfTemplate[] = [
+  {
+    slug: "s3-static-site",
+    name: "S3 static site bucket",
+    description:
+      "S3 bucket (registry module) for static-site hosting — landing zone for Vercel/Firebase Hosting migrations.",
+    releaseTag: "v1",
+    templateBody: `module "{{module_name}}" {
+  source  = "terraform-aws-modules/s3-bucket/aws"
+  version = "4.6.0"
+
+  bucket        = "{{bucket_name}}"
+  force_destroy = false
+{{#if project_tag}}
+  tags = {
+    Project   = "{{project_tag}}"
+    ManagedBy = "infralift"
+  }
+{{/if}}
+}
+
+output "{{module_name}}_bucket_regional_domain" {
+  value = module.{{module_name}}.s3_bucket_bucket_regional_domain_name
+}
+`,
+    inputSchema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        module_name: { type: "string", pattern: "^[a-z][a-z0-9_]*$" },
+        bucket_name: { type: "string", minLength: 3, maxLength: 63 },
+        project_tag: { type: "string" },
+      },
+      required: ["module_name", "bucket_name"],
+      additionalProperties: false,
+    },
+  },
+  {
+    slug: "route53-healthcheck",
+    name: "Route 53 health check",
+    description:
+      "HTTPS health check against an endpoint — first safety net when cutting traffic over during a migration.",
+    releaseTag: "v1",
+    templateBody: `resource "aws_route53_health_check" "{{resource_name}}" {
+  fqdn              = "{{fqdn}}"
+  type              = "HTTPS"
+  port              = 443
+  resource_path     = "{{resource_path}}"
+  failure_threshold = 3
+  request_interval  = 30
+
+  tags = {
+    Name      = "{{resource_name}}"
+    ManagedBy = "infralift"
+  }
+}
+
+output "{{resource_name}}_healthcheck_id" {
+  value = aws_route53_health_check.{{resource_name}}.id
+}
+`,
+    inputSchema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        resource_name: { type: "string", pattern: "^[a-z][a-z0-9_]*$" },
+        fqdn: { type: "string", minLength: 1 },
+        resource_path: { type: "string", pattern: "^/" },
+      },
+      required: ["resource_name", "fqdn", "resource_path"],
+      additionalProperties: false,
+    },
+  },
+  {
+    slug: "apprunner-service",
+    name: "App Runner container service",
+    description:
+      "AWS App Runner service from a public container image — the usual landing zone for Heroku dyno migrations.",
+    releaseTag: "v1",
+    templateBody: `resource "aws_apprunner_service" "{{service_name}}" {
+  service_name = "{{service_name}}"
+
+  source_configuration {
+    image_repository {
+      image_identifier      = "{{image}}"
+      image_repository_type = "ECR_PUBLIC"
+      image_configuration {
+        port = "{{port}}"
+      }
+    }
+    auto_deployments_enabled = false
+  }
+
+  instance_configuration {
+    cpu    = "{{cpu}}"
+    memory = "{{memory}}"
+  }
+
+  tags = {
+    ManagedBy = "infralift"
+  }
+}
+
+output "{{service_name}}_url" {
+  value = aws_apprunner_service.{{service_name}}.service_url
+}
+`,
+    inputSchema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        service_name: { type: "string", pattern: "^[a-z][a-z0-9-]*$" },
+        image: { type: "string", minLength: 1 },
+        port: { type: "integer", minimum: 1, maximum: 65535 },
+        cpu: { type: "string", enum: ["256", "512", "1024", "2048", "4096"] },
+        memory: {
+          type: "string",
+          enum: ["512", "1024", "2048", "3072", "4096", "8192"],
+        },
+      },
+      required: ["service_name", "image", "port", "cpu", "memory"],
+      additionalProperties: false,
+    },
+  },
+];
+
 async function main() {
   for (const p of providers) {
     const { caps, plans, ...data } = p;
@@ -676,8 +816,29 @@ async function main() {
       });
     }
   }
+  for (const t of tfTemplates) {
+    const { releaseTag, templateBody, inputSchema, ...meta } = t;
+    const template = await prisma.tfTemplate.upsert({
+      where: { slug: t.slug },
+      create: meta,
+      update: { name: meta.name, description: meta.description },
+    });
+    await prisma.tfTemplateVersion.upsert({
+      where: {
+        templateId_releaseTag: { templateId: template.id, releaseTag },
+      },
+      create: {
+        templateId: template.id,
+        releaseTag,
+        templateBody,
+        inputSchema,
+      },
+      update: { templateBody, inputSchema },
+    });
+  }
+
   console.log(
-    `Seeded ${providers.length} hosting providers, ${programs.length} discount programs`
+    `Seeded ${providers.length} hosting providers, ${programs.length} discount programs, ${tfTemplates.length} TF templates`
   );
 }
 

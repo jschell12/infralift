@@ -6,6 +6,7 @@ import { assessmentsRouter } from "./routes/assessments.js";
 import { migrationsRouter } from "./routes/migrations.js";
 import { workspacesRouter } from "./routes/workspaces.js";
 import { providersRouter } from "./routes/providers.js";
+import { tfRouter } from "./routes/tf.js";
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use("/assessments", assessmentsRouter);
 app.use("/migrations", migrationsRouter);
 app.use("/workspaces", workspacesRouter);
 app.use("/hosting", providersRouter);
+app.use("/tf", tfRouter);
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => {
