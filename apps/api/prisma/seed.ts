@@ -250,6 +250,32 @@ const providers: SeedProvider[] = [
     ],
   },
   {
+    slug: "firebase",
+    name: "Firebase",
+    category: "baas",
+    websiteUrl: "https://firebase.google.com",
+    pricingModel: "usage",
+    minMonthlyCents: 0,
+    typicalMonthlyCents: 8000,
+    benefits:
+      "Fastest mobile/web backend bootstrap; Auth, FCM push, and realtime sync are best-in-class; generous Spark free tier; deep Google ecosystem integration.",
+    drawbacks:
+      "Firestore per-read/write pricing punishes chatty apps at scale; NoSQL data model and security rules create heavy lock-in; no SQL; egress via GCP rates; Google sunset risk perception.",
+    managedLevel: 3,
+    egressFreeGb: 10,
+    notes: "Common infralift migration source — Firestore pricing and lock-in are the usual exit drivers.",
+    caps: {
+      static_hosting: 3, ssr: 1, full_node_runtime: 1, containers: 0,
+      background_workers: 2, cron: 2, websockets: 3, managed_postgres: 0,
+      object_storage: 3, edge_network: 2, autoscaling: 3, zero_devops: 3,
+      terraform_provider: 2, gpu: 0,
+    },
+    plans: [
+      { name: "Spark", monthlyCents: 0, unit: "flat", includedNotes: "Free: 50k Firestore reads/day, 10GB hosting" },
+      { name: "Blaze", monthlyCents: 0, unit: "usage", includedNotes: "Pay-as-you-go beyond free quotas" },
+    ],
+  },
+  {
     slug: "azure",
     name: "Microsoft Azure",
     category: "hyperscaler",

@@ -32,3 +32,4 @@ Assessments run against read-only credentials only:
 - **Cloudflare** — API token: Workers, Pages, R2, DNS zones
 - **Heroku** — API key: apps, dynos, add-ons
 - **AWS** — `ReadOnlyAccess` IAM role: Cost Explorer + resource inventory
+- **Firebase / GCP** — Viewer service account JSON key: Hosting sites, Cloud Functions, Firestore databases
