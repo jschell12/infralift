@@ -7,6 +7,13 @@ export const PROVIDERS = [
   "aws",
   "firebase",
   "github",
+  "netlify",
+  "render",
+  "railway",
+  "flyio",
+  "digitalocean",
+  "gcp",
+  "azure",
 ] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
@@ -17,6 +24,13 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
   aws: "AWS",
   firebase: "Firebase / GCP",
   github: "GitHub",
+  netlify: "Netlify",
+  render: "Render",
+  railway: "Railway",
+  flyio: "Fly.io",
+  digitalocean: "DigitalOcean",
+  gcp: "Google Cloud",
+  azure: "Microsoft Azure",
 };
 
 export type AssessmentStatus =

@@ -62,6 +62,63 @@ const SCOPE_HELP: Record<Provider, React.ReactNode> = {
       rendered <code>.tf</code> files.
     </>
   ),
+  netlify: (
+    <>
+      Create a personal access token at{" "}
+      <code>app.netlify.com/user/applications#personal-access-tokens</code>.
+      We read sites, forms, DNS zones, and build hooks, all read-only.
+    </>
+  ),
+  render: (
+    <>
+      Create an API key at <code>dashboard.render.com/account/api-keys</code>.
+      We read services, databases, Redis instances, and env groups, all
+      read-only.
+    </>
+  ),
+  railway: (
+    <>
+      Create an API token at <code>railway.com/account/tokens</code>. We read
+      projects, services, plugins (databases), and environments via the GraphQL
+      API, all read-only.
+    </>
+  ),
+  flyio: (
+    <>
+      Create a deploy token or personal access token via{" "}
+      <code>fly tokens create</code> (CLI) or the Fly.io dashboard. We read
+      apps, machines, and volumes, all read-only.
+    </>
+  ),
+  digitalocean: (
+    <>
+      Create a personal access token at{" "}
+      <code>cloud.digitalocean.com/account/api/tokens</code> with read-only
+      scope. We inventory Droplets, App Platform apps, managed databases,
+      Spaces, and Kubernetes clusters.
+    </>
+  ),
+  gcp: (
+    <>
+      Create a service account in{" "}
+      <code>console.cloud.google.com/iam-admin/serviceaccounts</code> with the{" "}
+      <code>Viewer</code> role, generate a JSON key, and paste the full JSON
+      here. We inventory Cloud Run, GCE, Cloud SQL, GCS, and Cloud Functions,
+      read-only.
+    </>
+  ),
+  azure: (
+    <>
+      Register an app in Azure AD, create a client secret, and grant{" "}
+      <code>Reader</code> role on the subscription. Paste JSON:{" "}
+      <code>
+        {"{"}&quot;tenantId&quot;, &quot;clientId&quot;,
+        &quot;clientSecret&quot;, &quot;subscriptionId&quot;{"}"}
+      </code>
+      . We inventory App Services, VMs, SQL databases, and storage accounts,
+      read-only.
+    </>
+  ),
 };
 
 export default function ConnectionsPage() {
@@ -145,16 +202,26 @@ export default function ConnectionsPage() {
             <label>
               {provider === "aws"
                 ? "Role ARN"
-                : provider === "firebase"
+                : provider === "firebase" || provider === "gcp"
                   ? "Service account JSON key"
-                  : "Read-only API token"}
+                  : provider === "azure"
+                    ? "Service principal JSON"
+                    : "Read-only API token"}
             </label>
-            {provider === "firebase" ? (
+            {provider === "firebase" || provider === "gcp" ? (
               <textarea
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 rows={6}
                 placeholder='{"type": "service_account", "project_id": "…", …}'
+                required
+              />
+            ) : provider === "azure" ? (
+              <textarea
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                rows={4}
+                placeholder='{"tenantId": "…", "clientId": "…", "clientSecret": "…", "subscriptionId": "…"}'
                 required
               />
             ) : (
