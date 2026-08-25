@@ -3,7 +3,8 @@ FROM node:22-slim AS builder
 
 RUN corepack enable pnpm
 
-ARG NEXT_PUBLIC_API_URL=http://localhost:4000
+# No NEXT_PUBLIC_API_URL — api.ts defaults to /api which is proxied to
+# the Express backend via next.config.ts rewrites.
 
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
