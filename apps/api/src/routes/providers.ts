@@ -11,6 +11,14 @@ providersRouter.get("/", async (_req, res) => {
     include: {
       capabilities: { select: { key: true, score: true } },
       plans: { select: { name: true, monthlyCents: true, unit: true, includedNotes: true } },
+      discountPrograms: {
+        include: {
+          tiers: {
+            select: { minAnnualCommitUsd: true, discountBps: true },
+            orderBy: { minAnnualCommitUsd: "asc" },
+          },
+        },
+      },
     },
     orderBy: { name: "asc" },
   });
@@ -24,6 +32,8 @@ const profileSchema = z.object({
   budgetMonthlyCents: z.number().int().nonnegative().default(5000),
   opsTolerance: z.number().int().min(0).max(3).default(1),
   trafficGbMonth: z.number().int().nonnegative().default(10),
+  annualSpendCents: z.number().int().positive().optional(),
+  startupCreditsEligible: z.boolean().default(false),
 });
 
 // Ad-hoc recommendation: describe the app, get ranked providers.
@@ -79,6 +89,8 @@ providersRouter.get("/app-profiles/:id/recommendations", async (req, res) => {
       budgetMonthlyCents: profile.budgetMonthlyCents,
       opsTolerance: profile.opsTolerance,
       trafficGbMonth: profile.trafficGbMonth,
+      annualSpendCents: profile.annualSpendCents ?? undefined,
+      startupCreditsEligible: profile.startupCreditsEligible,
     })
   );
 });

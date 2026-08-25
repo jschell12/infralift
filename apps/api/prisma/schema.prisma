@@ -182,8 +182,53 @@ model HostingProvider {
   egressFreeGb   Int     @default(0)
   notes          String?
 
-  capabilities ProviderCapability[]
-  plans        ProviderPlan[]
+  capabilities     ProviderCapability[]
+  plans            ProviderPlan[]
+  discountPrograms DiscountProgram[]
+}
+
+// A way to pay less than list price on a provider: startup credits,
+// committed-spend/enterprise agreements, or published mechanisms like
+// Hetzner's server auction. Data is research-sourced; `confidence` tracks
+// how well each program's numbers are corroborated.
+model DiscountProgram {
+  id         String @id @default(cuid())
+  providerId String
+  // startup_credit | committed_spend | auction
+  kind       String
+  name       String
+
+  // startup_credit fields
+  creditMaxCents        Int?
+  creditDurationMonths  Int?
+  // use-it-or-lose-it monthly allocation (null = lump-sum pool)
+  creditMonthlyCapCents Int?
+
+  // corroborated | advisor | anecdote | unverified
+  confidence String
+  sourceNote String?
+  // when the numbers were last verified, e.g. "2026-08"
+  sourceDate String?
+  notes      String?
+
+  provider HostingProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  tiers    DiscountTier[]
+
+  @@unique([providerId, name])
+}
+
+// Commit-size → discount curve for committed_spend (and auction) programs.
+// Commit is whole USD/year (not cents) so $50M+ tiers fit in an Int.
+model DiscountTier {
+  id                 String @id @default(cuid())
+  programId          String
+  minAnnualCommitUsd Int
+  // discount in basis points (1500 = 15% off list)
+  discountBps        Int
+
+  program DiscountProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, minAnnualCommitUsd])
 }
 
 // Capability score per provider: 0 = unsupported, 1 = partial/workaround,
@@ -231,6 +276,10 @@ model AppProfile {
   // 0 = wants zero devops … 3 = happy to run servers
   opsTolerance          Int      @default(1)
   trafficGbMonth        Int      @default(10)
+  // Current all-in annual spend, used to size committed-spend discounts
+  annualSpendCents      Int?
+  // Startup-credit eligibility (early stage, funded, no prior credits)
+  startupCreditsEligible Boolean @default(false)
   createdAt             DateTime @default(now())
 
   @@index([orgId])

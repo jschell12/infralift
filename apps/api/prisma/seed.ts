@@ -424,6 +424,210 @@ const providers: SeedProvider[] = [
   },
 ];
 
+// Discount programs — researched 2026-08 from HN/Reddit/LowEndTalk, FinOps
+// advisories (Redress, CloudForecast, VendorBenchmark), and official program
+// pages. confidence: corroborated (multiple independent sources), advisor
+// (advisory-published curves only), anecdote (single report), unverified.
+// Tier commits are whole USD/year; discounts are basis points off list.
+interface SeedProgram {
+  providerSlug: string;
+  kind: string; // startup_credit | committed_spend | auction
+  name: string;
+  creditMaxCents?: number;
+  creditDurationMonths?: number;
+  creditMonthlyCapCents?: number;
+  confidence: string;
+  sourceNote?: string;
+  sourceDate?: string;
+  notes?: string;
+  tiers?: { minAnnualCommitUsd: number; discountBps: number }[];
+}
+
+const programs: SeedProgram[] = [
+  // --- AWS ---
+  {
+    providerSlug: "aws",
+    kind: "startup_credit",
+    name: "AWS Activate (portfolio)",
+    creditMaxCents: 200_000_00,
+    creditDurationMonths: 24,
+    confidence: "corroborated",
+    sourceNote: "aws.amazon.com/startups/credits; requires Activate Provider org ID; gen-AI tier up to $300k",
+    sourceDate: "2026-08",
+    notes: "12–24mo expiry, no extensions; credits exclude Marketplace, support fees, SP/RI upfronts; credited usage does not burn a PPA commit.",
+  },
+  {
+    providerSlug: "aws",
+    kind: "committed_spend",
+    name: "Private Pricing Agreement (ex-EDP)",
+    confidence: "corroborated",
+    sourceNote: "Redress/CloudForecast 2026 benchmarks; HN 35113812 (14% on-demand); SEC-filed 9% (MiX Telematics)",
+    sourceDate: "2026-08",
+    notes: "Stacks on top of Savings Plans/RIs. Marketplace burn-down capped at 25% of commit since May 2025. Commit must not decrease YoY; Enterprise Support required.",
+    tiers: [
+      { minAnnualCommitUsd: 1_000_000, discountBps: 750 },
+      { minAnnualCommitUsd: 10_000_000, discountBps: 1500 },
+      { minAnnualCommitUsd: 50_000_000, discountBps: 2000 },
+    ],
+  },
+  // --- GCP (also applies to Firebase — same billing account) ---
+  {
+    providerSlug: "gcp",
+    kind: "startup_credit",
+    name: "Google for Startups Cloud",
+    creditMaxCents: 200_000_00,
+    creditDurationMonths: 24,
+    confidence: "corroborated",
+    sourceNote: "cloud.google.com/startup; AI-first tier up to $350k",
+    sourceDate: "2026-08",
+    notes: "Equity-funded pre-seed–Series A; Google reserves the right to revoke extended credits.",
+  },
+  {
+    providerSlug: "gcp",
+    kind: "committed_spend",
+    name: "Enterprise Agreement + spend CUDs",
+    confidence: "advisor",
+    sourceNote: "VendorBenchmark 2026-04 curve; no community anecdotes found",
+    sourceDate: "2026-08",
+    notes: "Most aggressive displacement discounts of the big three (30%+ with competitor quote). CUDs stack on the negotiated layer. Egress unprotected unless negotiated.",
+    tiers: [
+      { minAnnualCommitUsd: 500_000, discountBps: 700 },
+      { minAnnualCommitUsd: 1_000_000, discountBps: 1400 },
+      { minAnnualCommitUsd: 5_000_000, discountBps: 2200 },
+      { minAnnualCommitUsd: 50_000_000, discountBps: 3500 },
+    ],
+  },
+  {
+    providerSlug: "firebase",
+    kind: "startup_credit",
+    name: "Google for Startups Cloud (covers Firebase Blaze)",
+    creditMaxCents: 200_000_00,
+    creditDurationMonths: 24,
+    confidence: "corroborated",
+    sourceNote: "Firebase Blaze bills through GCP, so GCP startup credits apply",
+    sourceDate: "2026-08",
+  },
+  // --- Azure ---
+  {
+    providerSlug: "azure",
+    kind: "startup_credit",
+    name: "Microsoft for Startups (investor track)",
+    creditMaxCents: 100_000_00,
+    creditDurationMonths: 12,
+    confidence: "corroborated",
+    sourceNote: "Program restructured 2025-07-02: open $150k ladder gone; $5k self-serve; $100k+ needs VC/accelerator referral",
+    sourceDate: "2026-08",
+  },
+  {
+    providerSlug: "azure",
+    kind: "committed_spend",
+    name: "MACC / MCA-E",
+    confidence: "advisor",
+    sourceNote: "Redress 2025-12 + US Cloud curves; no community anecdotes found",
+    sourceDate: "2026-08",
+    notes: "Marketplace ISV purchases count 100% toward commit (vs AWS 25% cap). Shortfall back-billed at term end; ~half of customers oversize commits 15–30%.",
+    tiers: [
+      { minAnnualCommitUsd: 250_000, discountBps: 750 },
+      { minAnnualCommitUsd: 1_000_000, discountBps: 1250 },
+      { minAnnualCommitUsd: 3_000_000, discountBps: 1850 },
+      { minAnnualCommitUsd: 25_000_000, discountBps: 3000 },
+    ],
+  },
+  // --- Cloudflare ---
+  {
+    providerSlug: "cloudflare",
+    kind: "startup_credit",
+    name: "Cloudflare for Startups",
+    creditMaxCents: 250_000_00,
+    creditDurationMonths: 12,
+    confidence: "corroborated",
+    sourceNote: "Tiers $5k/$25k/$100k/$250k; $5k tier open to bootstrapped",
+    sourceDate: "2026-08",
+  },
+  {
+    providerSlug: "cloudflare",
+    kind: "committed_spend",
+    name: "Enterprise contract",
+    confidence: "corroborated",
+    sourceNote: "HN leaks: entry $3–5k/mo (HN 35965058); multi-year 10–20% off; renewal-hike pattern well documented (HN 40481808, 48608394)",
+    sourceDate: "2026-08",
+    notes: "Cheap year 1, aggressive renewal posture — demand renewal uplift caps in writing. Contract language allows termination if usage caps are exceeded without a re-price.",
+    tiers: [{ minAnnualCommitUsd: 36_000, discountBps: 1500 }],
+  },
+  // --- Vercel ---
+  {
+    providerSlug: "vercel",
+    kind: "startup_credit",
+    name: "Vercel for Startups",
+    creditMaxCents: 30_000_00,
+    creditDurationMonths: 12,
+    confidence: "corroborated",
+    sourceNote: "vercel.com/startups/credits; Series A or earlier via approved partner; terms as of 2026-08-06",
+    sourceDate: "2026-08",
+    notes: "No rollover; only 50% of monthly allocation usable on AI Gateway.",
+  },
+  // --- DigitalOcean ---
+  {
+    providerSlug: "digitalocean",
+    kind: "startup_credit",
+    name: "DigitalOcean Startups",
+    creditMaxCents: 100_000_00,
+    creditDurationMonths: 12,
+    creditMonthlyCapCents: 10_000_00,
+    confidence: "corroborated",
+    sourceNote: "digitalocean.com/startups, 2026-05 terms",
+    sourceDate: "2026-08",
+    notes: "~$10k/mo use-it-or-lose-it — cannot be banked; GPU products excluded. Raised ≤$10M.",
+  },
+  // --- Heroku ---
+  {
+    providerSlug: "heroku",
+    kind: "startup_credit",
+    name: "Heroku OSS credits",
+    creditMaxCents: 6_000_00,
+    creditDurationMonths: 12,
+    creditMonthlyCapCents: 500_00,
+    confidence: "corroborated",
+    sourceNote: "heroku.com/open-source-credit-program: $25–500/mo; no general startup amounts published",
+    sourceDate: "2026-08",
+  },
+  // --- Render ---
+  {
+    providerSlug: "render",
+    kind: "startup_credit",
+    name: "Render startup program",
+    creditMaxCents: 50_000_00,
+    creditDurationMonths: 12,
+    confidence: "unverified",
+    sourceNote: "Commonly cited ~$50k in 2026 credit-stacking guides; not confirmed on render.com",
+    sourceDate: "2026-08",
+  },
+  // --- Hetzner ---
+  {
+    providerSlug: "hetzner",
+    kind: "auction",
+    name: "Serverbörse (server auction)",
+    confidence: "corroborated",
+    sourceNote: "LowEndTalk consensus: no negotiated discounts; auction is the discount channel (HN 49111648 2026-07, 46897416 2026-02)",
+    sourceDate: "2026-08",
+    notes: "Reverse auction on post-ROI hardware; ~30–50% below equivalent new-dedicated list. No commitment required.",
+    tiers: [{ minAnnualCommitUsd: 0, discountBps: 4000 }],
+  },
+  // --- Linode / Akamai ---
+  {
+    providerSlug: "linode",
+    kind: "committed_spend",
+    name: "Akamai committed-use",
+    confidence: "advisor",
+    sourceNote: "VendorBenchmark 2026: 10–22% 1yr / 22–35% 3yr; sales worthwhile from ~$350/mo; no first-person confirmations",
+    sourceDate: "2026-08",
+    tiers: [
+      { minAnnualCommitUsd: 4_200, discountBps: 1600 },
+      { minAnnualCommitUsd: 1_000_000, discountBps: 3000 },
+    ],
+  },
+];
+
 async function main() {
   for (const p of providers) {
     const { caps, plans, ...data } = p;
@@ -447,7 +651,34 @@ async function main() {
       });
     }
   }
-  console.log(`Seeded ${providers.length} hosting providers`);
+
+  for (const prog of programs) {
+    const provider = await prisma.hostingProvider.findUnique({
+      where: { slug: prog.providerSlug },
+    });
+    if (!provider) continue;
+    const { providerSlug, tiers, ...data } = prog;
+    const program = await prisma.discountProgram.upsert({
+      where: { providerId_name: { providerId: provider.id, name: prog.name } },
+      create: { providerId: provider.id, ...data },
+      update: data,
+    });
+    for (const tier of tiers ?? []) {
+      await prisma.discountTier.upsert({
+        where: {
+          programId_minAnnualCommitUsd: {
+            programId: program.id,
+            minAnnualCommitUsd: tier.minAnnualCommitUsd,
+          },
+        },
+        create: { programId: program.id, ...tier },
+        update: { discountBps: tier.discountBps },
+      });
+    }
+  }
+  console.log(
+    `Seeded ${providers.length} hosting providers, ${programs.length} discount programs`
+  );
 }
 
 main()
