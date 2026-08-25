@@ -75,6 +75,9 @@ importers:
 
   apps/web:
     dependencies:
+      marked:
+        specifier: ^18.0.11
+        version: 18.0.11
       next:
         specifier: ^16.0.0
         version: 16.3.2(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -794,6 +797,11 @@ packages:
 
   jiti@2.7.0:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
+    hasBin: true
+
+  marked@18.0.11:
+    resolution: {integrity: sha512-HnslJfsZkRPBDJRHvVtAaWlZHEpSu7u8LgQuJCELjRKuWR+hpq4A7sLq3p8HaI9ypVoXDXxV34CsQJEe1+J5Aw==}
+    engines: {node: '>= 20'}
     hasBin: true
 
   math-intrinsics@1.1.0:
@@ -1666,6 +1674,8 @@ snapshots:
   ipaddr.js@1.9.1: {}
 
   jiti@2.7.0: {}
+
+  marked@18.0.11: {}
 
   math-intrinsics@1.1.0: {}
 
