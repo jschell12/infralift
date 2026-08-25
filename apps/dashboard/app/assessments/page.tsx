@@ -74,7 +74,7 @@ export default function AssessmentsPage() {
             .filter((c) => c.status === "valid")
             .map((c) => (
               <option key={c.id} value={c.id}>
-                {PROVIDER_LABELS[c.provider]} — {c.label}
+                {PROVIDER_LABELS[c.provider]}: {c.label}
               </option>
             ))}
         </select>

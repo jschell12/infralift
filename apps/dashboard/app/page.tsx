@@ -4,7 +4,7 @@ export default function Overview() {
       <h1>Overview</h1>
       <p className="lead">
         Connect a read-only provider token, run an assessment, and track your
-        migration — everything delivered as Terraform in a repo you own.
+        migration. Everything is delivered as Terraform in a repo you own.
       </p>
 
       <div className="grid grid-3">

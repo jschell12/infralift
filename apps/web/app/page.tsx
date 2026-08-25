@@ -31,9 +31,8 @@ export default function Home() {
           </h1>
           <p className="sub">
             Connect a read-only token and get a migration report with cost
-            projections. We execute the migration for a fixed fee — onto
-            Cloudflare or a VPS — and every deliverable is Terraform in a repo
-            you own.
+            projections. We execute the migration onto Cloudflare or a VPS for
+            a fixed fee, and every deliverable is Terraform in a repo you own.
           </p>
           <a className="btn btn-primary" href={DASHBOARD_URL}>
             Get your free assessment
@@ -73,9 +72,9 @@ export default function Home() {
               <div className="step-num">3</div>
               <h3>Fixed-fee migration</h3>
               <p>
-                We build the target environment in parallel — zero downtime on
-                your current stack — as Terraform in a new GitHub or GitLab
-                repo, with state in Terraform Cloud.
+                We build the target environment in parallel, with zero downtime
+                on your current stack, as Terraform in a new GitHub or GitLab
+                repo with state in Terraform Cloud.
               </p>
             </div>
             <div className="card">
@@ -101,15 +100,15 @@ export default function Home() {
             <div className="card">
               <h3>You own the repo</h3>
               <p>
-                Deliverables live in your GitHub or GitLab org. Fire us anytime
-                — the code, the state, and the docs stay with you. No lock-in
-                by design.
+                Deliverables live in your GitHub or GitLab org. Fire us
+                anytime; the code, the state, and the docs stay with you. No
+                lock-in by design.
               </p>
             </div>
             <div className="card">
               <h3>Standards enforced</h3>
               <p>
-                Modules, naming, tagging, remote state, and review gates —
+                Modules, naming, tagging, remote state, and review gates,
                 enforced automatically on every change. Your infra stays clean
                 after we leave.
               </p>
@@ -127,7 +126,7 @@ export default function Home() {
         <section className="section" id="pricing">
           <h2>Pricing</h2>
           <p className="lead">
-            Assessment is free. Migration is a fixed fee quoted in the report —
+            Assessment is free. Migration is a fixed fee quoted in the report:
             the price you see is the price you pay.
           </p>
           <div className="grid grid-3">
@@ -153,7 +152,7 @@ export default function Home() {
               <ul>
                 <li>Terraform repo you own</li>
                 <li>Terraform Cloud workspaces</li>
-                <li>Parallel build — zero downtime</li>
+                <li>Parallel build, zero downtime</li>
                 <li>DNS + data cutover</li>
                 <li>30-day post-cutover support</li>
               </ul>
@@ -161,7 +160,7 @@ export default function Home() {
             <div className="card">
               <h3>Platform</h3>
               <div className="price">
-                $99<small>/mo — optional</small>
+                $99<small>/mo, optional</small>
               </div>
               <p>Keep the dashboard after migration</p>
               <ul>
@@ -175,7 +174,7 @@ export default function Home() {
         </section>
 
         <div className="cta-panel">
-          <h2>See what your stack costs — and what it should cost</h2>
+          <h2>See what your stack costs, and what it should cost</h2>
           <p>
             The assessment is free, read-only, and takes minutes. The report is
             yours to keep even if you never hire us.

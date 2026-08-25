@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { readDoc } from "../../lib/docs";
 
 export const metadata: Metadata = {
-  title: "Documentation — infralift",
+  title: "Documentation | infralift",
   description:
     "How infralift works: granting read-only access, the assessment report, the fixed-fee migration process, and the security model.",
 };

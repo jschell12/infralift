@@ -1,6 +1,6 @@
 # The migration process
 
-Fixed fee, quoted in your assessment report. No hourly billing, no scope creep — if it takes us longer than planned, that's our problem.
+Fixed fee, quoted in your assessment report. No hourly billing, no scope creep. If it takes us longer than planned, that's our problem.
 
 ## Principles
 
@@ -20,8 +20,8 @@ We implement the target environment as Terraform: compute (Workers/Pages or VPS)
 
 ### 3. Data migration & verification
 
-- **Databases:** replicated or exported/imported with a verified row-count and checksum pass. For Firestore → Postgres we map collections to a relational schema and port security rules to app-layer authorization.
-- **Auth:** user records exported with password hashes where the provider allows it (e.g. Firebase Auth scrypt hashes) — no forced password resets.
+- **Databases:** replicated or exported/imported with a verified row-count and checksum pass. For Firestore to Postgres we map collections to a relational schema and port security rules to app-layer authorization.
+- **Auth:** user records exported with password hashes where the provider allows it (e.g. Firebase Auth scrypt hashes), so there are no forced password resets.
 - **Objects/assets:** synced (e.g. to R2), then re-synced at cutover.
 - The target environment runs against production-shaped data and is verified: smoke tests, load sanity checks, and a staging URL you can hammer.
 
@@ -38,7 +38,7 @@ You execute the write actions (or grant a scoped, temporary credential for the w
 
 ### 5. Handover & 30-day support
 
-- The repo, Terraform state, and runbook are yours — they were in your org the whole time.
+- The repo, Terraform state, and runbook are yours. They were in your org the whole time.
 - 30 days of post-cutover support for anything that surfaces.
 - Old-provider teardown checklist (what to cancel, when it's safe).
 
@@ -46,8 +46,8 @@ You execute the write actions (or grant a scoped, temporary credential for the w
 
 The dashboard keeps working if you want it ($99/mo, optional, cancel anytime):
 
-- **Drift detection** — if someone changes something in a console, you see it.
-- **IaC standards enforcement** — modules, naming, tagging, remote state, and review gates checked on every change.
+- Drift detection: if someone changes something in a console, you see it.
+- IaC standards enforcement: modules, naming, tagging, remote state, and review gates checked on every change.
 - **Workspace management** and cost tracking.
 
-Fire us anytime. The code, the state, and the docs stay with you — no lock-in by design.
+Fire us anytime. The code, the state, and the docs stay with you. No lock-in by design.

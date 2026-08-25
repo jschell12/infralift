@@ -12,13 +12,13 @@ Every credential we ask for is read-only at the provider level:
 | AWS | Cross-account IAM role | AWS-managed `ReadOnlyAccess` policy; trust policy restricted to our account **with an external ID** |
 | Firebase / GCP | Service account JSON key | `Viewer` (or granular `*Viewer`) roles carry no write permissions |
 
-If you accidentally paste an over-privileged credential, replacing it with a correctly scoped one takes a minute — and we'd rather you do that than proceed.
+If you accidentally paste an over-privileged credential, replacing it with a correctly scoped one takes a minute, and we'd rather you do that than proceed.
 
 ## Credential handling
 
 - **Encrypted at rest** with AES-256-GCM. Ciphertext, IV, and auth tag are stored; the encryption key lives only in the API server's environment, never in the database or repo.
 - **Never displayed again.** After you submit a credential, the dashboard shows only provider, label, and verification status.
-- **Never used to modify anything.** The connector code paths only perform reads. Environment variable *values* are never fetched — only names.
+- **Never used to modify anything.** The connector code paths only perform reads. Environment variable *values* are never fetched, only names.
 
 ## Migration-time writes
 
@@ -26,7 +26,7 @@ Migrations don't change this model. Write actions on your *current* provider (DN
 
 ## Revocation
 
-Delete the token/key/role/service account in your provider's console at any time — access ends immediately, no coordination with us required.
+Delete the token, key, role, or service account in your provider's console at any time. Access ends immediately, no coordination with us required.
 
 ## Disclosure
 

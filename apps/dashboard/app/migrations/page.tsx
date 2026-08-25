@@ -40,7 +40,7 @@ export default function MigrationsPage() {
       <h1>Migration status</h1>
       <p className="lead">
         Each migration runs through six phases. Your current stack stays live
-        until cutover — we build the target environment in parallel.
+        until cutover; we build the target environment in parallel.
       </p>
 
       {error && <div className="error">{error}</div>}
@@ -49,8 +49,9 @@ export default function MigrationsPage() {
         <div className="card">
           <h3>No migrations yet</h3>
           <p>
-            Run an assessment first — your report includes a fixed-fee
-            migration quote. Once you approve it, the migration appears here.
+            Run an assessment first. Your report includes a fixed-fee
+            migration quote, and once you approve it the migration appears
+            here.
           </p>
           <a className="btn btn-primary" href="/assessments">
             Go to assessments
@@ -60,7 +61,7 @@ export default function MigrationsPage() {
         migrations.map((m) => (
           <div className="card" key={m.id}>
             <h3>
-              {PROVIDER_LABELS[m.sourceProvider]} →{" "}
+              {PROVIDER_LABELS[m.sourceProvider]} to{" "}
               {m.targetPlatform === "cloudflare" ? "Cloudflare" : "VPS"}{" "}
               <span className={STATUS_BADGE[m.status] ?? "badge badge-muted"}>
                 {m.status.replace("_", " ")}

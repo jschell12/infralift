@@ -15,7 +15,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const doc = readDoc(slug);
-  return { title: doc ? `${doc.title} — infralift` : "Documentation — infralift" };
+  return { title: doc ? `${doc.title} | infralift` : "Documentation | infralift" };
 }
 
 export default async function DocPage({
