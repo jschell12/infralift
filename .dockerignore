@@ -1,0 +1,11 @@
+node_modules
+.next
+out
+dist
+.git
+.gitignore
+*.md
+!README.md
+terraform
+.env*
+.terraform*

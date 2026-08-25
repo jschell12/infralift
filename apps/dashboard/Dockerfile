@@ -1,0 +1,34 @@
+# Build context: monorepo root (needs packages/shared)
+FROM node:22-slim AS builder
+
+RUN corepack enable pnpm
+
+ARG NEXT_PUBLIC_API_URL=http://localhost:4000
+
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/shared/package.json packages/shared/
+COPY apps/dashboard/package.json apps/dashboard/
+
+RUN pnpm install --frozen-lockfile
+
+COPY packages/shared packages/shared/
+COPY apps/dashboard apps/dashboard/
+COPY tsconfig.base.json ./
+
+RUN pnpm --filter @infralift/shared build
+RUN pnpm --filter @infralift/dashboard build
+
+# --- Runtime ---
+FROM node:22-slim
+
+WORKDIR /app
+
+COPY --from=builder /app/apps/dashboard/.next/standalone ./
+COPY --from=builder /app/apps/dashboard/.next/static apps/dashboard/.next/static/
+
+ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
+EXPOSE 3000
+
+CMD ["node", "apps/dashboard/server.js"]
