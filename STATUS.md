@@ -1,5 +1,30 @@
 # infralift status
 
+## 2026-08-25 (session 4)
+
+### Completed
+- **Dashboard + API deployed to homelab** — Both running on Framework (10.0.0.2) as Nomad Docker job. API on port 30380, dashboard on port 30381. Both healthy.
+- **Cloudflare tunnel + Access** (schellout PRs #250-#252) — `dashboard.infralift.dev` and `api.infralift.dev` routed through schellout tunnel. Wildcard Access app `*.infralift.dev` gates to jschell12@gmail.com only.
+- **Database provisioned** — `infralift` role + database on shared Postgres (:5432). Schema pushed via `prisma db push`. Seeded: 16 hosting providers, 15 discount programs, 3 TF templates, dev-org.
+- **Docker build fixes** (infralift PRs #21-#22) — Dockerfiles, Makefile with `--platform linux/amd64` for cross-compile, openssl in API image for Prisma, full workspace copy to preserve pnpm symlinks.
+- **Initial Prisma migration** (PR #23) — Baseline migration SQL for future `prisma migrate deploy` on redeploys.
+- **Marketing site redeployed** — CTAs now point to `https://dashboard.infralift.dev`.
+- **Neon migration script** — `scripts/migrate-to-neon.sh` ready for future cloud move.
+
+### Debugging notes
+- Docker images must target `linux/amd64` (Framework is x86, MacBook is ARM)
+- Nomad `<<-EOF` heredoc strips tabs but not spaces; env var templates must be left-aligned
+- Vault password for DB URL must not contain `/` (breaks URI parsing); use `openssl rand -hex` not `-base64`
+- `node:22-slim` needs `apt-get install openssl` for Prisma query engine
+- Prisma pnpm monorepo needs full `/app` copy in Dockerfile (cherry-picking breaks symlinks)
+
+### Next steps
+- Verify dashboard end-to-end in browser (Access login, connections, assessments)
+- Create provider accounts and run real integration tests
+- Implement OpenTofu + S3 backend option in TF pipeline
+- Update connect-providers docs to cover all 12 source providers
+- Remove the `import` block from `tunnel.tf` (zone now in state)
+
 ## 2026-08-25 (session 3)
 
 ### Completed
