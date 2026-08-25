@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "infralift-web",
+  "compatibility_date": "2026-08-24",
+  // Static-assets-only Worker: `pnpm build` produces ./out via Next static
+  // export. Deploy with `npx wrangler deploy` from this directory.
+  "assets": {
+    "directory": "./out",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "infralift.dev", "custom_domain": true },
+    { "pattern": "www.infralift.dev", "custom_domain": true }
+  ]
+}
