@@ -1,5 +1,4 @@
 FRAMEWORK_HOST ?= josh-schell@10.0.0.2
-DASHBOARD_URL ?= https://api.infralift.dev
 
 .PHONY: build-api build-dashboard build deploy-images deploy
 
@@ -8,7 +7,6 @@ build-api:
 
 build-dashboard:
 	docker build --platform linux/amd64 -t infralift-dashboard:local \
-		--build-arg NEXT_PUBLIC_API_URL=$(DASHBOARD_URL) \
 		-f apps/dashboard/Dockerfile .
 
 build: build-api build-dashboard
