@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "infralift | fixed-fee infrastructure migrations, delivered as Terraform",
   description:
-    "Connect a read-only token. Get an assessment with cost projections. We migrate you off Vercel, Heroku, Firebase, or AWS onto Cloudflare or a VPS. Every deliverable is Terraform in a repo you own.",
+    "Your cloud bill shouldn't scale faster than your revenue. Free assessment for Vercel, Heroku, Firebase, AWS, GCP, Azure, Netlify, Render, Railway, Fly.io, and DigitalOcean. Fixed-fee migration onto infrastructure you own, delivered as Terraform.",
 };
 
 export default function RootLayout({
