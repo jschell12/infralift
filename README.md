@@ -12,6 +12,7 @@ Fixed-fee infrastructure migrations delivered as Terraform — assess, migrate, 
 | `apps/dashboard` | Customer dashboard (Next.js) — token intake, assessment reports, migration status, workspaces |
 | `apps/api` | Backend (Express + Prisma + Postgres) — auth, assessment engine, provider connectors |
 | `packages/shared` | Shared TypeScript types |
+| `docs/` | Customer-facing documentation — [access granting, assessment report, migration process, security model](docs/README.md) |
 
 ## Development
 
