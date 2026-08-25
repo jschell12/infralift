@@ -1,5 +1,17 @@
 # infralift status
 
+## 2026-08-25 (session 3)
+
+### Completed
+- **Marketing copy rewrite (PR #19)** — Rewrote landing page for startup audience. New hero: "Your cloud bill shouldn't scale faster than your revenue." New "Why now" section with Vercel inflection point ($400 vs $80 at 100k MAU), Firebase read amplification ($70k/day), Heroku maintenance mode data. Stat cards: 5-10x savings, $850 vs $80, 12 providers. CTA: "Start at $20/mo. Migrate at $200/mo. Not at $3,000/mo." Step 1 lists all 12 source providers. Assessment card updated to show "current and 10x scale" projections. Meta description updated for SEO.
+
+### Next steps
+- Create provider accounts and run real integration tests with TF fixtures
+- Implement OpenTofu + S3 backend option in TF pipeline (backend block toggle)
+- Add Terraform templates for Hetzner VPS Docker Compose target pattern
+- Consider Linode connector; seed missing discount programs (Railway, Fly.io)
+- Update connect-providers docs to cover all 12 source providers
+
 ## 2026-08-25 (session 2)
 
 ### Completed
@@ -11,13 +23,6 @@
 - **OpenTofu not yet, but soon**: Support HashiCorp products (TFC) for now. OpenTofu + S3 as future option avoids BSL license concerns and aligns with "you own everything" positioning.
 - **Marketing angle**: Target small startups on PaaS platforms before they hit the billing inflection (~1TB egress, ~10k MAU). Message: "plan your exit before you need one."
 - **Render/Railway**: No Terraform providers exist. Dashboard-only setup for testing. Not a blocker for connector testing.
-
-### Next steps
-- Create provider accounts and run real integration tests with TF fixtures
-- Write startup-focused marketing copy for infralift.dev (billing shock data, "scale smart" messaging)
-- Implement OpenTofu + S3 backend option in TF pipeline (backend block toggle)
-- Add Terraform templates for Hetzner VPS Docker Compose target pattern
-- Consider Linode connector; seed missing discount programs (Railway, Fly.io)
 
 ## 2026-08-25
 
