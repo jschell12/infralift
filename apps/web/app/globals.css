@@ -205,6 +205,18 @@ a {
   color: var(--accent);
 }
 
+.stat {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+
+.stat-card {
+  text-align: center;
+}
+
 .badge {
   display: inline-block;
   padding: 3px 10px;
