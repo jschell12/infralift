@@ -1,5 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db.js";
+import {
+  computeEffectivePricing,
+  type EffectivePricing,
+} from "./pricing.js";
 
 export interface RecommendInput {
   runtime: "static" | "ssr" | "node_server" | "container" | "serverless_fn";
@@ -8,6 +12,9 @@ export interface RecommendInput {
   budgetMonthlyCents: number;
   opsTolerance: number; // 0 wants zero devops … 3 happy to run servers
   trafficGbMonth: number;
+  // Current all-in annual spend (cents) — sizes committed-spend discounts
+  annualSpendCents?: number;
+  startupCreditsEligible?: boolean;
 }
 
 export interface Recommendation {
@@ -29,6 +36,7 @@ export interface Recommendation {
     opsFit: number;
     egressFit: number;
   };
+  pricing: EffectivePricing;
 }
 
 // Each runtime implies one hard capability requirement.
@@ -124,6 +132,21 @@ export async function recommend(
     ORDER BY score DESC, "typicalMonthlyCents" ASC
   `);
 
+  // Discount programs for the surviving providers, for effective pricing.
+  const programs = await prisma.discountProgram.findMany({
+    where: { provider: { slug: { in: rows.map((r) => r.slug) } } },
+    include: {
+      provider: { select: { slug: true } },
+      tiers: { select: { minAnnualCommitUsd: true, discountBps: true } },
+    },
+  });
+  const programsBySlug = new Map<string, typeof programs>();
+  for (const p of programs) {
+    const list = programsBySlug.get(p.provider.slug) ?? [];
+    list.push(p);
+    programsBySlug.set(p.provider.slug, list);
+  }
+
   return rows.map((r) => ({
     slug: r.slug,
     name: r.name,
@@ -143,5 +166,13 @@ export async function recommend(
       opsFit: Number(r.ops_fit),
       egressFit: Number(r.egress_fit),
     },
+    pricing: computeEffectivePricing(
+      r.typicalMonthlyCents,
+      programsBySlug.get(r.slug) ?? [],
+      {
+        annualSpendCents: input.annualSpendCents,
+        startupCreditsEligible: input.startupCreditsEligible,
+      }
+    ),
   }));
 }
