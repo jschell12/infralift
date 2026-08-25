@@ -14,7 +14,7 @@ const SCOPE_HELP: Record<Provider, React.ReactNode> = {
     <>
       Create a token at <code>vercel.com/account/tokens</code>. Scope it to the
       team you want assessed. Vercel tokens are read/write by scope of your
-      role — use a <code>Viewer</code> role member&apos;s token for strict
+      role, so use a <code>Viewer</code> role member&apos;s token for strict
       read-only.
     </>
   ),
@@ -30,7 +30,8 @@ const SCOPE_HELP: Record<Provider, React.ReactNode> = {
   heroku: (
     <>
       Generate an API key at <code>dashboard.heroku.com/account</code>{" "}
-      (Account → API Key) or via <code>heroku authorizations:create</code>.
+      (under Account, find API Key) or via{" "}
+      <code>heroku authorizations:create</code>.
       We only call read endpoints: apps, formation, add-ons.
     </>
   ),
@@ -49,7 +50,7 @@ const SCOPE_HELP: Record<Provider, React.ReactNode> = {
       <code>Viewer</code> role (or granular: <code>Firebase Viewer</code>,{" "}
       <code>Cloud Functions Viewer</code>, <code>Cloud Datastore Viewer</code>),
       generate a JSON key, and paste the full JSON here. We inventory Hosting
-      sites, Cloud Functions, and Firestore databases — read-only.
+      sites, Cloud Functions, and Firestore databases, read-only.
     </>
   ),
   github: (

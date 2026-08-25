@@ -105,7 +105,7 @@ function ArgumentFields({
               value={String(values[key] ?? "")}
               onChange={(e) => onChange({ ...values, [key]: e.target.value })}
             >
-              <option value="">— select —</option>
+              <option value="">Select…</option>
               {prop.enum.map((v) => (
                 <option key={String(v)} value={String(v)}>
                   {String(v)}
@@ -117,7 +117,7 @@ function ArgumentFields({
               value={String(values[key] ?? "")}
               onChange={(e) => onChange({ ...values, [key]: e.target.value })}
             >
-              <option value="">— select —</option>
+              <option value="">Select…</option>
               <option value="true">true</option>
               <option value="false">false</option>
             </select>
@@ -489,7 +489,7 @@ export default function TerraformPage() {
               }}
               required
             >
-              <option value="">— select —</option>
+              <option value="">Select…</option>
               {templates.map((t) => (
                 <option key={t.slug} value={t.slug}>
                   {t.name}
@@ -503,7 +503,7 @@ export default function TerraformPage() {
               required
               disabled={!selectedTemplate}
             >
-              <option value="">— select —</option>
+              <option value="">Select…</option>
               {selectedTemplate?.versions.map((v) => (
                 <option key={v.releaseTag} value={v.releaseTag}>
                   {v.releaseTag}
@@ -541,8 +541,8 @@ export default function TerraformPage() {
 
       {runProject && runVersion && (
         <Drawer
-          title={`Run job — ${runProject.name}`}
-          subtitle={`${runProject.templateVersion.template.slug}@${runProject.templateVersion.releaseTag} → ${runProject.destRepo}`}
+          title={`Run job: ${runProject.name}`}
+          subtitle={`${runProject.templateVersion.template.slug}@${runProject.templateVersion.releaseTag} to ${runProject.destRepo}`}
           onClose={() => setRunProject(null)}
         >
           <form onSubmit={launchJob}>

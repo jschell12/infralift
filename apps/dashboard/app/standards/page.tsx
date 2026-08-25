@@ -36,7 +36,7 @@ const STANDARDS: IacStandardCheck[] = [
     key: "no_secrets",
     title: "No secrets in code or state where avoidable",
     description:
-      "Secrets flow through TF Cloud sensitive variables or a secrets manager — never committed to the repo.",
+      "Secrets flow through TF Cloud sensitive variables or a secrets manager, never committed to the repo.",
     status: "pass",
   },
   {
@@ -69,7 +69,7 @@ export default function StandardsPage() {
       <h1>IaC standards</h1>
       <p className="lead">
         Every deliverable is held to this ruleset. After migration, the
-        platform keeps enforcing it — so your infrastructure stays reviewable,
+        platform keeps enforcing it, so your infrastructure stays reviewable,
         reproducible, and drift-free.
       </p>
 

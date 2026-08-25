@@ -1,6 +1,6 @@
 # infralift
 
-Fixed-fee infrastructure migrations delivered as Terraform — assess, migrate, and keep the platform.
+Fixed-fee infrastructure migrations delivered as Terraform: assess, migrate, and keep the platform.
 
 **The offer:** connect a read-only token for your current provider (Vercel, Heroku, AWS, Cloudflare). We assess your stack, produce a migration report with cost projections, then execute a fixed-fee migration onto Cloudflare or a VPS. Every deliverable is Terraform in a repo you own, with state in Terraform Cloud. After the migration, the dashboard keeps working: IaC standards enforcement, drift visibility, and workspace management.
 
@@ -8,11 +8,11 @@ Fixed-fee infrastructure migrations delivered as Terraform — assess, migrate, 
 
 | Package | Purpose |
 |---|---|
-| `apps/web` | Marketing site (Next.js) — offer, pricing, assessment CTA |
-| `apps/dashboard` | Customer dashboard (Next.js) — token intake, assessment reports, migration status, workspaces |
-| `apps/api` | Backend (Express + Prisma + Postgres) — auth, assessment engine, provider connectors |
+| `apps/web` | Marketing site (Next.js): offer, pricing, assessment CTA |
+| `apps/dashboard` | Customer dashboard (Next.js): token intake, assessment reports, migration status, workspaces |
+| `apps/api` | Backend (Express + Prisma + Postgres): auth, assessment engine, provider connectors |
 | `packages/shared` | Shared TypeScript types |
-| `docs/` | Customer-facing documentation — [access granting, assessment report, migration process, security model](docs/README.md) |
+| `docs/` | Customer-facing documentation: [access granting, assessment report, migration process, security model](docs/README.md) |
 
 ## Development
 
@@ -29,8 +29,8 @@ pnpm build
 
 Assessments run against read-only credentials only:
 
-- **Vercel** — API token (read-only scope): projects, domains, env var names, usage
-- **Cloudflare** — API token: Workers, Pages, R2, DNS zones
-- **Heroku** — API key: apps, dynos, add-ons
-- **AWS** — `ReadOnlyAccess` IAM role: Cost Explorer + resource inventory
-- **Firebase / GCP** — Viewer service account JSON key: Hosting sites, Cloud Functions, Firestore databases
+- Vercel: API token (read-only scope) for projects, domains, env var names, usage
+- Cloudflare: API token for Workers, Pages, R2, DNS zones
+- Heroku: API key for apps, dynos, add-ons
+- AWS: `ReadOnlyAccess` IAM role for Cost Explorer + resource inventory
+- Firebase / GCP: Viewer service account JSON key for Hosting sites, Cloud Functions, Firestore databases

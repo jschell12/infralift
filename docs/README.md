@@ -1,13 +1,13 @@
 # infralift documentation
 
-infralift migrates your app off Vercel, Heroku, Firebase, or AWS onto Cloudflare or a VPS — for a fixed fee, with every deliverable as Terraform in a repo you own. The assessment is free and read-only.
+infralift migrates your app off Vercel, Heroku, Firebase, or AWS onto Cloudflare or a VPS for a fixed fee, with every deliverable as Terraform in a repo you own. The assessment is free and read-only.
 
 ## How it works, end to end
 
-1. **[Grant read-only access](./connect-providers.md)** — create a read-only token, role, or service account for your current provider and connect it in the dashboard. We can never modify anything.
-2. **[Get your assessment report](./assessment-report.md)** — we inventory your stack, project monthly costs (list price *and* effective price after credits/discounts), flag risks, and quote a fixed migration fee.
-3. **[Review the migration strategy](./migration-process.md)** — parallel build, zero downtime on your current stack, Terraform in your repo, DNS + data cutover, 30-day support.
-4. **[Security model](./security.md)** — how your credentials are scoped, encrypted, and used.
+1. [Grant read-only access](./connect-providers.md): create a read-only token, role, or service account for your current provider and connect it in the dashboard. We can never modify anything.
+2. [Get your assessment report](./assessment-report.md): we inventory your stack, project monthly costs (list price *and* effective price after credits and discounts), flag risks, and quote a fixed migration fee.
+3. [Review the migration strategy](./migration-process.md): parallel build, zero downtime on your current stack, Terraform in your repo, DNS and data cutover, 30-day support.
+4. [Security model](./security.md): how your credentials are scoped, encrypted, and used.
 
 ## Quick answers
 
