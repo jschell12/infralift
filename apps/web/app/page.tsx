@@ -1,5 +1,8 @@
 const DASHBOARD_URL =
   process.env.NEXT_PUBLIC_DASHBOARD_URL ?? "http://localhost:3001";
+const DOCS_URL =
+  process.env.NEXT_PUBLIC_DOCS_URL ??
+  "https://github.com/jschell12/infralift/tree/main/docs";
 
 export default function Home() {
   return (
@@ -13,6 +16,7 @@ export default function Home() {
             <a href="#how">How it works</a>
             <a href="#pricing">Pricing</a>
             <a href="#standards">IaC standards</a>
+            <a href={DOCS_URL}>Docs</a>
             <a className="btn btn-primary" href={DASHBOARD_URL}>
               Start assessment
             </a>
