@@ -52,6 +52,15 @@ const SCOPE_HELP: Record<Provider, React.ReactNode> = {
       sites, Cloud Functions, and Firestore databases — read-only.
     </>
   ),
+  github: (
+    <>
+      Create a fine-grained personal access token at{" "}
+      <code>github.com/settings/tokens</code> scoped to the repository that
+      will receive generated Terraform, with{" "}
+      <code>Contents: Read and write</code> permission. Used only to commit
+      rendered <code>.tf</code> files.
+    </>
+  ),
 };
 
 export default function ConnectionsPage() {
