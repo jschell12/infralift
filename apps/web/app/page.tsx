@@ -14,9 +14,6 @@ export default function Home() {
             <a href="#pricing">Pricing</a>
             <a href="#standards">IaC standards</a>
             <a href="/docs">Docs</a>
-            <a className="btn btn-primary" href={DASHBOARD_URL}>
-              Start assessment
-            </a>
           </div>
         </nav>
       </header>
