@@ -1,5 +1,18 @@
 # infralift status
 
+## 2026-08-25 (session 5)
+
+### Completed
+- **Dashboard fully operational** (PRs #25-#26) — Fixed API connectivity. Dashboard proxies /api/* to Express backend via Next.js rewrites (same-origin, no CORS). Removed stale NEXT_PUBLIC_API_URL build arg that was baking localhost:4000 into the image.
+- **UFW firewall** — Opened ports 30380/30381 on Framework for LAN + failover subnets. Cloudflared on mac-mini can now reach the services.
+- **Terraform applied** — Imported infralift.dev zone, created DNS CNAMEs, Access app, tunnel ingress (all via TFC remote apply).
+- **End-to-end verified** — dashboard.infralift.dev loads, authenticates via CF Access OTP, connections page renders with API data.
+
+### Debugging notes (this session)
+- Cloudflare Access wildcard `*.infralift.dev` shares auth but cross-origin fetch still fails (browser won't send cookie cross-subdomain). Fix: proxy API through dashboard same-origin.
+- `NEXT_PUBLIC_*` vars baked at Docker build time. If Dockerfile has `ARG NEXT_PUBLIC_API_URL=X`, that overrides the code default. Remove the ARG to let code defaults work.
+- UFW on Framework has default DROP policy. New Nomad service ports must be explicitly allowed.
+
 ## 2026-08-25 (session 4)
 
 ### Completed
