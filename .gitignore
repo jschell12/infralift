@@ -10,3 +10,6 @@ build/
 coverage/
 .turbo/
 prisma/*.db
+
+# Next static export
+out/
