@@ -153,3 +153,85 @@ model Workspace {
 
   @@unique([orgId, name])
 }
+
+// ---------------------------------------------------------------------------
+// Hosting provider catalog + "find a better home for my app" recommendation
+// model. Catalog rows are seeded (prisma/seed.ts); AppProfile captures a
+// customer's workload requirements, and the /recommendations endpoint scores
+// providers against a profile in SQL.
+// ---------------------------------------------------------------------------
+
+model HostingProvider {
+  id             String  @id @default(cuid())
+  slug           String  @unique
+  name           String
+  // paas | frontend_cloud | edge | hyperscaler | vps | container | static
+  category       String
+  websiteUrl     String
+  // free_tier | per_seat | usage | fixed | hybrid
+  pricingModel   String
+  // Cheapest paid entry point, USD cents/month (0 = usable free tier)
+  minMonthlyCents Int
+  // What a typical small production app actually costs per month
+  typicalMonthlyCents Int
+  benefits       String
+  drawbacks      String
+  // 0 = you run everything, 3 = fully managed
+  managedLevel   Int
+  // Free egress allowance in GB/month (-1 = unmetered)
+  egressFreeGb   Int     @default(0)
+  notes          String?
+
+  capabilities ProviderCapability[]
+  plans        ProviderPlan[]
+}
+
+// Capability score per provider: 0 = unsupported, 1 = partial/workaround,
+// 2 = supported, 3 = best-in-class. Keys are stable strings, e.g.
+// static_hosting, ssr, full_node_runtime, containers, background_workers,
+// cron, websockets, managed_postgres, object_storage, edge_network,
+// autoscaling, zero_devops, terraform_provider, gpu.
+model ProviderCapability {
+  id         String @id @default(cuid())
+  providerId String
+  key        String
+  score      Int
+
+  provider HostingProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, key])
+  @@index([key])
+}
+
+model ProviderPlan {
+  id           String  @id @default(cuid())
+  providerId   String
+  name         String
+  monthlyCents Int
+  // seat | app | vm | dyno | usage | flat
+  unit         String
+  includedNotes String
+
+  provider HostingProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, name])
+}
+
+// A customer's app described as requirements. requiredCapabilities are hard
+// filters (provider must score >= 2); preferredCapabilities add to the score.
+model AppProfile {
+  id                    String   @id @default(cuid())
+  orgId                 String
+  name                  String
+  // static | ssr | node_server | container | serverless_fn
+  runtime               String
+  requiredCapabilities  String[]
+  preferredCapabilities String[]
+  budgetMonthlyCents    Int
+  // 0 = wants zero devops … 3 = happy to run servers
+  opsTolerance          Int      @default(1)
+  trafficGbMonth        Int      @default(10)
+  createdAt             DateTime @default(now())
+
+  @@index([orgId])
+}
