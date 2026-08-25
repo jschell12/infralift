@@ -24,6 +24,7 @@ export default function RootLayout({
               <a href="/connections">Provider connections</a>
               <a href="/assessments">Assessments</a>
               <a href="/migrations">Migration status</a>
+              <a href="/terraform">Terraform generation</a>
               <a href="/workspaces">Workspaces</a>
               <a href="/standards">IaC standards</a>
             </nav>
