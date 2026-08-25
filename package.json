@@ -1,0 +1,17 @@
+{
+  "name": "infralift",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fixed-fee infrastructure migrations delivered as Terraform. Assess, migrate, and keep the platform.",
+  "scripts": {
+    "dev": "pnpm --parallel --filter './apps/*' dev",
+    "build": "pnpm --filter './packages/*' build && pnpm --filter './apps/*' build",
+    "lint": "pnpm --filter './apps/*' lint",
+    "db:generate": "pnpm --filter @infralift/api db:generate",
+    "db:migrate": "pnpm --filter @infralift/api db:migrate"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.33.0"
+}
