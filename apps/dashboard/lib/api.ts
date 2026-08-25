@@ -11,6 +11,7 @@ export async function api<T>(
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
+    credentials: "include",
     cache: "no-store",
   });
   if (!res.ok) {
