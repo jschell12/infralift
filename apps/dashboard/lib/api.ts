@@ -1,5 +1,7 @@
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+// API calls go through the same-origin /api rewrite (next.config.ts proxies
+// to the Express backend). This avoids cross-origin issues with Cloudflare
+// Access cookies. In local dev, set NEXT_PUBLIC_API_URL to override.
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
 // Dev-mode org until magic-link auth is wired into the UI.
 export const DEV_ORG_ID = "dev-org";
