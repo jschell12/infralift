@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Org {
+  id          String   @id @default(cuid())
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  connections ProviderConnection[]
+  assessments Assessment[]
+  migrations  Migration[]
+  workspaces  Workspace[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  orgId     String
+  createdAt DateTime @default(now())
+
+  org         Org          @relation(fields: [orgId], references: [id])
+  loginTokens LoginToken[]
+}
+
+// Magic-link auth: short-lived single-use tokens.
+model LoginToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// Read-only provider credentials. Token stored encrypted at rest
+// (AES-256-GCM via TOKEN_ENCRYPTION_KEY); never returned by the API.
+model ProviderConnection {
+  id             String    @id @default(cuid())
+  orgId          String
+  provider       String // vercel | cloudflare | heroku | aws
+  label          String
+  encryptedToken String
+  status         String    @default("unverified") // unverified | valid | invalid
+  lastVerifiedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  org         Org          @relation(fields: [orgId], references: [id])
+  assessments Assessment[]
+
+  @@unique([orgId, provider, label])
+}
+
+model Assessment {
+  id                          String    @id @default(cuid())
+  orgId                       String
+  connectionId                String
+  provider                    String
+  status                      String    @default("pending") // pending | running | completed | failed
+  startedAt                   DateTime?
+  completedAt                 DateTime?
+  error                       String?
+  resourceCount               Int       @default(0)
+  estimatedMonthlyCostCents   Int?
+  estimatedMonthlySavingsCents Int?
+  createdAt                   DateTime  @default(now())
+
+  org        Org                @relation(fields: [orgId], references: [id])
+  connection ProviderConnection @relation(fields: [connectionId], references: [id])
+  inventory  InventoryItem[]
+  findings   Finding[]
+}
+
+model InventoryItem {
+  id               String @id @default(cuid())
+  assessmentId     String
+  provider         String
+  type             String
+  externalId       String
+  name             String
+  region           String?
+  monthlyCostCents Int?
+  metadata         Json?
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+}
+
+model Finding {
+  id                  String  @id @default(cuid())
+  assessmentId        String
+  category            String // inventory | cost | risk | iac_standard | recommendation
+  severity            String // info | low | medium | high
+  title               String
+  detail              String
+  monthlySavingsCents Int?
+  resourceRef         String?
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+}
+
+model Migration {
+  id             String   @id @default(cuid())
+  orgId          String
+  sourceProvider String
+  targetPlatform String // cloudflare | vps
+  status         String   @default("proposed") // proposed | approved | in_progress | verifying | completed | cancelled
+  fixedFeeCents  Int?
+  repoUrl        String?
+  tfcOrg         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  org    Org              @relation(fields: [orgId], references: [id])
+  phases MigrationPhase[]
+}
+
+model MigrationPhase {
+  id          String    @id @default(cuid())
+  migrationId String
+  key         String
+  title       String
+  order       Int
+  status      String    @default("pending") // pending | in_progress | completed | blocked
+  completedAt DateTime?
+  notes       String?
+
+  migration Migration @relation(fields: [migrationId], references: [id], onDelete: Cascade)
+
+  @@unique([migrationId, key])
+}
+
+model Workspace {
+  id              String    @id @default(cuid())
+  orgId           String
+  name            String
+  tfcWorkspaceUrl String?
+  driftDetected   Boolean   @default(false)
+  lastRunStatus   String?
+  lastRunAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  org Org @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, name])
+}
