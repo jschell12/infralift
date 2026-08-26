@@ -1,0 +1,35 @@
+# Build context: monorepo root (needs packages/shared)
+FROM node:22-slim AS builder
+
+RUN corepack enable pnpm
+
+# No NEXT_PUBLIC_API_URL — api.ts defaults to /api which is proxied to
+# the Express backend via next.config.ts rewrites.
+
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/shared/package.json packages/shared/
+COPY apps/admin/package.json apps/admin/
+
+RUN pnpm install --frozen-lockfile
+
+COPY packages/shared packages/shared/
+COPY apps/admin apps/admin/
+COPY tsconfig.base.json ./
+
+RUN pnpm --filter @infralift/shared build
+RUN pnpm --filter @infralift/admin build
+
+# --- Runtime ---
+FROM node:22-slim
+
+WORKDIR /app
+
+COPY --from=builder /app/apps/admin/.next/standalone ./
+COPY --from=builder /app/apps/admin/.next/static apps/admin/.next/static/
+
+ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
+EXPOSE 3002
+
+CMD ["node", "apps/admin/server.js"]
