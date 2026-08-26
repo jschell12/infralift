@@ -8,6 +8,7 @@ import { workspacesRouter } from "./routes/workspaces.js";
 import { providersRouter } from "./routes/providers.js";
 import { tfRouter } from "./routes/tf.js";
 import { communitiesRouter } from "./routes/communities.js";
+import { leadsRouter } from "./routes/leads.js";
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use("/workspaces", workspacesRouter);
 app.use("/hosting", providersRouter);
 app.use("/tf", tfRouter);
 app.use("/communities", communitiesRouter);
+app.use("/leads", leadsRouter);
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => {
