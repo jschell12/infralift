@@ -57,32 +57,32 @@ const STANDARDS: IacStandardCheck[] = [
 ];
 
 const BADGE: Record<IacStandardCheck["status"], string> = {
-  pass: "badge badge-ok",
-  fail: "badge badge-bad",
-  warn: "badge badge-warn",
-  not_applicable: "badge badge-muted",
+  pass: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent-dim text-accent",
+  fail: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-danger/20 text-danger",
+  warn: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warn/20 text-warn",
+  not_applicable: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-border text-muted",
 };
 
 export default function StandardsPage() {
   return (
     <>
-      <h1>IaC standards</h1>
-      <p className="lead">
+      <h1 className="text-3xl font-bold tracking-tight mb-2">IaC standards</h1>
+      <p className="text-muted mb-8">
         Every deliverable is held to this ruleset. After migration, the
         platform keeps enforcing it, so your infrastructure stays reviewable,
         reproducible, and drift-free.
       </p>
 
       {STANDARDS.map((s) => (
-        <div className="card" key={s.key}>
-          <h3>
+        <div className="bg-surface border border-border rounded-xl p-6 mb-4" key={s.key}>
+          <h3 className="text-base font-semibold mb-1.5">
             {s.title}{" "}
             <span className={BADGE[s.status]}>
               {s.status === "not_applicable" ? "n/a" : s.status}
             </span>
           </h3>
-          <p>{s.description}</p>
-          {s.detail && <p style={{ marginTop: 6 }}>{s.detail}</p>}
+          <p className="text-muted text-sm">{s.description}</p>
+          {s.detail && <p className="text-muted text-sm mt-1.5">{s.detail}</p>}
         </div>
       ))}
     </>
