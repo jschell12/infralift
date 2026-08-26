@@ -1,5 +1,16 @@
 # infralift status
 
+## 2026-08-25 (session 6)
+
+### Completed
+- **E2E migration demo (PR #28)** — 110 files, 6,018 lines. Reference Express app (pg + S3 client) deployable to all 12 source platforms. Deploy configs for 7 Terraform platforms (AWS, Azure, Cloudflare, DO, Fly.io, GCP, Netlify) and 5 CLI platforms (Vercel, Heroku, Render, Railway, Firebase). Migration templates for 2 targets (Cloudflare Workers + R2 + Neon, Hetzner VPS + Docker + Neon). 24 per-source migration runbooks. Cost analysis showing 74-96% savings. 4 orchestration scripts. All TF configs validated.
+
+### Next steps
+- Provide API keys for each platform and run `e2e/scripts/deploy-all.sh`
+- Run assessments against deployed apps via `e2e/scripts/run-assessments.sh`
+- Execute a full migration from one source to each target
+- Remove import block from schellout terraform/tunnel.tf (zone now in state)
+
 ## 2026-08-25 (session 5)
 
 ### Completed
