@@ -1,5 +1,18 @@
 # infralift status
 
+## 2026-08-26 (session 3)
+
+### Completed
+- **Admin app deployed (PR #35, schellout PR #260)** — New apps/admin Next.js app at admin.infralift.dev. Leads and communities pages moved from customer dashboard. Separate Nomad group on port 30382 with Dockerfile and Makefile target. Tunnel ingress + DNS CNAME created. UFW port opened. All three Nomad groups healthy.
+- **Customer dashboard cleaned** — Leads and communities nav links removed, sidebar shows only customer-facing features.
+- **Chrome Safe Browsing false positive** — admin.infralift.dev flagged as "Dangerous site" due to new subdomain with no reputation. Will clear automatically. Can request review at safebrowsing.google.com.
+
+### Next steps
+- Submit Google Safe Browsing review for admin.infralift.dev
+- Integrate Bright Data Reddit scraper for posts + comments
+- Sign up for Vercel + Heroku, go after leads
+- Focus on Terraform + TF Cloud integration
+
 ## 2026-08-26 (session 2)
 
 ### Completed
