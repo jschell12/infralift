@@ -27,12 +27,9 @@ RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists
 
 WORKDIR /app
 
-COPY --from=builder /app/node_modules node_modules/
-COPY --from=builder /app/packages/shared packages/shared/
-COPY --from=builder /app/apps/api/dist apps/api/dist/
-COPY --from=builder /app/apps/api/prisma apps/api/prisma/
-COPY --from=builder /app/apps/api/node_modules apps/api/node_modules/
-COPY --from=builder /app/apps/api/package.json apps/api/
+# Copy the full workspace - pnpm's content-addressable store and Prisma's
+# generated engine binaries need their internal symlink structure intact.
+COPY --from=builder /app ./
 
 ENV NODE_ENV=production
 EXPOSE 4000
