@@ -395,6 +395,33 @@ model CommunitySource {
   notes       String?
   createdAt   DateTime @default(now())
 
+  leads CommunityLead[]
+
   @@index([platform])
   @@index([category])
+}
+
+// Posts from communities classified as potential leads (billing pain,
+// migration interest, platform complaints). Populated by the scanner.
+model CommunityLead {
+  id              String    @id @default(cuid())
+  communityId     String
+  sourceUrl       String
+  sourceId        String
+  platform        String
+  title           String
+  body            String    @db.Text
+  authorName      String?
+  classification  String    // billing_pain, migration_interest, platform_complaint
+  confidence      String    // high, medium, low
+  engagementScore Int?
+  postedAt        DateTime?
+  scrapedAt       DateTime  @default(now())
+
+  community CommunitySource @relation(fields: [communityId], references: [id])
+
+  @@unique([sourceId, platform])
+  @@index([communityId])
+  @@index([classification])
+  @@index([scrapedAt])
 }
