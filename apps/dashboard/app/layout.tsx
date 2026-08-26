@@ -65,18 +65,6 @@ export default function RootLayout({
               >
                 IaC standards
               </a>
-              <a
-                href="/leads"
-                className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface"
-              >
-                Leads
-              </a>
-              <a
-                href="/communities"
-                className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface"
-              >
-                Communities
-              </a>
             </nav>
           </aside>
           <main className="flex-1 p-10 max-w-[1100px]">{children}</main>
