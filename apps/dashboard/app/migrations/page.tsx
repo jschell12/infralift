@@ -8,12 +8,12 @@ import {
 import { api, DEV_ORG_ID, formatCents } from "../../lib/api";
 
 const STATUS_BADGE: Record<string, string> = {
-  completed: "badge badge-ok",
-  in_progress: "badge badge-warn",
-  verifying: "badge badge-warn",
-  approved: "badge badge-warn",
-  proposed: "badge badge-muted",
-  cancelled: "badge badge-bad",
+  completed: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent-dim text-accent",
+  in_progress: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warn/20 text-warn",
+  verifying: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warn/20 text-warn",
+  approved: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warn/20 text-warn",
+  proposed: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-border text-muted",
+  cancelled: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-danger/20 text-danger",
 };
 
 export default function MigrationsPage() {
@@ -37,37 +37,40 @@ export default function MigrationsPage() {
 
   return (
     <>
-      <h1>Migration status</h1>
-      <p className="lead">
+      <h1 className="text-3xl font-bold tracking-tight mb-2">Migration status</h1>
+      <p className="text-muted mb-8">
         Each migration runs through six phases. Your current stack stays live
         until cutover; we build the target environment in parallel.
       </p>
 
-      {error && <div className="error">{error}</div>}
+      {error && <div className="text-danger text-sm mt-2">{error}</div>}
 
       {migrations.length === 0 ? (
-        <div className="card">
-          <h3>No migrations yet</h3>
-          <p>
+        <div className="bg-surface border border-border rounded-xl p-6 mb-4">
+          <h3 className="text-base font-semibold mb-1.5">No migrations yet</h3>
+          <p className="text-muted text-sm">
             Run an assessment first. Your report includes a fixed-fee
             migration quote, and once you approve it the migration appears
             here.
           </p>
-          <a className="btn btn-primary" href="/assessments">
+          <a
+            className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90"
+            href="/assessments"
+          >
             Go to assessments
           </a>
         </div>
       ) : (
         migrations.map((m) => (
-          <div className="card" key={m.id}>
-            <h3>
+          <div className="bg-surface border border-border rounded-xl p-6 mb-4" key={m.id}>
+            <h3 className="text-base font-semibold mb-1.5">
               {PROVIDER_LABELS[m.sourceProvider]} to{" "}
               {m.targetPlatform === "cloudflare" ? "Cloudflare" : "VPS"}{" "}
-              <span className={STATUS_BADGE[m.status] ?? "badge badge-muted"}>
+              <span className={STATUS_BADGE[m.status] ?? "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-border text-muted"}>
                 {m.status.replace("_", " ")}
               </span>
             </h3>
-            <p>
+            <p className="text-muted text-sm">
               Fixed fee: {formatCents(m.fixedFeeCents)}
               {m.repoUrl && (
                 <>
@@ -77,26 +80,29 @@ export default function MigrationsPage() {
               )}
               {m.tfcOrg && <> · TF Cloud org: {m.tfcOrg}</>}
             </p>
-            <ul className="timeline">
+            <ul className="list-none space-y-0">
               {m.phases.map((p) => (
-                <li key={p.key}>
+                <li
+                  key={p.key}
+                  className="flex gap-3.5 py-3 border-b border-border items-baseline"
+                >
                   <span
-                    className={`dot ${
+                    className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
                       p.status === "completed"
-                        ? "done"
+                        ? "bg-accent"
                         : p.status === "in_progress"
-                          ? "active"
-                          : ""
+                          ? "bg-warn"
+                          : "bg-border"
                     }`}
                   />
                   <div>
                     <strong>{p.title}</strong>
                     {p.completedAt && (
-                      <span style={{ color: "var(--muted)", marginLeft: 8 }}>
+                      <span className="text-muted ml-2">
                         {new Date(p.completedAt).toLocaleDateString()}
                       </span>
                     )}
-                    {p.notes && <p>{p.notes}</p>}
+                    {p.notes && <p className="text-muted text-sm">{p.notes}</p>}
                   </div>
                 </li>
               ))}

@@ -14,22 +14,72 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <div className="shell">
-          <aside className="sidebar">
-            <a className="logo" href="/">
-              infra<span>lift</span>
+        <div className="flex min-h-screen">
+          <aside className="w-[220px] bg-surface border-r border-border px-4 py-6 flex-shrink-0 flex flex-col gap-1">
+            <a
+              className="block text-lg font-bold text-text mb-6"
+              href="/"
+            >
+              infra<span className="text-accent">lift</span>
             </a>
-            <nav>
-              <a href="/">Overview</a>
-              <a href="/connections">Provider connections</a>
-              <a href="/assessments">Assessments</a>
-              <a href="/migrations">Migration status</a>
-              <a href="/terraform">Terraform generation</a>
-              <a href="/workspaces">Workspaces</a>
-              <a href="/standards">IaC standards</a>
+            <nav className="flex flex-col gap-1">
+              <a
+                href="/"
+                className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface"
+              >
+                Overview
+              </a>
+              <a
+                href="/connections"
+                className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface"
+              >
+                Provider connections
+              </a>
+              <a
+                href="/assessments"
+                className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface"
+              >
+                Assessments
+              </a>
+              <a
+                href="/migrations"
+                className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface"
+              >
+                Migration status
+              </a>
+              <a
+                href="/terraform"
+                className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface"
+              >
+                Terraform generation
+              </a>
+              <a
+                href="/workspaces"
+                className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface"
+              >
+                Workspaces
+              </a>
+              <a
+                href="/standards"
+                className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface"
+              >
+                IaC standards
+              </a>
+              <a
+                href="/leads"
+                className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface"
+              >
+                Leads
+              </a>
+              <a
+                href="/communities"
+                className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface"
+              >
+                Communities
+              </a>
             </nav>
           </aside>
-          <main className="main">{children}</main>
+          <main className="flex-1 p-10 max-w-[1100px]">{children}</main>
         </div>
       </body>
     </html>

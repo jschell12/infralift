@@ -10,9 +10,12 @@
   },
   "dependencies": {
     "@infralift/shared": "workspace:*",
+    "@tailwindcss/postcss": "^4.3.3",
     "next": "^16.0.0",
+    "postcss": "^8.5.26",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

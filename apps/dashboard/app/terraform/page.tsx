@@ -60,10 +60,10 @@ interface TfJob {
 type ArgValues = Record<string, string | boolean>;
 
 const STATUS_BADGE: Record<string, string> = {
-  success: "badge-ok",
-  errored: "badge-bad",
-  running: "badge-warn",
-  pending: "badge-muted",
+  success: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent-dim text-accent",
+  errored: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-danger/20 text-danger",
+  running: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warn/20 text-warn",
+  pending: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-border text-muted",
 };
 
 function coerceArguments(
@@ -96,16 +96,17 @@ function ArgumentFields({
     <>
       {Object.entries(schema.properties ?? {}).map(([key, prop]) => (
         <div key={key}>
-          <label>
+          <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">
             {key}
             {required.has(key) ? " *" : " (optional)"}
           </label>
           {prop.enum ? (
             <select
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
               value={String(values[key] ?? "")}
               onChange={(e) => onChange({ ...values, [key]: e.target.value })}
             >
-              <option value="">Select…</option>
+              <option value="">Select...</option>
               {prop.enum.map((v) => (
                 <option key={String(v)} value={String(v)}>
                   {String(v)}
@@ -114,15 +115,17 @@ function ArgumentFields({
             </select>
           ) : prop.type === "boolean" ? (
             <select
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
               value={String(values[key] ?? "")}
               onChange={(e) => onChange({ ...values, [key]: e.target.value })}
             >
-              <option value="">Select…</option>
+              <option value="">Select...</option>
               <option value="true">true</option>
               <option value="false">false</option>
             </select>
           ) : (
             <input
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
               type={
                 prop.type === "integer" || prop.type === "number"
                   ? "number"
@@ -151,10 +154,10 @@ function Drawer({
 }) {
   return (
     <>
-      <div className="drawer-overlay" onClick={onClose} />
-      <div className="drawer">
-        <h2>{title}</h2>
-        <div className="drawer-sub">{subtitle}</div>
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+      <div className="fixed top-0 right-0 bottom-0 w-[440px] max-w-[92vw] bg-surface border-l border-border p-6 overflow-y-auto z-50">
+        <h2 className="text-xl font-bold mb-1">{title}</h2>
+        <div className="text-muted text-sm mb-6">{subtitle}</div>
         {children}
       </div>
     </>
@@ -320,76 +323,75 @@ export default function TerraformPage() {
 
   return (
     <>
-      <h1>Terraform generation</h1>
-      <p className="lead">
+      <h1 className="text-3xl font-bold tracking-tight mb-2">Terraform generation</h1>
+      <p className="text-muted mb-8">
         Render versioned Terraform templates into your repo. Each job
         validates inputs, commits the generated file, and prepares a TF Cloud
         workspace.
       </p>
 
-      {error && <div className="error">{error}</div>}
+      {error && <div className="text-danger text-sm mt-2">{error}</div>}
 
-      <div className="card">
-        <h3>Templates</h3>
-        <table>
+      <div className="bg-surface border border-border rounded-xl p-6 mb-4">
+        <h3 className="text-base font-semibold mb-1.5">Templates</h3>
+        <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
-              <th>Template</th>
-              <th>Versions</th>
-              <th>Description</th>
+              <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Template</th>
+              <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Versions</th>
+              <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Description</th>
             </tr>
           </thead>
           <tbody>
             {templates.map((t) => (
               <tr key={t.id}>
-                <td>
-                  <code>{t.slug}</code>
+                <td className="p-3 border-b border-border">
+                  <code className="text-accent font-mono text-xs">{t.slug}</code>
                 </td>
-                <td>{t.versions.map((v) => v.releaseTag).join(", ")}</td>
-                <td>{t.description}</td>
+                <td className="p-3 border-b border-border">{t.versions.map((v) => v.releaseTag).join(", ")}</td>
+                <td className="p-3 border-b border-border">{t.description}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <div className="card">
-        <h3>Projects</h3>
+      <div className="bg-surface border border-border rounded-xl p-6 mb-4">
+        <h3 className="text-base font-semibold mb-1.5">Projects</h3>
         {projects.length === 0 ? (
-          <p>
+          <p className="text-muted text-sm">
             No projects yet. A project binds a template version to a
             destination repo.
           </p>
         ) : (
-          <table>
+          <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
-                <th>Project</th>
-                <th>Template</th>
-                <th>Destination</th>
-                <th>Renderings</th>
-                <th></th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Project</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Template</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Destination</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Renderings</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs"></th>
               </tr>
             </thead>
             <tbody>
               {projects.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.name}</td>
-                  <td>
-                    <code>
+                  <td className="p-3 border-b border-border">{p.name}</td>
+                  <td className="p-3 border-b border-border">
+                    <code className="text-accent font-mono text-xs">
                       {p.templateVersion.template.slug}@
                       {p.templateVersion.releaseTag}
                     </code>
                   </td>
-                  <td>
+                  <td className="p-3 border-b border-border">
                     {p.destRepo}
                     {p.destPath ? `/${p.destPath}` : ""} ({p.destBranch})
                   </td>
-                  <td>{p.renderings.length}</td>
-                  <td>
+                  <td className="p-3 border-b border-border">{p.renderings.length}</td>
+                  <td className="p-3 border-b border-border">
                     <button
-                      className="btn btn-secondary"
-                      style={{ marginTop: 0 }}
+                      className="inline-block px-5 py-2 rounded-lg text-sm font-semibold cursor-pointer border border-border bg-transparent text-text hover:bg-surface"
                       onClick={() => {
                         setRunProject(p);
                         setArgValues({});
@@ -405,19 +407,20 @@ export default function TerraformPage() {
           </table>
         )}
         <button
-          className="btn btn-primary"
+          className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90"
           onClick={() => setShowNewProject(true)}
         >
           New project
         </button>
       </div>
 
-      <div className="card">
-        <h3>Jobs</h3>
+      <div className="bg-surface border border-border rounded-xl p-6 mb-4">
+        <h3 className="text-base font-semibold mb-1.5">Jobs</h3>
         {projects.length > 1 && (
           <>
-            <label>Project</label>
+            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Project</label>
             <select
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
             >
@@ -430,34 +433,34 @@ export default function TerraformPage() {
           </>
         )}
         {jobs.length === 0 ? (
-          <p>No jobs yet for this project.</p>
+          <p className="text-muted text-sm">No jobs yet for this project.</p>
         ) : (
-          <table>
+          <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
-                <th>Stage</th>
-                <th>Status</th>
-                <th>Message</th>
-                <th>Workspace</th>
-                <th>Started</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Stage</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Status</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Message</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Workspace</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Started</th>
               </tr>
             </thead>
             <tbody>
               {jobs.map((j) => (
                 <tr key={j.id}>
-                  <td>
-                    <code>{j.stage}</code>
+                  <td className="p-3 border-b border-border">
+                    <code className="text-accent font-mono text-xs">{j.stage}</code>
                   </td>
-                  <td>
+                  <td className="p-3 border-b border-border">
                     <span
-                      className={`badge ${STATUS_BADGE[j.status] ?? "badge-muted"}`}
+                      className={STATUS_BADGE[j.status] ?? "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-border text-muted"}
                     >
                       {j.status}
                     </span>
                   </td>
-                  <td>{j.statusMessage || "—"}</td>
-                  <td>{j.workspaceName ?? "—"}</td>
-                  <td>{new Date(j.createdAt).toLocaleString()}</td>
+                  <td className="p-3 border-b border-border">{j.statusMessage || "—"}</td>
+                  <td className="p-3 border-b border-border">{j.workspaceName ?? "—"}</td>
+                  <td className="p-3 border-b border-border">{new Date(j.createdAt).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -472,16 +475,18 @@ export default function TerraformPage() {
           onClose={() => setShowNewProject(false)}
         >
           <form onSubmit={createProject}>
-            <label>Project name * (lowercase, digits, dashes)</label>
+            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Project name * (lowercase, digits, dashes)</label>
             <input
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
               value={pName}
               onChange={(e) => setPName(e.target.value)}
               required
               pattern="[a-z0-9-]+"
               maxLength={32}
             />
-            <label>Template *</label>
+            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Template *</label>
             <select
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
               value={pTemplateSlug}
               onChange={(e) => {
                 setPTemplateSlug(e.target.value);
@@ -489,51 +494,59 @@ export default function TerraformPage() {
               }}
               required
             >
-              <option value="">Select…</option>
+              <option value="">Select...</option>
               {templates.map((t) => (
                 <option key={t.slug} value={t.slug}>
                   {t.name}
                 </option>
               ))}
             </select>
-            <label>Version *</label>
+            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Version *</label>
             <select
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
               value={pReleaseTag}
               onChange={(e) => setPReleaseTag(e.target.value)}
               required
               disabled={!selectedTemplate}
             >
-              <option value="">Select…</option>
+              <option value="">Select...</option>
               {selectedTemplate?.versions.map((v) => (
                 <option key={v.releaseTag} value={v.releaseTag}>
                   {v.releaseTag}
                 </option>
               ))}
             </select>
-            <label>Destination repo * (owner/repo)</label>
+            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Destination repo * (owner/repo)</label>
             <input
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
               value={pDestRepo}
               onChange={(e) => setPDestRepo(e.target.value)}
               required
               placeholder="acme/infrastructure"
             />
-            <label>Destination path</label>
+            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Destination path</label>
             <input
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
               value={pDestPath}
               onChange={(e) => setPDestPath(e.target.value)}
             />
-            <label>Branch</label>
+            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Branch</label>
             <input
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
               value={pDestBranch}
               onChange={(e) => setPDestBranch(e.target.value)}
             />
-            <label>AWS region</label>
+            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">AWS region</label>
             <input
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
               value={pRegion}
               onChange={(e) => setPRegion(e.target.value)}
             />
-            <button className="btn btn-primary" disabled={busy}>
-              {busy ? "Creating…" : "Create project"}
+            <button
+              className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={busy}
+            >
+              {busy ? "Creating..." : "Create project"}
             </button>
           </form>
         </Drawer>
@@ -553,17 +566,24 @@ export default function TerraformPage() {
             />
             <button
               type="button"
-              className="btn btn-secondary"
+              className="inline-block mt-4 px-5 py-2 rounded-lg text-sm font-semibold cursor-pointer border border-border bg-transparent text-text hover:bg-surface mr-2"
               disabled={busy}
               onClick={previewRender}
             >
               Preview
             </button>{" "}
-            <button className="btn btn-primary" disabled={busy}>
-              {busy ? "Working…" : "Launch job"}
+            <button
+              className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={busy}
+            >
+              {busy ? "Working..." : "Launch job"}
             </button>
           </form>
-          {preview && <pre>{preview}</pre>}
+          {preview && (
+            <pre className="bg-bg border border-border rounded-lg p-3 text-xs overflow-x-auto whitespace-pre mt-4">
+              {preview}
+            </pre>
+          )}
         </Drawer>
       )}
     </>

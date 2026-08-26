@@ -56,20 +56,21 @@ export default function AssessmentsPage() {
 
   return (
     <>
-      <h1>Assessments</h1>
-      <p className="lead">
+      <h1 className="text-3xl font-bold tracking-tight mb-2">Assessments</h1>
+      <p className="text-muted mb-8">
         Run a read-only assessment against a connected provider to inventory
         resources and project costs.
       </p>
 
-      <div className="card">
-        <h3>Run a new assessment</h3>
-        <label>Connection</label>
+      <div className="bg-surface border border-border rounded-xl p-6 mb-4">
+        <h3 className="text-base font-semibold mb-1.5">Run a new assessment</h3>
+        <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Connection</label>
         <select
+          className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
           value={connectionId}
           onChange={(e) => setConnectionId(e.target.value)}
         >
-          <option value="">Select a connection…</option>
+          <option value="">Select a connection...</option>
           {connections
             .filter((c) => c.status === "valid")
             .map((c) => (
@@ -79,52 +80,52 @@ export default function AssessmentsPage() {
             ))}
         </select>
         <button
-          className="btn btn-primary"
+          className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={run}
           disabled={busy || !connectionId}
         >
-          {busy ? "Running…" : "Run assessment"}
+          {busy ? "Running..." : "Run assessment"}
         </button>
-        {error && <div className="error">{error}</div>}
+        {error && <div className="text-danger text-sm mt-2">{error}</div>}
       </div>
 
-      <div className="card">
-        <h3>History</h3>
+      <div className="bg-surface border border-border rounded-xl p-6 mb-4">
+        <h3 className="text-base font-semibold mb-1.5">History</h3>
         {assessments.length === 0 ? (
-          <p>No assessments yet.</p>
+          <p className="text-muted text-sm">No assessments yet.</p>
         ) : (
-          <table>
+          <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
-                <th>Provider</th>
-                <th>Status</th>
-                <th>Resources</th>
-                <th>Est. monthly cost</th>
-                <th>Est. savings</th>
-                <th>Report</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Provider</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Status</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Resources</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Est. monthly cost</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Est. savings</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Report</th>
               </tr>
             </thead>
             <tbody>
               {assessments.map((a) => (
                 <tr key={a.id}>
-                  <td>{PROVIDER_LABELS[a.provider]}</td>
-                  <td>
+                  <td className="p-3 border-b border-border">{PROVIDER_LABELS[a.provider]}</td>
+                  <td className="p-3 border-b border-border">
                     <span
                       className={
                         a.status === "completed"
-                          ? "badge badge-ok"
+                          ? "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent-dim text-accent"
                           : a.status === "failed"
-                            ? "badge badge-bad"
-                            : "badge badge-warn"
+                            ? "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-danger/20 text-danger"
+                            : "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warn/20 text-warn"
                       }
                     >
                       {a.status}
                     </span>
                   </td>
-                  <td>{a.resourceCount}</td>
-                  <td>{formatCents(a.estimatedMonthlyCostCents)}</td>
-                  <td>{formatCents(a.estimatedMonthlySavingsCents)}</td>
-                  <td>
+                  <td className="p-3 border-b border-border">{a.resourceCount}</td>
+                  <td className="p-3 border-b border-border">{formatCents(a.estimatedMonthlyCostCents)}</td>
+                  <td className="p-3 border-b border-border">{formatCents(a.estimatedMonthlySavingsCents)}</td>
+                  <td className="p-3 border-b border-border">
                     <a href={`/assessments/${a.id}`}>View report</a>
                   </td>
                 </tr>
