@@ -1,5 +1,28 @@
 # infralift status
 
+## 2026-08-26 (session 2)
+
+### Completed
+- **Tailwind CSS conversion (PR #33)** — Replaced 330 lines of hand-written CSS with Tailwind v4. All 11 dashboard pages converted to inline utility classes with custom @theme colors.
+- **Leads dashboard page** — Stat cards (179 billing pain, 36 migration interest, 21 platform complaints), filters (classification/platform/days), sortable table with 235 leads.
+- **Communities dashboard page** — 48 sources with platform/category filtering, member counts, relevance descriptions.
+- **Public infralift-scanner repo** — github.com/jschell12/infralift-scanner. Standalone Node.js scanner with Reddit RSS (curl-based), HN Algolia, DEV.to, SE, Lobsters scrapers. Keyword classifier (no LLM cost).
+- **Backfill from Jan 1 2026** — 235 leads stored from 3,875 scraped posts via broadened HN queries (27 search terms, pagination) and DEV.to tag pagination.
+- **Reddit ticket filed** — API access request submitted via support.reddithelp.com. RSS workaround deployed (curl bypasses Node TLS fingerprinting).
+- **Schellout cleanup (PR #258)** — Removed infralift.dev zone import block from tunnel.tf.
+
+### Decisions
+- **Separate admin app**: Leads and communities will move to a new admin.infralift.dev app. Customer dashboard stays clean for customer-facing features only.
+- **Bright Data for Reddit**: Will use Bright Data's Reddit scraper for posts + comments instead of direct API. Avoids API approval dependency and gets comment-level data.
+- **Keyword classifier over LLM**: Zero cost, no API key dependency. Catches ~80% of what an LLM would catch. Can add LLM later for higher precision.
+- **Reddit RSS via curl**: Node.js fetch gets TLS-fingerprinted 429 by Reddit. curl subprocess works. 10s spacing between subreddits.
+
+### Next steps
+- Build admin.infralift.dev as a separate Next.js app (leads, communities, internal tools)
+- Integrate Bright Data Reddit scraper for posts + comments
+- Sign up for Vercel and Heroku, go after leads from those platforms
+- Focus on Terraform and TF Cloud integration (not OpenTofu yet)
+
 ## 2026-08-26
 
 ### Completed
