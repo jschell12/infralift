@@ -1,0 +1,7 @@
+# Azure E2E deployment variables
+# Copy to terraform.tfvars and fill in values
+
+subscription_id = "00000000-0000-0000-0000-000000000000"
+location        = "eastus"
+prefix          = "infralift"
+db_password     = "CHANGE_ME_strong_password_here"

@@ -1,0 +1,6 @@
+# Netlify E2E deployment variables
+# Copy to terraform.tfvars and fill in values
+
+team_slug         = "your-netlify-team-slug"
+site_name         = "infralift-e2e"
+neon_database_url = "postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/infralift?sslmode=require"

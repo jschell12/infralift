@@ -1,0 +1,46 @@
+{
+  "name": "infralift-demo",
+  "description": "Portable demo app for infralift E2E migration testing",
+  "keywords": ["node", "express", "postgres"],
+  "stack": "heroku-24",
+  "addons": [
+    {
+      "plan": "heroku-postgresql:essential-0",
+      "as": "DATABASE"
+    }
+  ],
+  "env": {
+    "PROVIDER_NAME": {
+      "value": "heroku",
+      "description": "Platform identifier for the demo app"
+    },
+    "STORAGE_ENDPOINT": {
+      "description": "S3-compatible storage endpoint (optional)",
+      "required": false
+    },
+    "STORAGE_BUCKET": {
+      "description": "S3-compatible storage bucket name (optional)",
+      "required": false
+    },
+    "STORAGE_ACCESS_KEY": {
+      "description": "S3-compatible storage access key (optional)",
+      "required": false
+    },
+    "STORAGE_SECRET_KEY": {
+      "description": "S3-compatible storage secret key (optional)",
+      "required": false
+    }
+  },
+  "scripts": {
+    "postdeploy": "node seed.js"
+  },
+  "buildpacks": [
+    { "url": "heroku/nodejs" }
+  ],
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+}

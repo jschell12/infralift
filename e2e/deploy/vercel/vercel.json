@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "name": "infralift-demo",
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    { "src": "/public/(.*)", "dest": "/public/$1" },
+    { "src": "/(.*)", "dest": "/server.js" }
+  ]
+}
