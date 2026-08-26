@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -376,4 +377,24 @@ model TfJob {
   rendering TfRendering? @relation(fields: [renderingId], references: [id])
 
   @@index([projectId, createdAt])
+}
+
+// Communities and forums where infralift's target audience discusses
+// cloud costs, migrations, and hosting decisions. Global reference data.
+model CommunitySource {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  platform    String   // reddit, hackernews, discord, slack, forum, blog, stackexchange, vendor
+  url         String
+  category    String   // cloud, devops, selfhosting, frontend, startup, general
+  audience    String
+  relevance   String
+  memberCount Int?
+  isActive    Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([platform])
+  @@index([category])
 }

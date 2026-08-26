@@ -837,8 +837,106 @@ async function main() {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Community sources — forums, subreddits, Discords where target audience
+  // discusses cloud costs, migrations, and hosting decisions.
+  // ---------------------------------------------------------------------------
+
+  interface SeedCommunity {
+    slug: string;
+    name: string;
+    platform: string;
+    url: string;
+    category: string;
+    audience: string;
+    relevance: string;
+    memberCount?: number;
+    notes?: string;
+  }
+
+  const communities: SeedCommunity[] = [
+    // --- Reddit ---
+    { slug: "reddit-selfhosted", name: "r/selfhosted", platform: "reddit", url: "https://reddit.com/r/selfhosted", category: "selfhosting", audience: "Developers and sysadmins who self-host services", relevance: "Top self-hosting community; daily discussions about migrating off cloud providers to VPS/homelab", memberCount: 400000 },
+    { slug: "reddit-devops", name: "r/devops", platform: "reddit", url: "https://reddit.com/r/devops", category: "devops", audience: "DevOps engineers and SREs", relevance: "Infrastructure decisions, cloud cost complaints, IaC discussions", memberCount: 300000 },
+    { slug: "reddit-webdev", name: "r/webdev", platform: "reddit", url: "https://reddit.com/r/webdev", category: "frontend", audience: "Web developers", relevance: "Hosting platform debates (Vercel vs Netlify vs self-host), deployment discussions", memberCount: 1000000 },
+    { slug: "reddit-nextjs", name: "r/nextjs", platform: "reddit", url: "https://reddit.com/r/nextjs", category: "frontend", audience: "Next.js developers", relevance: "Vercel pricing complaints, self-hosting Next.js threads, OpenNext discussions", memberCount: 150000 },
+    { slug: "reddit-aws", name: "r/aws", platform: "reddit", url: "https://reddit.com/r/aws", category: "cloud", audience: "AWS users and architects", relevance: "AWS cost optimization, NAT gateway complaints, migration discussions", memberCount: 300000 },
+    { slug: "reddit-googlecloud", name: "r/googlecloud", platform: "reddit", url: "https://reddit.com/r/googlecloud", category: "cloud", audience: "GCP and Firebase users", relevance: "GCP/Firebase billing discussions, Cloud Run adoption", memberCount: 80000 },
+    { slug: "reddit-azure", name: "r/azure", platform: "reddit", url: "https://reddit.com/r/azure", category: "cloud", audience: "Azure users and admins", relevance: "Azure cost management, App Service discussions", memberCount: 150000 },
+    { slug: "reddit-cloudflare", name: "r/CloudFlare", platform: "reddit", url: "https://reddit.com/r/CloudFlare", category: "cloud", audience: "Cloudflare users", relevance: "Workers adoption, R2 migration stories, migration to Cloudflare", memberCount: 80000 },
+    { slug: "reddit-sysadmin", name: "r/sysadmin", platform: "reddit", url: "https://reddit.com/r/sysadmin", category: "devops", audience: "System administrators", relevance: "Infrastructure decisions at scale, cloud vs on-prem debates", memberCount: 900000 },
+    { slug: "reddit-homelab", name: "r/homelab", platform: "reddit", url: "https://reddit.com/r/homelab", category: "selfhosting", audience: "Homelab enthusiasts", relevance: "Self-hosting culture, VPS recommendations, Hetzner discussions", memberCount: 500000 },
+    { slug: "reddit-terraform", name: "r/Terraform", platform: "reddit", url: "https://reddit.com/r/Terraform", category: "devops", audience: "Terraform and OpenTofu users", relevance: "IaC discussions, provider migrations, state management", memberCount: 60000 },
+    { slug: "reddit-kubernetes", name: "r/kubernetes", platform: "reddit", url: "https://reddit.com/r/kubernetes", category: "devops", audience: "Kubernetes users", relevance: "Container orchestration, cloud cost debates, managed vs self-hosted K8s", memberCount: 200000 },
+    { slug: "reddit-startups", name: "r/startups", platform: "reddit", url: "https://reddit.com/r/startups", category: "startup", audience: "Startup founders and early employees", relevance: "Infrastructure cost discussions, burn rate optimization", memberCount: 1000000 },
+    { slug: "reddit-saas", name: "r/SaaS", platform: "reddit", url: "https://reddit.com/r/SaaS", category: "startup", audience: "SaaS builders", relevance: "Hosting cost optimization, scaling infrastructure discussions", memberCount: 100000 },
+    { slug: "reddit-programming", name: "r/programming", platform: "reddit", url: "https://reddit.com/r/programming", category: "general", audience: "Software developers (broad)", relevance: "Viral cloud billing horror stories, migration blog post discussions", memberCount: 5000000 },
+
+    // --- Hacker News ---
+    { slug: "hn-front-page", name: "Hacker News", platform: "hackernews", url: "https://news.ycombinator.com", category: "general", audience: "Tech founders, senior engineers, VCs", relevance: "Viral billing stories ($96k Vercel, $70k Firebase, $85k GCP); migration blog posts regularly hit front page", notes: "Submit via Show HN or as link posts; comments drive most engagement" },
+    { slug: "hn-show", name: "Show HN", platform: "hackernews", url: "https://news.ycombinator.com/show", category: "general", audience: "Tech founders and early adopters", relevance: "Launch new tools and migration stories; high-signal feedback" },
+    { slug: "hn-ask", name: "Ask HN", platform: "hackernews", url: "https://news.ycombinator.com/ask", category: "general", audience: "Tech community (broad)", relevance: "Recurring threads: 'Why is Vercel so expensive?', 'How do you deploy?', 'What's your hosting stack?'" },
+
+    // --- Stack Exchange ---
+    { slug: "so-cloud", name: "Stack Overflow [cloud]", platform: "stackexchange", url: "https://stackoverflow.com/questions/tagged/cloud", category: "cloud", audience: "Developers seeking technical answers", relevance: "Cloud migration how-to questions, provider-specific troubleshooting" },
+    { slug: "serverfault", name: "Server Fault", platform: "stackexchange", url: "https://serverfault.com", category: "devops", audience: "System administrators and network engineers", relevance: "Server migration questions, DNS cutover procedures, load balancer configs" },
+    { slug: "devops-se", name: "DevOps Stack Exchange", platform: "stackexchange", url: "https://devops.stackexchange.com", category: "devops", audience: "DevOps practitioners", relevance: "IaC questions, CI/CD pipeline migration, deployment strategies" },
+    { slug: "softwareeng-se", name: "Software Engineering SE", platform: "stackexchange", url: "https://softwareengineering.stackexchange.com", category: "general", audience: "Software architects and senior developers", relevance: "Architecture decisions around cloud providers, vendor lock-in discussions" },
+
+    // --- Discord ---
+    { slug: "discord-cloudflare", name: "Cloudflare Workers Discord", platform: "discord", url: "https://discord.cloudflare.com", category: "cloud", audience: "Cloudflare Workers developers", relevance: "Workers community, migration help, R2 adoption stories" },
+    { slug: "discord-nextjs", name: "Next.js Discord", platform: "discord", url: "https://nextjs.org/discord", category: "frontend", audience: "Next.js developers", relevance: "Self-hosting Next.js discussions, Vercel alternative threads" },
+    { slug: "discord-coolify", name: "Coolify Discord", platform: "discord", url: "https://coolify.io/discord", category: "selfhosting", audience: "Coolify users and self-hosters", relevance: "Self-hosting PaaS community; many Vercel/Heroku/Netlify refugees", notes: "Very active; good for understanding migration pain points" },
+    { slug: "discord-railway", name: "Railway Discord", platform: "discord", url: "https://discord.gg/railway", category: "cloud", audience: "Railway users", relevance: "Railway pricing discussions, deployment help" },
+    { slug: "discord-render", name: "Render Community", platform: "discord", url: "https://discord.gg/render", category: "cloud", audience: "Render users", relevance: "Render users discussing pricing, Heroku migration" },
+    { slug: "discord-flyio", name: "Fly.io Community", platform: "discord", url: "https://community.fly.io", category: "cloud", audience: "Fly.io users", relevance: "Heroku migration stories, Fly Postgres discussions", notes: "Uses Discourse forum, not Discord" },
+    { slug: "discord-neon", name: "Neon Discord", platform: "discord", url: "https://neon.tech/discord", category: "cloud", audience: "Neon Postgres users", relevance: "Postgres migration discussions, Heroku Postgres refugees" },
+    { slug: "discord-hetzner", name: "Hetzner Community", platform: "discord", url: "https://discord.gg/hetzner", category: "selfhosting", audience: "Hetzner users", relevance: "VPS setup, cloud-to-VPS migration discussions, cost comparisons" },
+
+    // --- Slack ---
+    { slug: "slack-sweetops", name: "SweetOps (Cloud Posse)", platform: "slack", url: "https://slack.sweetops.com", category: "devops", audience: "DevOps engineers (9k+ members)", relevance: "AWS infrastructure discussions, Terraform best practices, Cloud Posse weekly office hours", memberCount: 9000 },
+    { slug: "slack-devops", name: "DevOps Community Slack", platform: "slack", url: "https://devopscommunity.slack.com", category: "devops", audience: "DevOps practitioners (19k+ members)", relevance: "Infrastructure discussions, cloud provider comparisons", memberCount: 19000 },
+    { slug: "slack-kubernetes", name: "Kubernetes Slack", platform: "slack", url: "https://slack.k8s.io", category: "devops", audience: "Kubernetes community", relevance: "K8s migration discussions, managed vs self-hosted debates" },
+    { slug: "slack-heavybit", name: "Heavybit Developer Community", platform: "slack", url: "https://heavybit.com/community", category: "startup", audience: "Developer-focused startup founders", relevance: "Infrastructure cost discussions for developer tools companies" },
+
+    // --- Forums / Blogs ---
+    { slug: "dev-to", name: "DEV Community", platform: "forum", url: "https://dev.to", category: "general", audience: "Developers (broad)", relevance: "'Why I left Vercel' blog posts, hosting tutorials, self-hosting guides; high SEO value", notes: "Cross-post migration case studies here for reach" },
+    { slug: "hashnode", name: "Hashnode", platform: "blog", url: "https://hashnode.com", category: "general", audience: "Developer bloggers", relevance: "Developer blogs about cloud migration, hosting comparisons" },
+    { slug: "lobsters", name: "Lobsters", platform: "forum", url: "https://lobste.rs", category: "general", audience: "Senior engineers (invite-only)", relevance: "HN alternative with higher signal; infrastructure and DevOps discussions", notes: "Invite-only; higher quality discussion than HN" },
+    { slug: "lowendtalk", name: "LowEndTalk", platform: "forum", url: "https://lowendtalk.com", category: "selfhosting", audience: "Budget hosting enthusiasts", relevance: "VPS deals, Hetzner discussions, hosting cost optimization; Serverborse auction talk", notes: "Very price-sensitive audience, good for VPS migration target messaging" },
+    { slug: "indie-hackers", name: "Indie Hackers", platform: "forum", url: "https://indiehackers.com", category: "startup", audience: "Solo founders and indie developers", relevance: "Hosting cost discussions, bootstrap-friendly infrastructure" },
+    { slug: "producthunt", name: "Product Hunt", platform: "forum", url: "https://producthunt.com", category: "startup", audience: "Product builders and early adopters", relevance: "Launch infralift here; new hosting products and migration tools get attention" },
+    { slug: "tldr-newsletter", name: "TLDR Newsletter", platform: "blog", url: "https://tldr.tech", category: "general", audience: "Tech professionals (1M+ subscribers)", relevance: "DevOps/cloud news aggregator; sponsor or get featured for reach", memberCount: 1000000 },
+    { slug: "changelog", name: "The Changelog", platform: "blog", url: "https://changelog.com", category: "general", audience: "Open source developers and DevOps practitioners", relevance: "Developer podcast/newsletter covering infrastructure topics" },
+
+    // --- Vendor Communities ---
+    { slug: "vercel-discussions", name: "Vercel GitHub Discussions", platform: "vendor", url: "https://github.com/vercel/next.js/discussions", category: "frontend", audience: "Vercel/Next.js users", relevance: "Pricing complaints, self-hosting questions, migration threads" },
+    { slug: "heroku-forums", name: "Heroku Community", platform: "vendor", url: "https://community.heroku.com", category: "cloud", audience: "Heroku users", relevance: "End-of-life discussions, migration planning, alternative recommendations" },
+    { slug: "firebase-community", name: "Firebase Google Group", platform: "vendor", url: "https://groups.google.com/g/firebase-talk", category: "cloud", audience: "Firebase developers", relevance: "Billing issues, Firestore pricing complaints, migration planning" },
+    { slug: "digitalocean-community", name: "DigitalOcean Community", platform: "vendor", url: "https://community.digitalocean.com", category: "cloud", audience: "DigitalOcean users", relevance: "Migration tutorials, hosting guides, community Q&A" },
+    { slug: "aws-repost", name: "AWS re:Post", platform: "vendor", url: "https://repost.aws", category: "cloud", audience: "AWS users", relevance: "Cost optimization Q&A, migration assistance, service comparisons" },
+    { slug: "netlify-community", name: "Netlify Community Forum", platform: "vendor", url: "https://answers.netlify.com", category: "frontend", audience: "Netlify users", relevance: "Pricing questions, build minute concerns, alternative discussions" },
+  ];
+
+  for (const c of communities) {
+    await prisma.communitySource.upsert({
+      where: { slug: c.slug },
+      create: c,
+      update: {
+        name: c.name,
+        platform: c.platform,
+        url: c.url,
+        category: c.category,
+        audience: c.audience,
+        relevance: c.relevance,
+        memberCount: c.memberCount ?? null,
+        notes: c.notes ?? null,
+      },
+    });
+  }
+
   console.log(
-    `Seeded ${providers.length} hosting providers, ${programs.length} discount programs, ${tfTemplates.length} TF templates`
+    `Seeded ${providers.length} hosting providers, ${programs.length} discount programs, ${tfTemplates.length} TF templates, ${communities.length} community sources`
   );
 }
 
