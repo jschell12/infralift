@@ -1,0 +1,7 @@
+# AWS E2E deployment variables
+# Copy to terraform.tfvars and fill in values
+
+region       = "us-east-1"
+prefix       = "infralift-e2e"
+db_password  = "CHANGE_ME_strong_password_here"
+docker_image = "public.ecr.aws/docker/library/node:22-slim"

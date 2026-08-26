@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>infralift demo - {{provider}}</title>
+  <link rel="stylesheet" href="/public/style.css">
+</head>
+<body>
+  <header>
+    <h1>infralift demo</h1>
+    <p>Running on <strong>{{provider}}</strong> with {{count}} items</p>
+  </header>
+  <main>
+    <ul>{{items}}</ul>
+  </main>
+  <footer>
+    <p>This app is deployed identically across 12 hosting platforms to demonstrate infralift migrations.</p>
+    <a href="/api/status">API status</a>
+  </footer>
+</body>
+</html>

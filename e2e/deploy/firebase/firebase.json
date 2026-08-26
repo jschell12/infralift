@@ -1,0 +1,17 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "**",
+        "function": "app"
+      }
+    ]
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22",
+    "codebase": "infralift-demo"
+  }
+}

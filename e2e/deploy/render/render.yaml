@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: infralift-demo
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: infralift-demo-db
+          property: connectionString
+      - key: PROVIDER_NAME
+        value: render
+      - key: PORT
+        value: "3000"
+      - key: STORAGE_ENDPOINT
+        sync: false
+      - key: STORAGE_BUCKET
+        sync: false
+      - key: STORAGE_ACCESS_KEY
+        sync: false
+      - key: STORAGE_SECRET_KEY
+        sync: false
+
+databases:
+  - name: infralift-demo-db
+    plan: free
+    databaseName: infralift_demo
+    postgresMajorVersion: "16"

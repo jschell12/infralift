@@ -1,0 +1,37 @@
+# Netlify configuration for infralift-demo
+#
+# The Express app runs as a Netlify Function via the serverless-http adapter.
+# Deploy from the reference-app directory after wrapping server.js with
+# serverless-http (see functions/ directory).
+
+[build]
+  functions = "functions"
+  publish = "public"
+
+[functions]
+  node_bundler = "esbuild"
+  directory = "functions"
+
+# Redirect all requests to the serverless function
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/server"
+  status = 200
+
+[[redirects]]
+  from = "/health"
+  to = "/.netlify/functions/server"
+  status = 200
+
+[[redirects]]
+  from = "/upload"
+  to = "/.netlify/functions/server"
+  status = 200
+
+[[redirects]]
+  from = "/"
+  to = "/.netlify/functions/server"
+  status = 200
+
+[build.environment]
+  NODE_VERSION = "22"

@@ -1,0 +1,7 @@
+# GCP E2E deployment variables
+# Copy to terraform.tfvars and fill in values
+
+project_id   = "your-gcp-project-id"
+region       = "us-central1"
+db_password  = "CHANGE_ME_strong_password_here"
+docker_image = "gcr.io/cloudrun/hello"
