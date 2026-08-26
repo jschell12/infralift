@@ -1,5 +1,29 @@
 # infralift status
 
+## 2026-08-26
+
+### Completed
+- **Community sources table (PR #30)** — 48 communities seeded across Reddit, HN, Stack Exchange, Discord, Slack, forums, blogs, vendor communities. GET /communities endpoint with platform/category filtering. Prisma binaryTargets fix for Docker (debian-openssl-3.0.x).
+- **Community scanner + leads pipeline (PR #31)** — 5 platform scrapers (Reddit RSS, HN Algolia, DEV.to, Stack Exchange, Lobsters), keyword classifier (no LLM), CommunityLead model, GET /leads endpoint.
+- **Public scanner repo** — github.com/jschell12/infralift-scanner (standalone Node.js, pg direct, curl-based Reddit RSS). Created for Reddit API approval review.
+- **Nomad scanner job (schellout PRs #256-#257)** — Periodic batch job every 4 hours on Framework, uses infralift-scanner:local Docker image.
+- **Backfill from Jan 1 2026** — 235 leads stored from 3,875 scraped posts (201 HN, 34 DEV.to). Broadened HN Algolia queries (27 search terms, pagination).
+- **Reddit API ticket filed** — Submitted via support.reddithelp.com, pending approval. Devvit app "infralift" registered. RSS workaround working via curl (Node fetch gets TLS-fingerprinted 429).
+- **API redeployed** — New image with communities + leads routes, schema pushed, migrations resolved.
+
+### Debugging notes
+- Reddit blocks Node.js fetch with 429 (TLS fingerprinting) but curl gets 200. Workaround: execSync curl in scraper.
+- Reddit RSS needs 10s+ spacing between subreddit fetches to avoid rate limiting.
+- Prisma `binaryTargets = ["native", "debian-openssl-3.0.x"]` required for Docker; must `--no-cache` build to regenerate engine.
+- Prisma migrations marked as failed if `db push` was used first; fix with `prisma migrate resolve --applied`.
+
+### Next steps
+- Wait for Reddit API approval, then switch from RSS to OAuth
+- Add leads dashboard page to infralift dashboard
+- Sign up for source hosting platforms (Vercel, Heroku, etc.) for E2E testing
+- Implement OpenTofu + S3 backend toggle
+- Remove import block from schellout tunnel.tf
+
 ## 2026-08-25 (session 6)
 
 ### Completed
