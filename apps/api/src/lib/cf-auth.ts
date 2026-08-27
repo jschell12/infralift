@@ -65,9 +65,10 @@ export async function cfAuth(req: Request, res: Response, next: NextFunction) {
 
   // JWT can come from the header (direct Cloudflare proxy) or the
   // CF_Authorization cookie (forwarded through Next.js rewrite proxy).
-  const token =
+  const rawToken =
     req.headers["cf-access-jwt-assertion"] ??
     parseCookie(req.headers.cookie, "CF_Authorization");
+  const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;
   if (!token) {
     return res.status(401).json({ error: "Missing Cloudflare Access token" });
   }
