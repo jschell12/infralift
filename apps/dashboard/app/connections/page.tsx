@@ -243,7 +243,18 @@ export default function ConnectionsPage() {
               />
             )}
 
-            <div className="bg-bg border border-border rounded-lg p-3 text-muted text-xs font-mono mt-3 mb-4">
+            <div className="bg-accent-dim/50 border border-accent/20 rounded-lg p-3 text-sm text-text mt-3 mb-2 flex items-start gap-2">
+              <svg className="w-4 h-4 mt-0.5 text-accent flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m0 0a2 2 0 100 4 2 2 0 000-4zm6-6V7a6 6 0 10-12 0v4m-2 0h16a1 1 0 011 1v8a1 1 0 01-1 1H5a1 1 0 01-1-1v-8a1 1 0 011-1z" />
+              </svg>
+              <span>
+                Your token is encrypted with AES-256 before storage, never
+                displayed again, and only used for read-only API calls. You can
+                revoke it from your provider at any time.
+              </span>
+            </div>
+
+            <div className="bg-bg border border-border rounded-lg p-3 text-muted text-xs font-mono mt-2 mb-4">
               {SCOPE_HELP[provider]}
             </div>
 
