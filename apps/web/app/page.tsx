@@ -29,10 +29,10 @@ export default function Home() {
             faster than your revenue.
           </h1>
           <p className="sub">
-            Vercel, Heroku, and Firebase are great for shipping your MVP. But
-            usage-based pricing compounds fast. Get a free assessment showing
-            what your stack costs today and what it&apos;ll cost at 10x, then
-            migrate to infrastructure you own for a fixed fee.
+            Vercel, Heroku, and Firebase got you to launch. Now usage-based
+            pricing is compounding. We assess what your stack costs today,
+            project what it&apos;ll cost at 10x, and migrate you to
+            infrastructure you own for a fixed fee.
           </p>
           <a className="btn btn-primary" href={DASHBOARD_URL}>
             Get your free assessment
@@ -51,10 +51,10 @@ export default function Home() {
             <div className="card">
               <h3>The Vercel inflection point</h3>
               <p>
-                A solo dev pays $20/mo. A growing startup with 100k monthly
-                users averages $400/mo on Vercel vs $80/mo self-hosted on
-                equivalent infrastructure. Fast Data Transfer ($0.15/GB) and
-                Edge Requests ($2/M) are the line items that surprise you.
+                A solo dev pays $20/mo. At 100k monthly users, that climbs to
+                ~$400/mo on Vercel. The same workload self-hosted runs about
+                $80/mo. Fast Data Transfer at $0.15/GB and edge requests at
+                $2/M account for most of the difference.
               </p>
             </div>
             <div className="card">
@@ -69,45 +69,38 @@ export default function Home() {
             <div className="card">
               <h3>Heroku in maintenance mode</h3>
               <p>
-                Salesforce moved Heroku into sustaining engineering in early
-                2026. No new features, no new Enterprise contracts. Same
-                30-second timeout and two regions since 2011. Paying
-                $25/dyno/mo for a platform that stopped investing in itself.
+                Salesforce moved Heroku to sustaining engineering in early
+                2026. Same 30-second timeout, same two regions since 2011.
+                You&apos;re still paying $25/dyno/mo. No new features or
+                Enterprise contracts are coming.
               </p>
             </div>
           </div>
-          <div className="grid grid-3" style={{ marginTop: 20 }}>
-            <div className="card stat-card">
-              <div className="stat">5x-10x</div>
-              <p>
-                cost savings reported by teams migrating high-traffic apps off
-                Vercel to self-hosted infrastructure
-              </p>
-            </div>
+          <div className="grid grid-2" style={{ marginTop: 20 }}>
             <div className="card stat-card">
               <div className="stat">$850 vs $80</div>
               <p>
-                monthly cost for a 10M request/mo API backend on Vercel vs a
-                VPS alternative
+                Monthly cost for a 10M req/mo API on Vercel Pro vs a
+                comparable VPS. Per-seat pricing and Fast Data Transfer
+                ($0.15/GB) are most of the gap.
               </p>
             </div>
             <div className="card stat-card">
-              <div className="stat">12</div>
+              <div className="stat">12 providers</div>
               <p>
-                source providers assessed: Vercel, Heroku, Firebase, AWS, GCP,
-                Azure, Netlify, Render, Railway, Fly.io, DigitalOcean, and
-                Cloudflare
+                Vercel, Heroku, Firebase, AWS, GCP, Azure, Netlify, Render,
+                Railway, Fly.io, DigitalOcean, Cloudflare. We assess all of
+                them.
               </p>
             </div>
           </div>
         </section>
 
         <section className="section" id="scenarios">
-          <h2>Real numbers, real savings</h2>
+          <h2>What teams actually pay</h2>
           <p className="lead">
-            These scenarios use published 2026 pricing from Vercel and Heroku.
-            Savings are measured against Cloudflare Workers + Neon or Hetzner +
-            Docker + Neon, depending on the migration target.
+            Published 2026 pricing from Vercel and Heroku, compared against
+            Cloudflare Workers + Neon or Hetzner + Docker + Neon.
           </p>
 
           <div className="grid grid-2">
@@ -258,9 +251,10 @@ export default function Home() {
 
           <div className="scenario-footnote">
             <p>
-              Every scenario&apos;s alternative is an engineer spending 2-4 weeks
-              migrating. At loaded cost, that&apos;s $10k-30k of payroll plus risk.
-              A from-$3,000 fixed fee undercuts DIY before you count the savings.
+              The alternative in each case: an engineer spends 2-4 weeks on
+              the migration. At loaded cost that&apos;s $10k-30k in payroll,
+              plus the risk of getting it wrong. A fixed fee starting at
+              $3,000 is cheaper than DIY before you count the monthly savings.
             </p>
           </div>
         </section>
@@ -268,8 +262,8 @@ export default function Home() {
         <section className="section" id="how">
           <h2>How it works</h2>
           <p className="lead">
-            Read-only access in, working infrastructure out. You never hand us
-            write access to your current provider.
+            You give us a read-only token. We never get write access to your
+            current provider.
           </p>
           <div className="grid grid-4">
             <div className="card">
@@ -315,32 +309,24 @@ export default function Home() {
         <section className="section" id="standards">
           <h2>Everything is infrastructure as code</h2>
           <p className="lead">
-            No console clicking, no snowflake servers. Every resource we create
-            is Terraform, checked into your repo, planned and applied through
-            Terraform Cloud.
+            Every resource is Terraform, checked into your repo, planned and
+            applied through Terraform Cloud. You own the repo and state. Fire
+            us anytime and keep everything.
           </p>
-          <div className="grid grid-3">
+          <div className="grid grid-2">
             <div className="card">
-              <h3>You own the repo</h3>
+              <h3>Standards that stick</h3>
               <p>
-                Deliverables live in your GitHub or GitLab org. Fire us
-                anytime; the code, the state, and the docs stay with you. No
-                lock-in by design.
-              </p>
-            </div>
-            <div className="card">
-              <h3>Standards enforced</h3>
-              <p>
-                Modules, naming, tagging, remote state, and review gates,
-                enforced automatically on every change. Your infra stays clean
-                after we leave.
+                Modules, naming, tagging, remote state, and review gates run
+                automatically on every change. Your infra stays clean after we
+                leave.
               </p>
             </div>
             <div className="card">
               <h3>Drift visibility</h3>
               <p>
-                If someone changes something in a console, you see it. The
-                dashboard surfaces drift between Terraform state and reality.
+                Someone clicks around in a console. The dashboard catches it
+                and shows you what changed between Terraform state and reality.
               </p>
             </div>
           </div>
@@ -399,13 +385,12 @@ export default function Home() {
 
         <div className="cta-panel">
           <h2>
-            Start at $20/mo. Migrate at $200/mo. Not at $3,000/mo.
+            The assessment is free. The report is yours to keep.
           </h2>
           <p>
-            The assessment is free, read-only, and takes minutes. You get a
-            report showing your current costs, projected costs at scale, and a
-            fixed-fee quote to move. The report is yours even if you never hire
-            us.
+            Connect a read-only token, get back a cost report with projections
+            at 10x and a fixed-fee migration quote. Takes minutes. No
+            obligation.
           </p>
           <a className="btn btn-primary" href={DASHBOARD_URL}>
             Start your free assessment
