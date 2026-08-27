@@ -30,6 +30,9 @@ export default function RootLayout({
               <a href="/communities" className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface">
                 Communities
               </a>
+              <a href="/report" className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface">
+                Report
+              </a>
               <a href="/scanner" className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface">
                 Scanner
               </a>
