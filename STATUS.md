@@ -1,5 +1,22 @@
 # infralift status
 
+## 2026-08-27 (session 2)
+
+### Completed
+- **Lead actions + scanner status (PR #38)** — PATCH /leads/:id with status (new/contacted/dismissed/converted) + notes. Scanner status page at admin/scanner. Contact/Dismiss buttons on leads table. TFC client with real API calls.
+- **Providers column (PR #39)** — CommunityLead.providers[] tracks which source platforms are mentioned (vercel, heroku, firebase, aws, etc.). Classifier extracts providers and gates on hosting context. Admin leads page shows provider badges. Purged 184 off-topic leads total (290 down to 106).
+- **Tightened classifier** — Requires hosting/cloud context before scoring. Platform-specific Bright Data keywords. Generic terms like "cloud cost" replaced with "vercel pricing expensive", "heroku migration alternative".
+
+### Lead counts (106 clean leads)
+- Vercel: 42, AWS: 37, Cloudflare: 24, Firebase: 12, GCP: 12
+- Railway: 6, DigitalOcean: 6, Netlify: 6, Azure: 6, Heroku: 5, Fly.io: 3
+
+### Next steps
+- Sign up for Vercel + Heroku (links provided), deploy reference app
+- Build more admin features (lead detail view, outreach templates)
+- Wire TFC client with real credentials
+- Continue scanner improvement based on lead quality feedback
+
 ## 2026-08-27
 
 ### Completed
