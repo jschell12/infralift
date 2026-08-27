@@ -8,8 +8,33 @@ import {
   TfInputValidationError,
   type TfArguments,
 } from "../lib/tf/render.js";
+import { getTfcClient } from "../lib/tf/tfc-client.js";
 
 export const tfRouter = Router();
+
+// -- TFC connection status ---------------------------------------------------
+
+tfRouter.get("/tfc-status", async (_req, res) => {
+  const client = getTfcClient();
+  if (!client) {
+    return res.json({ connected: false, org: null, workspaceCount: null });
+  }
+  try {
+    const workspaces = await client.listWorkspaces();
+    res.json({
+      connected: true,
+      org: process.env.TFC_ORG ?? null,
+      workspaceCount: workspaces.length,
+    });
+  } catch {
+    // Token set but invalid or network failure
+    res.json({
+      connected: false,
+      org: process.env.TFC_ORG ?? null,
+      workspaceCount: null,
+    });
+  }
+});
 
 // -- templates ---------------------------------------------------------------
 
