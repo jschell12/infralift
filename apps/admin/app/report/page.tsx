@@ -113,7 +113,7 @@ export default function ReportPage() {
           fixed-fee migration to Cloudflare Workers or a Hetzner VPS eliminates
           the unpredictability.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <h3 className="text-sm font-semibold text-accent mb-2">Primary targets</h3>
             <ul className="text-muted text-sm space-y-1">
@@ -129,15 +129,6 @@ export default function ReportPage() {
               <li><span className="text-text font-semibold">Cloudflare</span> (24 leads) - Workers limits, overage protection gaps</li>
               <li><span className="text-text font-semibold">Heroku</span> (5 leads) - maintenance mode, stagnation</li>
             </ul>
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-accent mb-2">Key insight</h3>
-            <p className="text-muted text-sm">
-              The HN post "Usage circuit breaker for Cloudflare Workers" (29 pts)
-              shows developers building DIY cost protection because platforms
-              don't offer it. infralift's migration to fixed-cost infrastructure
-              removes the need for circuit breakers entirely.
-            </p>
           </div>
         </div>
       </div>
