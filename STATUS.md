@@ -1,5 +1,26 @@
 # infralift status
 
+## 2026-08-27 (session 4)
+
+### Completed
+- **E2E pipeline proven** — Reference app deployed to Vercel and Heroku with Neon Postgres (API-provisioned). Real assessments run via infralift connectors. Full pipeline: deploy, connect, assess, get inventory + cost + recommendations.
+- **Vercel assessment**: 2 resources (projects), Next.js migration recommendation, usage-based billing finding.
+- **Heroku assessment**: 2 resources (app + Basic dyno), $7/mo cost, dyno cost finding.
+- **Neon databases created via API** — 2 projects (infralift-e2e-vercel, infralift-e2e-heroku) under hustlehawk org.
+- **Lead intelligence report (PR #41)** — Provider pain matrix, top leads, strategic analysis at admin.infralift.dev/report.
+- **Removed hardcoded Key insight (PR #43)**.
+
+### Live E2E deployments
+- Vercel: reference-40e5m01ib-jschell12s-projects.vercel.app
+- Heroku: infralift-e2e-58df521cccc0.herokuapp.com
+- Both connected and assessed via dashboard.infralift.dev
+
+### Next steps
+- Execute a full migration from Vercel/Heroku to Cloudflare or Hetzner target
+- Wire TFC client with real credentials for workspace creation
+- Go after Vercel leads (42 billing pain leads) with free assessment offer
+- Outreach templates for high-engagement leads
+
 ## 2026-08-27 (session 3)
 
 ### Completed
