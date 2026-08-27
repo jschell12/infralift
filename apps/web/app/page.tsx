@@ -11,6 +11,7 @@ export default function Home() {
           </div>
           <div className="nav-links">
             <a href="#why">Why now</a>
+            <a href="#scenarios">Scenarios</a>
             <a href="#how">How it works</a>
             <a href="#pricing">Pricing</a>
             <a href="#standards">IaC standards</a>
@@ -98,6 +99,169 @@ export default function Home() {
                 Cloudflare
               </p>
             </div>
+          </div>
+        </section>
+
+        <section className="section" id="scenarios">
+          <h2>Real numbers, real savings</h2>
+          <p className="lead">
+            These scenarios use published 2026 pricing from Vercel and Heroku.
+            Savings are measured against Cloudflare Workers + Neon or Hetzner +
+            Docker + Neon, depending on the migration target.
+          </p>
+
+          <div className="grid grid-2">
+            <div className="card scenario-card">
+              <div className="scenario-badge">Vercel</div>
+              <h3>5-person funded startup</h3>
+              <p>
+                Seed-stage SaaS, Next.js + API routes, 50k MAU, 500GB/mo
+                transfer, preview deploys on every PR.
+              </p>
+              <div className="scenario-compare">
+                <div className="scenario-before">
+                  <span className="scenario-label">Vercel today</span>
+                  <span className="scenario-amount">$197<small>/mo</small></span>
+                  <span className="scenario-detail">5 seats, bandwidth, functions, Postgres</span>
+                </div>
+                <div className="scenario-after">
+                  <span className="scenario-label">After migration</span>
+                  <span className="scenario-amount">$34<small>/mo</small></span>
+                  <span className="scenario-detail">CF Workers + R2 + Neon</span>
+                </div>
+              </div>
+              <div className="scenario-savings">
+                Save <strong>$1,960/yr</strong> (83%)
+              </div>
+            </div>
+
+            <div className="card scenario-card">
+              <div className="scenario-badge">Vercel</div>
+              <h3>Scaling SaaS (the sweat zone)</h3>
+              <p>
+                Series A, 10 engineers, 200k MAU, 2TB/mo transfer,
+                image-heavy product with ISR + edge middleware.
+              </p>
+              <div className="scenario-compare">
+                <div className="scenario-before">
+                  <span className="scenario-label">Vercel today</span>
+                  <span className="scenario-amount">$755<small>/mo</small></span>
+                  <span className="scenario-detail">10 seats, egress, functions, observability</span>
+                </div>
+                <div className="scenario-after">
+                  <span className="scenario-label">After migration</span>
+                  <span className="scenario-amount">$114<small>/mo</small></span>
+                  <span className="scenario-detail">CF Workers + R2 + Neon</span>
+                </div>
+              </div>
+              <div className="scenario-savings">
+                Save <strong>$7,690/yr</strong> (85%) &middot; Payback under 5 months
+              </div>
+            </div>
+
+            <div className="card scenario-card">
+              <div className="scenario-badge">Vercel</div>
+              <h3>High-traffic content site</h3>
+              <p>
+                1.5M monthly visitors, 10TB/mo transfer, marketing site +
+                storefront, 6 engineers. Vercel starts calling about Enterprise.
+              </p>
+              <div className="scenario-compare">
+                <div className="scenario-before">
+                  <span className="scenario-label">Vercel today</span>
+                  <span className="scenario-amount">$3,080<small>/mo</small></span>
+                  <span className="scenario-detail">Egress alone: $1,350/mo at $0.15/GB</span>
+                </div>
+                <div className="scenario-after">
+                  <span className="scenario-label">After migration</span>
+                  <span className="scenario-amount">$180<small>/mo</small></span>
+                  <span className="scenario-detail">CF Workers + R2 (egress: $0)</span>
+                </div>
+              </div>
+              <div className="scenario-savings">
+                Save <strong>$34,800/yr</strong> (94%) &middot; Payback in 5 weeks
+              </div>
+            </div>
+
+            <div className="card scenario-card">
+              <div className="scenario-badge scenario-badge-heroku">Heroku</div>
+              <h3>Bootstrapped API business</h3>
+              <p>
+                2 founders, REST API at 10M requests/mo, worker dyno for
+                background jobs, Postgres + Redis.
+              </p>
+              <div className="scenario-compare">
+                <div className="scenario-before">
+                  <span className="scenario-label">Heroku today</span>
+                  <span className="scenario-amount">$150<small>/mo</small></span>
+                  <span className="scenario-detail">2 dynos, Postgres, Redis, logging</span>
+                </div>
+                <div className="scenario-after">
+                  <span className="scenario-label">After migration</span>
+                  <span className="scenario-amount">$27<small>/mo</small></span>
+                  <span className="scenario-detail">Hetzner VPS + Neon</span>
+                </div>
+              </div>
+              <div className="scenario-savings">
+                Save <strong>$1,480/yr</strong> (82%)
+              </div>
+            </div>
+
+            <div className="card scenario-card">
+              <div className="scenario-badge scenario-badge-heroku">Heroku</div>
+              <h3>Production SaaS (the step function)</h3>
+              <p>
+                8-person team, B2B SaaS. Traffic outgrew Standard dynos, so
+                they jumped to Performance-M: 5x the price for 2.5x the compute.
+              </p>
+              <div className="scenario-compare">
+                <div className="scenario-before">
+                  <span className="scenario-label">Heroku today</span>
+                  <span className="scenario-amount">$910<small>/mo</small></span>
+                  <span className="scenario-detail">Performance dynos, Postgres, Redis, add-ons</span>
+                </div>
+                <div className="scenario-after">
+                  <span className="scenario-label">After migration</span>
+                  <span className="scenario-amount">$128<small>/mo</small></span>
+                  <span className="scenario-detail">Hetzner dedicated + Neon</span>
+                </div>
+              </div>
+              <div className="scenario-savings">
+                Save <strong>$9,380/yr</strong> (86%) &middot; Payback under 4 months
+              </div>
+            </div>
+
+            <div className="card scenario-card">
+              <div className="scenario-badge scenario-badge-split">Both</div>
+              <h3>Split stack (Vercel + Heroku)</h3>
+              <p>
+                Common pattern: Next.js frontend on Vercel, API + jobs on
+                Heroku. Two bills, two dashboards, 6 engineers.
+              </p>
+              <div className="scenario-compare">
+                <div className="scenario-before">
+                  <span className="scenario-label">Combined today</span>
+                  <span className="scenario-amount">$325<small>/mo</small></span>
+                  <span className="scenario-detail">Vercel seats + bandwidth + Heroku dynos</span>
+                </div>
+                <div className="scenario-after">
+                  <span className="scenario-label">After migration</span>
+                  <span className="scenario-amount">$39<small>/mo</small></span>
+                  <span className="scenario-detail">Unified: CF Workers + Neon</span>
+                </div>
+              </div>
+              <div className="scenario-savings">
+                Save <strong>$3,430/yr</strong> (88%) &middot; One platform instead of two
+              </div>
+            </div>
+          </div>
+
+          <div className="scenario-footnote">
+            <p>
+              Every scenario&apos;s alternative is an engineer spending 2-4 weeks
+              migrating. At loaded cost, that&apos;s $10k-30k of payroll plus risk.
+              A from-$3,000 fixed fee undercuts DIY before you count the savings.
+            </p>
           </div>
         </section>
 
