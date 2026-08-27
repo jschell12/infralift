@@ -114,6 +114,59 @@ leadsRouter.get("/scanner-status", async (req, res) => {
   });
 });
 
+// Full report data for admin dashboard.
+leadsRouter.get("/report", async (req, res) => {
+  const [
+    total,
+    byClassification,
+    byStatus,
+    topLeads,
+  ] = await Promise.all([
+    prisma.communityLead.count(),
+    prisma.communityLead.groupBy({
+      by: ["classification"],
+      _count: true,
+    }),
+    prisma.communityLead.groupBy({
+      by: ["status"],
+      _count: true,
+    }),
+    prisma.communityLead.findMany({
+      orderBy: { engagementScore: "desc" },
+      take: 20,
+      include: {
+        community: { select: { name: true, slug: true, platform: true } },
+      },
+    }),
+  ]);
+
+  // Raw SQL for provider breakdown and cross-tab (Prisma can't unnest arrays)
+  const byProvider: { provider: string; n: string }[] = await prisma.$queryRaw`
+    SELECT unnest(providers) as provider, count(*)::text as n
+    FROM "CommunityLead"
+    GROUP BY provider ORDER BY count(*) DESC`;
+
+  const crossTab: { provider: string; classification: string; n: string }[] = await prisma.$queryRaw`
+    SELECT unnest(providers) as provider, classification, count(*)::text as n
+    FROM "CommunityLead"
+    GROUP BY provider, classification ORDER BY provider, count(*) DESC`;
+
+  const byPlatform = await prisma.communityLead.groupBy({
+    by: ["platform"],
+    _count: true,
+  });
+
+  res.json({
+    total,
+    byClassification: Object.fromEntries(byClassification.map((r) => [r.classification, r._count])),
+    byStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count])),
+    byProvider: byProvider.map((r) => ({ provider: r.provider, count: Number(r.n) })),
+    byPlatform: Object.fromEntries(byPlatform.map((r) => [r.platform, r._count])),
+    crossTab: crossTab.map((r) => ({ provider: r.provider, classification: r.classification, count: Number(r.n) })),
+    topLeads,
+  });
+});
+
 // PATCH /leads/:id - update lead status
 leadsRouter.patch("/:id", async (req, res) => {
   const { id } = req.params;
