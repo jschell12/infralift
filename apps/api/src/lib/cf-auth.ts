@@ -63,8 +63,12 @@ export async function cfAuth(req: Request, res: Response, next: NextFunction) {
     return next();
   }
 
-  const token = req.headers["cf-access-jwt-assertion"];
-  if (!token || typeof token !== "string") {
+  // JWT can come from the header (direct Cloudflare proxy) or the
+  // CF_Authorization cookie (forwarded through Next.js rewrite proxy).
+  const token =
+    req.headers["cf-access-jwt-assertion"] ??
+    parseCookie(req.headers.cookie, "CF_Authorization");
+  if (!token) {
     return res.status(401).json({ error: "Missing Cloudflare Access token" });
   }
 
@@ -104,6 +108,15 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
     return res.status(403).json({ error: "Admin access required" });
   }
   next();
+}
+
+function parseCookie(
+  header: string | undefined,
+  name: string
+): string | undefined {
+  if (!header) return undefined;
+  const match = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match?.[1];
 }
 
 /**
