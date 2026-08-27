@@ -8,7 +8,6 @@ import { getConnector } from "../connectors/index.js";
 export const connectionsRouter = Router();
 
 const createSchema = z.object({
-  orgId: z.string().min(1),
   provider: z.enum(PROVIDERS),
   label: z.string().min(1).max(120),
   token: z.string().min(1),
@@ -32,10 +31,9 @@ function toSummary(c: {
   };
 }
 
-// List connections for an org — tokens are never returned.
+// List connections for the authenticated user's org.
 connectionsRouter.get("/", async (req, res) => {
-  const orgId = String(req.query.orgId ?? "");
-  if (!orgId) return res.status(400).json({ error: "orgId required" });
+  const { orgId } = req.user!;
   const connections = await prisma.providerConnection.findMany({
     where: { orgId },
     orderBy: { createdAt: "desc" },
@@ -49,7 +47,8 @@ connectionsRouter.post("/", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid request", detail: parsed.error.message });
   }
-  const { orgId, provider, label, token } = parsed.data;
+  const { provider, label, token } = parsed.data;
+  const { orgId } = req.user!;
 
   const connector = getConnector(provider);
   let valid = false;
@@ -78,7 +77,9 @@ connectionsRouter.post("/:id/verify", async (req, res) => {
   const connection = await prisma.providerConnection.findUnique({
     where: { id: req.params.id },
   });
-  if (!connection) return res.status(404).json({ error: "Not found" });
+  if (!connection || connection.orgId !== req.user!.orgId) {
+    return res.status(404).json({ error: "Not found" });
+  }
 
   const connector = getConnector(connection.provider as Provider);
   let valid = false;
@@ -100,6 +101,12 @@ connectionsRouter.post("/:id/verify", async (req, res) => {
 
 // Delete a connection (and its stored token).
 connectionsRouter.delete("/:id", async (req, res) => {
-  await prisma.providerConnection.delete({ where: { id: req.params.id } });
+  const connection = await prisma.providerConnection.findUnique({
+    where: { id: req.params.id },
+  });
+  if (!connection || connection.orgId !== req.user!.orgId) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  await prisma.providerConnection.delete({ where: { id: connection.id } });
   res.status(204).end();
 });

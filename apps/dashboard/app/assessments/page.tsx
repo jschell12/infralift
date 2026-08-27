@@ -6,7 +6,7 @@ import {
   type AssessmentSummary,
   type ProviderConnectionSummary,
 } from "@infralift/shared";
-import { api, DEV_ORG_ID, formatCents } from "../../lib/api";
+import { api, formatCents } from "../../lib/api";
 
 export default function AssessmentsPage() {
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
@@ -20,10 +20,8 @@ export default function AssessmentsPage() {
   const load = useCallback(async () => {
     try {
       const [a, c] = await Promise.all([
-        api<AssessmentSummary[]>(`/assessments?orgId=${DEV_ORG_ID}`),
-        api<ProviderConnectionSummary[]>(
-          `/connections?orgId=${DEV_ORG_ID}`
-        ),
+        api<AssessmentSummary[]>(`/assessments`),
+        api<ProviderConnectionSummary[]>(`/connections`),
       ]);
       setAssessments(a);
       setConnections(c);

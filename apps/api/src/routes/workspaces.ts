@@ -4,8 +4,7 @@ import { prisma } from "../lib/db.js";
 export const workspacesRouter = Router();
 
 workspacesRouter.get("/", async (req, res) => {
-  const orgId = String(req.query.orgId ?? "");
-  if (!orgId) return res.status(400).json({ error: "orgId required" });
+  const { orgId } = req.user!;
   const workspaces = await prisma.workspace.findMany({
     where: { orgId },
     orderBy: { name: "asc" },

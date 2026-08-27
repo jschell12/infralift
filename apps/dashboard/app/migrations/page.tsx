@@ -5,7 +5,7 @@ import {
   PROVIDER_LABELS,
   type MigrationSummary,
 } from "@infralift/shared";
-import { api, DEV_ORG_ID, formatCents } from "../../lib/api";
+import { api, formatCents } from "../../lib/api";
 
 const STATUS_BADGE: Record<string, string> = {
   completed: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent-dim text-accent",
@@ -23,7 +23,7 @@ export default function MigrationsPage() {
   const load = useCallback(async () => {
     try {
       setMigrations(
-        await api<MigrationSummary[]>(`/migrations?orgId=${DEV_ORG_ID}`)
+        await api<MigrationSummary[]>(`/migrations`)
       );
       setError(null);
     } catch (e) {

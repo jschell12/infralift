@@ -7,7 +7,7 @@ import {
   type Provider,
   type ProviderConnectionSummary,
 } from "@infralift/shared";
-import { api, DEV_ORG_ID } from "../../lib/api";
+import { api } from "../../lib/api";
 
 const SCOPE_HELP: Record<Provider, React.ReactNode> = {
   vercel: (
@@ -135,7 +135,7 @@ export default function ConnectionsPage() {
     try {
       setConnections(
         await api<ProviderConnectionSummary[]>(
-          `/connections?orgId=${DEV_ORG_ID}`
+          `/connections`
         )
       );
       setError(null);
@@ -155,7 +155,7 @@ export default function ConnectionsPage() {
     try {
       await api("/connections", {
         method: "POST",
-        body: JSON.stringify({ orgId: DEV_ORG_ID, provider, label, token }),
+        body: JSON.stringify({ provider, label, token }),
       });
       setLabel("");
       setToken("");
