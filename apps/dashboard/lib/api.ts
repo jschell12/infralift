@@ -3,9 +3,6 @@
 // Access cookies. In local dev, set NEXT_PUBLIC_API_URL to override.
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
-// Dev-mode org until magic-link auth is wired into the UI.
-export const DEV_ORG_ID = "dev-org";
-
 export async function api<T>(
   path: string,
   init?: RequestInit

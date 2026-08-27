@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import type { WorkspaceSummary } from "@infralift/shared";
-import { api, DEV_ORG_ID } from "../../lib/api";
+import { api } from "../../lib/api";
 
 export default function WorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api<WorkspaceSummary[]>(`/workspaces?orgId=${DEV_ORG_ID}`)
+    api<WorkspaceSummary[]>(`/workspaces`)
       .then(setWorkspaces)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);

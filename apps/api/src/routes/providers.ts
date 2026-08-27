@@ -48,7 +48,6 @@ providersRouter.post("/recommendations", async (req, res) => {
 });
 
 const saveProfileSchema = profileSchema.extend({
-  orgId: z.string().min(1),
   name: z.string().min(1).max(120),
 });
 
@@ -60,13 +59,13 @@ providersRouter.post("/app-profiles", async (req, res) => {
       .status(400)
       .json({ error: "Invalid request", detail: parsed.error.message });
   }
-  const profile = await prisma.appProfile.create({ data: parsed.data });
+  const { orgId } = req.user!;
+  const profile = await prisma.appProfile.create({ data: { ...parsed.data, orgId } });
   res.status(201).json(profile);
 });
 
 providersRouter.get("/app-profiles", async (req, res) => {
-  const orgId = String(req.query.orgId ?? "");
-  if (!orgId) return res.status(400).json({ error: "orgId required" });
+  const { orgId } = req.user!;
   res.json(
     await prisma.appProfile.findMany({
       where: { orgId },

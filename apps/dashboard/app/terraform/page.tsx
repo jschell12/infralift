@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, DEV_ORG_ID } from "../../lib/api";
+import { api } from "../../lib/api";
 
 // -- API shapes ---------------------------------------------------------------
 
@@ -194,7 +194,7 @@ export default function TerraformPage() {
   }, []);
 
   const loadProjects = useCallback(async () => {
-    const rows = await api<TfProject[]>(`/tf/projects?orgId=${DEV_ORG_ID}`);
+    const rows = await api<TfProject[]>(`/tf/projects`);
     setProjects(rows);
     setSelectedProjectId((cur) => cur || rows[0]?.id || "");
   }, []);
@@ -248,7 +248,6 @@ export default function TerraformPage() {
       await api("/tf/projects", {
         method: "POST",
         body: JSON.stringify({
-          orgId: DEV_ORG_ID,
           name: pName,
           templateSlug: pTemplateSlug,
           releaseTag: pReleaseTag,

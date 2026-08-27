@@ -125,8 +125,7 @@ tfRouter.post("/templates/:slug/versions/:tag/preview", async (req, res) => {
 // -- projects ----------------------------------------------------------------
 
 tfRouter.get("/projects", async (req, res) => {
-  const orgId = String(req.query.orgId ?? "");
-  if (!orgId) return res.status(400).json({ error: "orgId required" });
+  const { orgId } = req.user!;
   const projects = await prisma.tfProject.findMany({
     where: { orgId },
     include: {
@@ -144,7 +143,6 @@ tfRouter.get("/projects", async (req, res) => {
 });
 
 const projectSchema = z.object({
-  orgId: z.string().min(1),
   name: z
     .string()
     .min(1)
@@ -168,6 +166,7 @@ tfRouter.post("/projects", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
+  const { orgId } = req.user!;
   const d = parsed.data;
   const template = await prisma.tfTemplate.findUnique({
     where: { slug: d.templateSlug },
@@ -184,7 +183,7 @@ tfRouter.post("/projects", async (req, res) => {
   if (!version) return res.status(404).json({ error: "version not found" });
   const project = await prisma.tfProject.create({
     data: {
-      orgId: d.orgId,
+      orgId,
       name: d.name,
       templateVersionId: version.id,
       destRepo: d.destRepo,

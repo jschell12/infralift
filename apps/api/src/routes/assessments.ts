@@ -40,10 +40,9 @@ async function summarize(assessmentId: string) {
   };
 }
 
-// List assessments for an org.
+// List assessments for the authenticated user's org.
 assessmentsRouter.get("/", async (req, res) => {
-  const orgId = String(req.query.orgId ?? "");
-  if (!orgId) return res.status(400).json({ error: "orgId required" });
+  const { orgId } = req.user!;
   const assessments = await prisma.assessment.findMany({
     where: { orgId },
     orderBy: { createdAt: "desc" },
@@ -64,7 +63,9 @@ assessmentsRouter.post("/run", async (req, res) => {
   const connection = await prisma.providerConnection.findUnique({
     where: { id: parsed.data.connectionId },
   });
-  if (!connection) return res.status(404).json({ error: "Connection not found" });
+  if (!connection || connection.orgId !== req.user!.orgId) {
+    return res.status(404).json({ error: "Connection not found" });
+  }
 
   const assessment = await prisma.assessment.create({
     data: {

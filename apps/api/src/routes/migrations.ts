@@ -15,7 +15,6 @@ const DEFAULT_PHASES = [
 ];
 
 const createSchema = z.object({
-  orgId: z.string().min(1),
   sourceProvider: z.enum(PROVIDERS),
   targetPlatform: z.enum(["cloudflare", "vps"]),
   fixedFeeCents: z.number().int().positive().optional(),
@@ -63,8 +62,7 @@ function toSummary(m: {
 }
 
 migrationsRouter.get("/", async (req, res) => {
-  const orgId = String(req.query.orgId ?? "");
-  if (!orgId) return res.status(400).json({ error: "orgId required" });
+  const { orgId } = req.user!;
   const migrations = await prisma.migration.findMany({
     where: { orgId },
     include: { phases: true },
@@ -78,9 +76,11 @@ migrationsRouter.post("/", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid request", detail: parsed.error.message });
   }
+  const { orgId } = req.user!;
   const migration = await prisma.migration.create({
     data: {
       ...parsed.data,
+      orgId,
       phases: {
         create: DEFAULT_PHASES.map((p, i) => ({ ...p, order: i })),
       },

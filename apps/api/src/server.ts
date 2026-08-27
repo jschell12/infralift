@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { authRouter } from "./routes/auth.js";
+import { cfAuth, requireAdmin } from "./lib/cf-auth.js";
 import { connectionsRouter } from "./routes/connections.js";
 import { assessmentsRouter } from "./routes/assessments.js";
 import { migrationsRouter } from "./routes/migrations.js";
@@ -18,20 +18,31 @@ const corsOrigins = (process.env.CORS_ORIGINS ??
   .map((s) => s.trim())
   .filter(Boolean);
 
-app.use(cors({ origin: corsOrigins }));
+app.use(cors({ origin: corsOrigins, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-app.use("/auth", authRouter);
+// All routes below require Cloudflare Access authentication.
+// In dev mode (no CF_ACCESS_TEAM_DOMAIN), a dev user is auto-created.
+app.use(cfAuth);
+
+// Current user info — the dashboard calls this on load.
+app.get("/auth/me", (req, res) => {
+  res.json(req.user);
+});
+
+// Customer-facing routes (scoped to req.user.orgId by each router)
 app.use("/connections", connectionsRouter);
 app.use("/assessments", assessmentsRouter);
 app.use("/migrations", migrationsRouter);
 app.use("/workspaces", workspacesRouter);
 app.use("/hosting", providersRouter);
 app.use("/tf", tfRouter);
-app.use("/communities", communitiesRouter);
-app.use("/leads", leadsRouter);
+
+// Admin-only routes
+app.use("/communities", requireAdmin, communitiesRouter);
+app.use("/leads", requireAdmin, leadsRouter);
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => {
