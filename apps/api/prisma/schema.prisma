@@ -415,6 +415,7 @@ model CommunityLead {
   classification  String    // billing_pain, migration_interest, platform_complaint
   confidence      String    // high, medium, low
   engagementScore Int?
+  providers       String[]  @default([]) // source providers mentioned: vercel, heroku, firebase, aws, etc.
   status          String    @default("new") // new, contacted, dismissed, converted
   notes           String?
   postedAt        DateTime?

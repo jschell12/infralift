@@ -14,6 +14,7 @@ interface Lead {
   classification: string;
   confidence: string;
   engagementScore: number | null;
+  providers: string[];
   status: string;
   notes: string | null;
   postedAt: string | null;
@@ -199,6 +200,7 @@ export default function LeadsPage() {
               <tr>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Classification</th>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Status</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Providers</th>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Source</th>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Title</th>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Engagement</th>
@@ -218,6 +220,18 @@ export default function LeadsPage() {
                     <span className={STATUS_BADGE[l.status] ?? STATUS_BADGE.new}>
                       {l.status}
                     </span>
+                  </td>
+                  <td className="p-3 border-b border-border">
+                    <div className="flex flex-wrap gap-1">
+                      {(l.providers ?? []).map((p) => (
+                        <span
+                          key={p}
+                          className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-accent-dim text-accent"
+                        >
+                          {p}
+                        </span>
+                      ))}
+                    </div>
                   </td>
                   <td className="p-3 border-b border-border">{l.community?.name ?? l.platform}</td>
                   <td className="p-3 border-b border-border">
