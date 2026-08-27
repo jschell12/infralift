@@ -415,6 +415,8 @@ model CommunityLead {
   classification  String    // billing_pain, migration_interest, platform_complaint
   confidence      String    // high, medium, low
   engagementScore Int?
+  status          String    @default("new") // new, contacted, dismissed, converted
+  notes           String?
   postedAt        DateTime?
   scrapedAt       DateTime  @default(now())
 
@@ -423,5 +425,6 @@ model CommunityLead {
   @@unique([sourceId, platform])
   @@index([communityId])
   @@index([classification])
+  @@index([status])
   @@index([scrapedAt])
 }

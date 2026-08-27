@@ -14,6 +14,8 @@ interface Lead {
   classification: string;
   confidence: string;
   engagementScore: number | null;
+  status: string;
+  notes: string | null;
   postedAt: string | null;
   scrapedAt: string;
   community: { name: string; slug: string; platform: string };
@@ -24,6 +26,7 @@ interface Summary {
   migration_interest?: number;
   platform_complaint?: number;
   total?: number;
+  byStatus?: Record<string, number>;
 }
 
 const CLASS_BADGE: Record<string, string> = {
@@ -38,19 +41,29 @@ const CLASS_LABEL: Record<string, string> = {
   platform_complaint: "platform complaint",
 };
 
+const STATUS_BADGE: Record<string, string> = {
+  new: "inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-accent/20 text-accent",
+  contacted: "inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400",
+  dismissed: "inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-border text-muted",
+  converted: "inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-400",
+};
+
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [summary, setSummary] = useState<Summary>({});
   const [classification, setClassification] = useState("");
   const [platform, setPlatform] = useState("");
+  const [status, setStatus] = useState("");
   const [days, setDays] = useState(30);
   const [error, setError] = useState<string | null>(null);
+  const [updating, setUpdating] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (classification) params.set("classification", classification);
       if (platform) params.set("platform", platform);
+      if (status) params.set("status", status);
       params.set("days", String(days));
       params.set("limit", "200");
 
@@ -64,11 +77,31 @@ export default function LeadsPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [classification, platform, days]);
+  }, [classification, platform, status, days]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const updateStatus = async (id: string, newStatus: string) => {
+    setUpdating(id);
+    try {
+      const updated = await api<Lead>(`/leads/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: newStatus }),
+      });
+      setLeads((prev) =>
+        prev.map((l) => (l.id === id ? { ...l, ...updated } : l))
+      );
+      // Refresh summary counts
+      const summaryData = await api<Summary>(`/leads/summary?days=${days}`);
+      setSummary(summaryData);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUpdating(null);
+    }
+  };
 
   return (
     <>
@@ -126,6 +159,20 @@ export default function LeadsPage() {
             </select>
           </div>
           <div>
+            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Status</label>
+            <select
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="new">New</option>
+              <option value="contacted">Contacted</option>
+              <option value="dismissed">Dismissed</option>
+              <option value="converted">Converted</option>
+            </select>
+          </div>
+          <div>
             <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Days</label>
             <select
               className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
@@ -151,10 +198,12 @@ export default function LeadsPage() {
             <thead>
               <tr>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Classification</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Status</th>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Source</th>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Title</th>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Engagement</th>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Date</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -163,6 +212,11 @@ export default function LeadsPage() {
                   <td className="p-3 border-b border-border">
                     <span className={CLASS_BADGE[l.classification] ?? "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold"}>
                       {CLASS_LABEL[l.classification] ?? l.classification}
+                    </span>
+                  </td>
+                  <td className="p-3 border-b border-border">
+                    <span className={STATUS_BADGE[l.status] ?? STATUS_BADGE.new}>
+                      {l.status}
                     </span>
                   </td>
                   <td className="p-3 border-b border-border">{l.community?.name ?? l.platform}</td>
@@ -187,6 +241,28 @@ export default function LeadsPage() {
                     {l.postedAt
                       ? new Date(l.postedAt).toLocaleDateString()
                       : ""}
+                  </td>
+                  <td className="p-3 border-b border-border">
+                    <div className="flex gap-1.5">
+                      {l.status !== "contacted" && (
+                        <button
+                          className="px-2.5 py-1 text-xs rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50"
+                          disabled={updating === l.id}
+                          onClick={() => updateStatus(l.id, "contacted")}
+                        >
+                          Contact
+                        </button>
+                      )}
+                      {l.status !== "dismissed" && (
+                        <button
+                          className="px-2.5 py-1 text-xs rounded-lg bg-border text-muted hover:bg-border/80 disabled:opacity-50"
+                          disabled={updating === l.id}
+                          onClick={() => updateStatus(l.id, "dismissed")}
+                        >
+                          Dismiss
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
