@@ -1,5 +1,5 @@
 const DASHBOARD_URL =
-  process.env.NEXT_PUBLIC_DASHBOARD_URL ?? "http://localhost:3001";
+  process.env.NEXT_PUBLIC_DASHBOARD_URL ?? "https://dashboard.infralift.dev";
 
 export default function Home() {
   return (
