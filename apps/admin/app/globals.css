@@ -20,11 +20,10 @@ body {
     "Helvetica Neue", sans-serif;
 }
 
-a {
+a:not([class*="bg-"]) {
   color: var(--color-accent);
-  text-decoration: none;
 }
 
-a:hover {
+a {
   text-decoration: none;
 }
