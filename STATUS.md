@@ -1,5 +1,21 @@
 # infralift status
 
+## 2026-08-27 (session 3)
+
+### Completed
+- **Lead intelligence report (PR #41)** — GET /leads/report with provider pain matrix (cross-tab), source/status breakdown, top 20 leads. Admin report page at /report with "Where infralift fits" analysis.
+- **Providers column + purge (PR #39)** — providers[] tracks mentioned platforms. Purged 184 off-topic leads (290 to 106). All leads now tagged with source providers.
+- **Tightened classifier** — Hosting context gate, platform-specific Bright Data keywords, generic terms removed.
+
+### Lead state (106 leads)
+- Vercel: 42, AWS: 37, Cloudflare: 24, GCP: 12, Firebase: 12
+- 80 billing pain, 13 migration interest, 13 platform complaints
+
+### Next steps
+- Sign up for Vercel + Heroku, deploy reference app, run assessments
+- Wire TFC client with real credentials
+- Outreach templates for high-engagement leads
+
 ## 2026-08-27 (session 2)
 
 ### Completed
