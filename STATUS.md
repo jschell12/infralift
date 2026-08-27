@@ -1,5 +1,25 @@
 # infralift status
 
+## 2026-08-27
+
+### Completed
+- **Bright Data Reddit integration** — Keyword discovery scraper using Bright Data Scraper API ($1.50/1k records, ~$18/mo estimated). 14 search terms, async snapshot polling (10s intervals, 2min timeout), comment collection on top 5 posts. Valid date values: "Past hour", "Past week", "Past month" (not "Past day"). Deployed to infralift-scanner:local Docker image.
+- **Bright Data API key** — Stored in scredmgr and Vault (secret/data/infralift). Nomad scanner job updated to pass BRIGHTDATA_API_KEY.
+- **First Bright Data scan verified** — 25 Reddit posts discovered, 138 comments fetched, 17 new leads stored. Total leads now: 290 (231 billing pain, 38 migration interest, 21 platform complaint).
+- **Scanner running on schedule** — Every 4 hours via Nomad batch job. Reddit via Bright Data, HN/DEV.to/SE/Lobsters via public APIs. RSS fallback when no BD key.
+
+### Lead counts (290 total)
+- Hacker News: 201
+- DEV.to: 35
+- Reddit comments (Bright Data): 31
+- Reddit posts (Bright Data): 23
+
+### Next steps
+- Sign up for Vercel + Heroku, go after billing_pain leads
+- Build admin dashboard features (scanner status, lead actions)
+- Focus on Terraform + TF Cloud integration
+- Submit Google Safe Browsing review for admin.infralift.dev
+
 ## 2026-08-26 (session 3)
 
 ### Completed
