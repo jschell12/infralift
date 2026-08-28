@@ -76,6 +76,7 @@ export default function LeadsPage() {
   const [classification, setClassification] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -190,20 +191,49 @@ export default function LeadsPage() {
                   {l.community?.name ?? l.platform}
                 </span>
                 <div className="min-w-0">
-                  <a
-                    href={l.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block truncate text-accent"
+                  <button
+                    className="block w-full cursor-pointer truncate border-0 bg-transparent p-0 text-left text-accent hover:underline"
+                    onClick={() =>
+                      setExpanded((prev) => {
+                        const next = new Set(prev);
+                        next.has(l.id) ? next.delete(l.id) : next.add(l.id);
+                        return next;
+                      })
+                    }
                   >
                     {l.title}
-                  </a>
+                  </button>
                   <div className="text-[11px] text-faint">
                     {l.authorName ? `by ${l.authorName}` : ""}
                     {l.postedAt
                       ? ` \u00b7 ${new Date(l.postedAt).toLocaleDateString()}`
                       : ""}
                   </div>
+                  {expanded.has(l.id) && (
+                    <div className="mt-2 rounded-lg border border-border bg-bg p-3">
+                      <p className="mb-2 whitespace-pre-wrap text-xs text-muted leading-relaxed">
+                        {l.body || "(no body)"}
+                      </p>
+                      <div className="flex gap-3 text-[11px]">
+                        <a
+                          href={l.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-accent hover:underline"
+                        >
+                          Open original
+                        </a>
+                        <a
+                          href={`https://web.archive.org/web/${l.sourceUrl}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted hover:text-text"
+                        >
+                          Web Archive fallback
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <span className={`text-muted ${NUM}`}>
                   {l.engagementScore ?? 0}
