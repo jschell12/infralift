@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
 import { runJob } from "../lib/tf/pipeline.js";
 import {
@@ -9,6 +10,7 @@ import {
   type TfArguments,
 } from "../lib/tf/render.js";
 import { getTfcClient } from "../lib/tf/tfc-client.js";
+import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
 
 export const tfRouter = Router();
 
@@ -253,4 +255,85 @@ tfRouter.get("/jobs/:id", async (req, res) => {
   });
   if (!job) return res.status(404).json({ error: "job not found" });
   res.json(job);
+});
+
+// -- codegen: assessment to HCL -----------------------------------------------
+
+const codegenSchema = z.object({
+  assessmentId: z.string().min(1),
+  backend: z.enum(["tfc", "s3", "local"]).default("local"),
+  tfcOrg: z.string().optional(),
+  s3Bucket: z.string().optional(),
+  s3Endpoint: z.string().optional(),
+  projectName: z.string().optional(),
+  migrationTarget: z.enum(["cloudflare", "hetzner"]).nullable().default(null),
+});
+
+tfRouter.post("/codegen", async (req, res) => {
+  const parsed = codegenSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const { orgId } = req.user!;
+  const { assessmentId, ...opts } = parsed.data;
+
+  const assessment = await prisma.assessment.findUnique({
+    where: { id: assessmentId },
+    include: { inventory: true },
+  });
+  if (!assessment || assessment.orgId !== orgId) {
+    return res.status(404).json({ error: "assessment not found" });
+  }
+  if (assessment.status !== "completed") {
+    return res.status(400).json({ error: "assessment not completed" });
+  }
+
+  const inventory: ResourceInventoryItem[] = assessment.inventory.map((i) => ({
+    provider: i.provider as Provider,
+    type: i.type,
+    externalId: i.externalId,
+    name: i.name,
+    region: i.region ?? undefined,
+    monthlyCostCents: i.monthlyCostCents ?? undefined,
+    metadata: (i.metadata as Record<string, unknown>) ?? undefined,
+  }));
+
+  const files = generateHcl({
+    provider: assessment.provider as Provider,
+    inventory,
+    ...opts,
+  } as CodegenOptions);
+
+  res.json({ files, resourceCount: inventory.length });
+});
+
+// Preview: generate HCL without an assessment (from provided inventory)
+tfRouter.post("/codegen/preview", async (req, res) => {
+  const schema = z.object({
+    provider: z.string().min(1),
+    inventory: z.array(z.object({
+      provider: z.string(),
+      type: z.string(),
+      externalId: z.string(),
+      name: z.string(),
+      region: z.string().optional(),
+      monthlyCostCents: z.number().optional(),
+      metadata: z.record(z.unknown()).optional(),
+    })),
+    backend: z.enum(["tfc", "s3", "local"]).default("local"),
+    migrationTarget: z.enum(["cloudflare", "hetzner"]).nullable().default(null),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  const files = generateHcl({
+    provider: parsed.data.provider as Provider,
+    inventory: parsed.data.inventory as ResourceInventoryItem[],
+    backend: parsed.data.backend,
+    migrationTarget: parsed.data.migrationTarget,
+  });
+
+  res.json({ files, resourceCount: parsed.data.inventory.length });
 });

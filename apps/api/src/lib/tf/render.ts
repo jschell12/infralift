@@ -74,11 +74,15 @@ export interface ProviderConfig {
 
 export function renderProviderFile(cfg: ProviderConfig): string {
   const lines = [
+    `# Works with both Terraform >= 1.5 and OpenTofu >= 1.6`,
+    ``,
     `provider "${cfg.name}" {`,
     ...(cfg.region ? [`  region = "${cfg.region}"`] : []),
     `}`,
     ``,
     `terraform {`,
+    `  required_version = ">= 1.5"`,
+    ``,
     `  required_providers {`,
     `    ${cfg.name} = {`,
     `      source  = "${cfg.source}"`,
