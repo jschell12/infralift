@@ -97,6 +97,10 @@ export default function AssessmentReportPage({
   const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
   const [approved, setApproved] = useState(false);
+  const [codegenTarget, setCodegenTarget] = useState<"cloudflare" | "hetzner">("cloudflare");
+  const [codegenBackend, setCodegenBackend] = useState<"local" | "tfc" | "s3">("local");
+  const [codegenFiles, setCodegenFiles] = useState<{ fileName: string; content: string }[] | null>(null);
+  const [codegenBusy, setCodegenBusy] = useState(false);
 
   useEffect(() => {
     api<AssessmentReport & ReportExtras>(`/assessments/${id}`)
@@ -118,6 +122,30 @@ export default function AssessmentReportPage({
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setApproving(false);
+    }
+  }
+
+  async function runCodegen() {
+    if (!report) return;
+    setCodegenBusy(true);
+    setCodegenFiles(null);
+    try {
+      const result = await api<{ files: { fileName: string; content: string }[] }>(
+        "/tf/codegen",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            assessmentId: report.id,
+            backend: codegenBackend,
+            migrationTarget: codegenTarget,
+          }),
+        }
+      );
+      setCodegenFiles(result.files);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCodegenBusy(false);
     }
   }
 
@@ -273,6 +301,70 @@ export default function AssessmentReportPage({
               </TableRow>
             ))}
           </>
+        )}
+      </Card>
+
+      <Card className="mb-5">
+        <CardTitle>Generate infrastructure as code</CardTitle>
+        <p className="mb-4 text-[13px] leading-relaxed text-muted">
+          Produce Terraform/OpenTofu configs that reproduce the discovered
+          resources and include import blocks for adopting them into state.
+          Optionally generates a migration target alongside the source.
+        </p>
+
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div>
+            <label className="block text-[11px] uppercase tracking-[0.06em] text-faint mb-1">
+              Migration target
+            </label>
+            <select
+              value={codegenTarget}
+              onChange={(e) => setCodegenTarget(e.target.value as "cloudflare" | "hetzner")}
+              className="bg-bg border border-border rounded-lg px-2.5 py-2 text-sm text-text focus:outline-none focus:border-accent"
+            >
+              <option value="cloudflare">Cloudflare Workers + Neon</option>
+              <option value="hetzner">Hetzner VPS + Docker + Neon</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] uppercase tracking-[0.06em] text-faint mb-1">
+              State backend
+            </label>
+            <select
+              value={codegenBackend}
+              onChange={(e) => setCodegenBackend(e.target.value as "local" | "tfc" | "s3")}
+              className="bg-bg border border-border rounded-lg px-2.5 py-2 text-sm text-text focus:outline-none focus:border-accent"
+            >
+              <option value="local">Local state</option>
+              <option value="tfc">Terraform Cloud</option>
+              <option value="s3">S3 / Cloudflare R2</option>
+            </select>
+          </div>
+          <div className="self-end">
+            <PrimaryButton onClick={runCodegen} disabled={codegenBusy}>
+              {codegenBusy ? "Generating..." : "Generate HCL"}
+            </PrimaryButton>
+          </div>
+        </div>
+
+        {codegenFiles && (
+          <div className="space-y-3">
+            <div className="text-[13px] text-muted">
+              {codegenFiles.length} files generated. Works with both{" "}
+              <code className="rounded bg-bg px-1.5 py-0.5 text-xs">terraform</code> and{" "}
+              <code className="rounded bg-bg px-1.5 py-0.5 text-xs">tofu</code>.
+            </div>
+            {codegenFiles.filter(f => f.fileName !== "README.md").map((f) => (
+              <details key={f.fileName} className="rounded-lg border border-border bg-bg">
+                <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-text hover:text-accent">
+                  {f.fileName}
+                </summary>
+                <pre className="overflow-x-auto border-t border-border p-3 text-xs leading-relaxed text-muted">
+                  {f.content}
+                </pre>
+              </details>
+            ))}
+          </div>
         )}
       </Card>
 
