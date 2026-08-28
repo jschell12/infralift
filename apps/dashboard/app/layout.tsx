@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { SidebarNav } from "../components/sidebar-nav";
 
 export const metadata: Metadata = {
   title: "infralift",
@@ -15,46 +16,27 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <div className="flex min-h-screen">
-          <aside className="w-[200px] bg-surface border-r border-border px-4 py-6 flex-shrink-0 flex flex-col justify-between">
+          <aside className="flex w-[210px] shrink-0 flex-col justify-between border-r border-border bg-surface px-4 py-6">
             <div>
               <a
-                className="block text-lg font-bold text-text mb-8 px-3"
+                className="mb-7 block px-3 text-lg font-bold text-text"
                 href="/"
               >
                 infra<span className="text-accent">lift</span>
               </a>
-              <nav className="flex flex-col gap-0.5">
-                <a
-                  href="/"
-                  className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-bg"
-                >
-                  Dashboard
-                </a>
-                <a
-                  href="/connections"
-                  className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-bg"
-                >
-                  Connections
-                </a>
-                <a
-                  href="/assessments"
-                  className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-bg"
-                >
-                  Assessments
-                </a>
-                <a
-                  href="/migrations"
-                  className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-bg"
-                >
-                  Migrations
-                </a>
-              </nav>
+              <SidebarNav />
             </div>
             <div className="px-3 text-xs text-muted">
-              <a href="https://infralift.dev" className="hover:text-text">infralift.dev</a>
+              <div className="mb-1.5">Northwind Labs</div>
+              <a
+                href="https://infralift.dev"
+                className="text-faint hover:text-text"
+              >
+                infralift.dev
+              </a>
             </div>
           </aside>
-          <main className="flex-1 p-8 md:p-10 max-w-[960px]">{children}</main>
+          <main className="min-w-0 flex-1 max-w-[1000px] p-10">{children}</main>
         </div>
       </body>
     </html>

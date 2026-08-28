@@ -6,10 +6,18 @@
   --color-border: #1f2a36;
   --color-text: #e6edf3;
   --color-muted: #8b98a5;
+  --color-faint: #5b6672;
   --color-accent: #4cc38a;
   --color-accent-dim: #1c3a2c;
   --color-danger: #e5534b;
+  --color-danger-bright: #ff6b6b;
   --color-warn: #d4a72c;
+  --color-info: #7c8aff;
+  --color-info-dim: #1a1a2e;
+  --color-tag-heroku: #c084fc;
+  --color-tag-heroku-dim: #2a1a2e;
+  --color-tag-both: #fbbf24;
+  --color-tag-both-dim: #2a2a1a;
 }
 
 html,
@@ -20,7 +28,7 @@ body {
     "Helvetica Neue", sans-serif;
 }
 
-a:not([class*="bg-"]) {
+a:not([class*="bg-"]):not([class*="text-"]) {
   color: var(--color-accent);
 }
 

@@ -2,6 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import {
+  Card,
+  Chip,
+  FilterPill,
+  H1,
+  NUM,
+  StatCard,
+  TableHead,
+  TableRow,
+  type Tone,
+} from "../../components/ui";
 
 interface Lead {
   id: string;
@@ -30,10 +41,10 @@ interface Summary {
   byStatus?: Record<string, number>;
 }
 
-const CLASS_BADGE: Record<string, string> = {
-  billing_pain: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-danger/20 text-danger",
-  migration_interest: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warn/20 text-warn",
-  platform_complaint: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-border text-muted",
+const CLASS_TONE: Record<string, Tone> = {
+  billing_pain: "danger",
+  migration_interest: "warn",
+  platform_complaint: "muted",
 };
 
 const CLASS_LABEL: Record<string, string> = {
@@ -42,20 +53,27 @@ const CLASS_LABEL: Record<string, string> = {
   platform_complaint: "platform complaint",
 };
 
-const STATUS_BADGE: Record<string, string> = {
-  new: "inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-accent/20 text-accent",
-  contacted: "inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400",
-  dismissed: "inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-border text-muted",
-  converted: "inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-400",
+const STATUS_TONE: Record<string, Tone> = {
+  new: "accent",
+  contacted: "info",
+  dismissed: "faint",
+  converted: "accent",
 };
+
+const FILTERS: { label: string; value: string }[] = [
+  { label: "All", value: "" },
+  { label: "Billing pain", value: "billing_pain" },
+  { label: "Migration interest", value: "migration_interest" },
+  { label: "Platform complaint", value: "platform_complaint" },
+];
+
+const COLS = "grid-cols-[140px_100px_110px_1fr_80px_150px]";
+const DAYS = 30;
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [summary, setSummary] = useState<Summary>({});
   const [classification, setClassification] = useState("");
-  const [platform, setPlatform] = useState("");
-  const [status, setStatus] = useState("");
-  const [days, setDays] = useState(30);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
 
@@ -63,14 +81,12 @@ export default function LeadsPage() {
     try {
       const params = new URLSearchParams();
       if (classification) params.set("classification", classification);
-      if (platform) params.set("platform", platform);
-      if (status) params.set("status", status);
-      params.set("days", String(days));
+      params.set("days", String(DAYS));
       params.set("limit", "200");
 
       const [leadsData, summaryData] = await Promise.all([
         api<Lead[]>(`/leads?${params}`),
-        api<Summary>(`/leads/summary?days=${days}`),
+        api<Summary>(`/leads/summary?days=${DAYS}`),
       ]);
       setLeads(leadsData);
       setSummary(summaryData);
@@ -78,212 +94,141 @@ export default function LeadsPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [classification, platform, status, days]);
+  }, [classification]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const updateStatus = async (id: string, newStatus: string) => {
+  async function updateStatus(id: string, newStatus: string) {
     setUpdating(id);
+    // optimistic: the chip flips immediately, reverts if the PATCH fails
+    const before = leads;
+    setLeads((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l))
+    );
     try {
       const updated = await api<Lead>(`/leads/${id}`, {
         method: "PATCH",
         body: JSON.stringify({ status: newStatus }),
       });
-      setLeads((prev) =>
-        prev.map((l) => (l.id === id ? { ...l, ...updated } : l))
-      );
-      // Refresh summary counts
-      const summaryData = await api<Summary>(`/leads/summary?days=${days}`);
-      setSummary(summaryData);
+      setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, ...updated } : l)));
+      setSummary(await api<Summary>(`/leads/summary?days=${DAYS}`));
     } catch (e) {
+      setLeads(before);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setUpdating(null);
     }
-  };
+  }
 
   return (
     <>
-      <h1 className="text-3xl font-bold tracking-tight mb-2">Community leads</h1>
-      <p className="text-muted mb-8">
+      <h1 className={H1}>Community leads</h1>
+      <p className="mb-6 max-w-[660px] text-muted">
         Posts from developer communities classified as billing pain, migration
         interest, or platform complaints. Updated every 4 hours.
       </p>
 
-      {error && <div className="text-danger text-sm mt-2">{error}</div>}
+      {error && <div className="mb-4 text-sm text-danger">{error}</div>}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="bg-surface border border-border rounded-xl p-6 text-center">
-          <div className="text-4xl font-bold text-accent tracking-tight mb-1">{summary.billing_pain ?? 0}</div>
-          <p className="text-muted text-sm">billing pain</p>
-        </div>
-        <div className="bg-surface border border-border rounded-xl p-6 text-center">
-          <div className="text-4xl font-bold text-accent tracking-tight mb-1">{summary.migration_interest ?? 0}</div>
-          <p className="text-muted text-sm">migration interest</p>
-        </div>
-        <div className="bg-surface border border-border rounded-xl p-6 text-center">
-          <div className="text-4xl font-bold text-accent tracking-tight mb-1">{summary.platform_complaint ?? 0}</div>
-          <p className="text-muted text-sm">platform complaints</p>
-        </div>
+      <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <StatCard label="billing pain" value={summary.billing_pain ?? 0} center />
+        <StatCard
+          label="migration interest"
+          value={summary.migration_interest ?? 0}
+          center
+        />
+        <StatCard
+          label="platform complaints"
+          value={summary.platform_complaint ?? 0}
+          center
+        />
       </div>
 
-      <div className="bg-surface border border-border rounded-xl p-6 mt-5">
-        <div className="flex gap-3 flex-wrap mb-4">
-          <div>
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Classification</label>
-            <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
-              value={classification}
-              onChange={(e) => setClassification(e.target.value)}
+      <Card>
+        <div className="mb-4 flex items-center gap-1.5">
+          <span className="mr-1 text-[11px] uppercase tracking-[0.06em] text-faint">
+            Classification
+          </span>
+          {FILTERS.map((f) => (
+            <FilterPill
+              key={f.value}
+              active={classification === f.value}
+              onClick={() => setClassification(f.value)}
             >
-              <option value="">All</option>
-              <option value="billing_pain">Billing pain</option>
-              <option value="migration_interest">Migration interest</option>
-              <option value="platform_complaint">Platform complaint</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Platform</label>
-            <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
-              value={platform}
-              onChange={(e) => setPlatform(e.target.value)}
-            >
-              <option value="">All</option>
-              <option value="hackernews">Hacker News</option>
-              <option value="reddit">Reddit</option>
-              <option value="dev-to">DEV.to</option>
-              <option value="stackexchange">Stack Exchange</option>
-              <option value="lobsters">Lobsters</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Status</label>
-            <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="">All</option>
-              <option value="new">New</option>
-              <option value="contacted">Contacted</option>
-              <option value="dismissed">Dismissed</option>
-              <option value="converted">Converted</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Days</label>
-            <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
-              value={days}
-              onChange={(e) => setDays(Number(e.target.value))}
-            >
-              <option value="7">7 days</option>
-              <option value="30">30 days</option>
-              <option value="90">90 days</option>
-              <option value="365">All time</option>
-            </select>
-          </div>
+              {f.label}
+            </FilterPill>
+          ))}
+          <span className="ml-auto text-[13px] text-muted">
+            {leads.length} of {summary.total ?? leads.length} leads &middot; last{" "}
+            {DAYS} days
+          </span>
         </div>
-
-        <p className="text-muted mb-3">
-          {leads.length} leads ({summary.total ?? 0} total in {days} days)
-        </p>
 
         {leads.length === 0 ? (
-          <p className="text-muted text-sm">No leads found for this filter.</p>
+          <p className="text-sm text-muted">No leads found for this filter.</p>
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Classification</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Status</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Providers</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Source</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Title</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Engagement</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Date</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map((l) => (
-                <tr key={l.id}>
-                  <td className="p-3 border-b border-border">
-                    <span className={CLASS_BADGE[l.classification] ?? "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold"}>
-                      {CLASS_LABEL[l.classification] ?? l.classification}
-                    </span>
-                  </td>
-                  <td className="p-3 border-b border-border">
-                    <span className={STATUS_BADGE[l.status] ?? STATUS_BADGE.new}>
-                      {l.status}
-                    </span>
-                  </td>
-                  <td className="p-3 border-b border-border">
-                    <div className="flex flex-wrap gap-1">
-                      {(l.providers ?? []).map((p) => (
-                        <span
-                          key={p}
-                          className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-accent-dim text-accent"
-                        >
-                          {p}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="p-3 border-b border-border">{l.community?.name ?? l.platform}</td>
-                  <td className="p-3 border-b border-border">
-                    <a
-                      href={l.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {l.title.length > 80
-                        ? l.title.slice(0, 80) + "..."
-                        : l.title}
-                    </a>
-                    {l.authorName && (
-                      <span className="text-muted text-xs ml-2">
-                        by {l.authorName}
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-3 border-b border-border">{l.engagementScore ?? 0}</td>
-                  <td className="p-3 border-b border-border">
+          <>
+            <TableHead cols={COLS}>
+              <span>Classification</span>
+              <span>Status</span>
+              <span>Source</span>
+              <span>Title</span>
+              <span>Score</span>
+              <span>Actions</span>
+            </TableHead>
+            {leads.map((l) => (
+              <TableRow key={l.id} cols={COLS}>
+                <Chip tone={CLASS_TONE[l.classification] ?? "muted"} size="xs">
+                  {CLASS_LABEL[l.classification] ?? l.classification}
+                </Chip>
+                <Chip tone={STATUS_TONE[l.status] ?? "accent"} size="xs">
+                  {l.status}
+                </Chip>
+                <span className="text-xs text-muted">
+                  {l.community?.name ?? l.platform}
+                </span>
+                <div className="min-w-0">
+                  <a
+                    href={l.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block truncate text-accent"
+                  >
+                    {l.title}
+                  </a>
+                  <div className="text-[11px] text-faint">
+                    {l.authorName ? `by ${l.authorName}` : ""}
                     {l.postedAt
-                      ? new Date(l.postedAt).toLocaleDateString()
+                      ? ` \u00b7 ${new Date(l.postedAt).toLocaleDateString()}`
                       : ""}
-                  </td>
-                  <td className="p-3 border-b border-border">
-                    <div className="flex gap-1.5">
-                      {l.status !== "contacted" && (
-                        <button
-                          className="px-2.5 py-1 text-xs rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50"
-                          disabled={updating === l.id}
-                          onClick={() => updateStatus(l.id, "contacted")}
-                        >
-                          Contact
-                        </button>
-                      )}
-                      {l.status !== "dismissed" && (
-                        <button
-                          className="px-2.5 py-1 text-xs rounded-lg bg-border text-muted hover:bg-border/80 disabled:opacity-50"
-                          disabled={updating === l.id}
-                          onClick={() => updateStatus(l.id, "dismissed")}
-                        >
-                          Dismiss
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+                <span className={`text-muted ${NUM}`}>
+                  {l.engagementScore ?? 0}
+                </span>
+                <div className="flex gap-1.5">
+                  <button
+                    className="cursor-pointer rounded-md border-0 bg-info/20 px-2.5 py-1 text-xs text-info hover:bg-info/30 disabled:cursor-default disabled:opacity-35"
+                    disabled={updating === l.id || l.status === "contacted"}
+                    onClick={() => updateStatus(l.id, "contacted")}
+                  >
+                    Contact
+                  </button>
+                  <button
+                    className="cursor-pointer rounded-md border-0 bg-border px-2.5 py-1 text-xs text-muted hover:text-text disabled:cursor-default disabled:opacity-35"
+                    disabled={updating === l.id || l.status === "dismissed"}
+                    onClick={() => updateStatus(l.id, "dismissed")}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </TableRow>
+            ))}
+          </>
         )}
-      </div>
+      </Card>
     </>
   );
 }
