@@ -4,15 +4,86 @@ import { use, useEffect, useState } from "react";
 import {
   PROVIDER_LABELS,
   type AssessmentReport,
+  type FindingCategory,
+  type FindingSeverity,
 } from "@infralift/shared";
 import { api, formatCents } from "../../../lib/api";
+import {
+  Card,
+  CardTitle,
+  Chip,
+  NUM,
+  Note,
+  PrimaryButton,
+  StatCard,
+  TableHead,
+  TableRow,
+  type Tone,
+} from "../../../components/ui";
 
-const SEVERITY_BADGE: Record<string, string> = {
-  high: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-danger/20 text-danger",
-  medium: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warn/20 text-warn",
-  low: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-border text-muted",
-  info: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-border text-muted",
+/* TODO(api): the three blocks below (cost projection, recommendation, quote)
+ * are not in AssessmentReport yet — see tailwind_conversion/APPLY.md for the
+ * suggested additions to packages/shared/src/index.ts. Until the API returns
+ * them, each section is skipped rather than filled with placeholder numbers. */
+
+type PriceConfidence =
+  | "invoiced"
+  | "corroborated"
+  | "advisor"
+  | "anecdote"
+  | "unverified";
+
+interface CostProjectionRow {
+  stack: string;
+  note: string;
+  listCents: number | null;
+  year1Cents: number | null;
+  steadyStateCents: number | null;
+  confidence: PriceConfidence;
+  sourceDate?: string;
+  isCurrent?: boolean;
+}
+
+interface ReportExtras {
+  costProjection?: CostProjectionRow[];
+  recommendation?: {
+    target: string;
+    summary: string;
+    rows: { label: string; value: string }[];
+  };
+  quote?: {
+    fixedFeeCents: number;
+    paybackMonths: number | null;
+    lines: { phase: string; effort: string }[];
+  };
+}
+
+const SEVERITY_TONE: Record<FindingSeverity, Tone> = {
+  high: "danger",
+  medium: "warn",
+  low: "muted",
+  info: "muted",
 };
+
+const CATEGORY_LABEL: Record<FindingCategory, string> = {
+  inventory: "inventory",
+  cost: "cost driver",
+  risk: "lock-in / risk",
+  iac_standard: "IaC standard",
+  recommendation: "recommendation",
+};
+
+const CONFIDENCE_TONE: Record<PriceConfidence, Tone> = {
+  invoiced: "muted",
+  corroborated: "accent",
+  advisor: "warn",
+  anecdote: "muted",
+  unverified: "faint",
+};
+
+const PROJ_COLS = "grid-cols-[2fr_1fr_1fr_1fr_130px]";
+const FIND_COLS = "grid-cols-[90px_130px_1fr]";
+const INV_COLS = "grid-cols-[160px_1fr_130px_110px]";
 
 export default function AssessmentReportPage({
   params,
@@ -20,110 +91,261 @@ export default function AssessmentReportPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const [report, setReport] = useState<AssessmentReport | null>(null);
+  const [report, setReport] = useState<(AssessmentReport & ReportExtras) | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
+  const [approved, setApproved] = useState(false);
 
   useEffect(() => {
-    api<AssessmentReport>(`/assessments/${id}`)
+    api<AssessmentReport & ReportExtras>(`/assessments/${id}`)
       .then(setReport)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [id]);
 
-  if (error) return <div className="text-danger text-sm mt-2">{error}</div>;
-  if (!report) return <p className="text-muted mb-8">Loading report...</p>;
+  async function approve() {
+    if (!report) return;
+    setApproving(true);
+    try {
+      await api("/migrations", {
+        method: "POST",
+        body: JSON.stringify({ assessmentId: report.id }),
+      });
+      setApproved(true);
+      window.location.href = "/migrations";
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  if (error) return <div className="mt-2 text-sm text-danger">{error}</div>;
+  if (!report) return <p className="text-muted">Loading report...</p>;
+
+  const projection = report.costProjection ?? [];
+  const inventory = report.inventory.slice(0, 8);
+  const savings = report.estimatedMonthlySavingsCents ?? 0;
+  const fee = report.quote?.fixedFeeCents ?? null;
 
   return (
     <>
-      <h1 className="text-3xl font-bold tracking-tight mb-2">
+      <div className="mb-2.5 text-[13px] text-muted">
+        <a href="/assessments">Assessments</a> / {PROVIDER_LABELS[report.provider]}
+      </div>
+      <h1 className="mb-1.5 text-[26px] font-bold tracking-[-0.02em]">
         {PROVIDER_LABELS[report.provider]} assessment
       </h1>
-      <p className="text-muted mb-8">
+      <p className="mb-6 text-muted">
         {report.completedAt
           ? `Completed ${new Date(report.completedAt).toLocaleString()}`
           : `Status: ${report.status}`}
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="bg-surface border border-border rounded-xl p-6 text-center">
-          <div className="text-4xl font-bold text-accent tracking-tight mb-1">
-            {report.resourceCount}
-            <small className="block text-sm text-muted font-normal">resources inventoried</small>
-          </div>
-        </div>
-        <div className="bg-surface border border-border rounded-xl p-6 text-center">
-          <div className="text-4xl font-bold text-accent tracking-tight mb-1">
-            {formatCents(report.estimatedMonthlyCostCents)}
-            <small className="block text-sm text-muted font-normal">estimated monthly cost</small>
-          </div>
-        </div>
-        <div className="bg-surface border border-border rounded-xl p-6 text-center">
-          <div className="text-4xl font-bold text-accent tracking-tight mb-1">
-            {formatCents(report.estimatedMonthlySavingsCents)}
-            <small className="block text-sm text-muted font-normal">estimated monthly savings</small>
-          </div>
-        </div>
+      <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <StatCard
+          label="Resources inventoried"
+          value={report.resourceCount}
+          center
+        />
+        <StatCard
+          label="Estimated monthly cost"
+          value={formatCents(report.estimatedMonthlyCostCents)}
+          tone="danger"
+          center
+        />
+        <StatCard
+          label="Estimated monthly savings"
+          value={formatCents(report.estimatedMonthlySavingsCents)}
+          center
+        />
       </div>
 
-      <div className="bg-surface border border-border rounded-xl p-6 mb-4 mt-5">
-        <h3 className="text-base font-semibold mb-1.5">Findings ({report.findings.length})</h3>
+      {projection.length > 0 && (
+        <Card className="mb-5">
+          <CardTitle>Cost projection at three prices</CardTitle>
+          <p className="mb-4 max-w-[640px] text-[13px] leading-relaxed text-muted">
+            List is published pricing. Year-1 effective subtracts startup credits
+            you actually qualify for, modeled with expiry windows and monthly
+            caps. Steady state applies the best committed-spend discount your
+            annual spend really reaches.
+          </p>
+          <TableHead cols={PROJ_COLS}>
+            <span>Stack</span>
+            <span>List</span>
+            <span>Year-1 effective</span>
+            <span>Steady state</span>
+            <span>Confidence</span>
+          </TableHead>
+          {projection.map((r) => (
+            <TableRow key={r.stack} cols={PROJ_COLS}>
+              <div className="min-w-0">
+                <div className="text-sm font-medium">{r.stack}</div>
+                <div className="text-xs text-faint">{r.note}</div>
+              </div>
+              <span
+                className={`text-[15px] font-semibold ${NUM} ${r.isCurrent ? "text-danger" : "text-text"}`}
+              >
+                {formatCents(r.listCents)}
+              </span>
+              <span className={`text-[15px] ${NUM}`}>
+                {formatCents(r.year1Cents)}
+              </span>
+              <span className={`text-[15px] ${NUM}`}>
+                {formatCents(r.steadyStateCents)}
+              </span>
+              <Chip tone={CONFIDENCE_TONE[r.confidence]} size="xs">
+                {r.confidence}
+              </Chip>
+            </TableRow>
+          ))}
+          <div className="mt-4">
+            <Note>
+              Below roughly $1M/year of spend, enterprise discounts are not
+              realistically negotiable. At your scale, changing architecture is
+              the only discount that exists &mdash; which is usually why the
+              migration pays for itself.
+            </Note>
+          </div>
+        </Card>
+      )}
+
+      <Card className="mb-5">
+        <CardTitle>Findings ({report.findings.length})</CardTitle>
         {report.findings.length === 0 ? (
-          <p className="text-muted text-sm">No findings.</p>
+          <p className="text-sm text-muted">No findings.</p>
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Severity</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Category</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Finding</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.findings.map((f) => (
-                <tr key={f.id}>
-                  <td className="p-3 border-b border-border">
-                    <span className={SEVERITY_BADGE[f.severity]}>
-                      {f.severity}
-                    </span>
-                  </td>
-                  <td className="p-3 border-b border-border">{f.category.replace("_", " ")}</td>
-                  <td className="p-3 border-b border-border">
-                    <strong>{f.title}</strong>
-                    <p className="text-muted text-sm">{f.detail}</p>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <TableHead cols={FIND_COLS}>
+              <span>Severity</span>
+              <span>Category</span>
+              <span>Finding</span>
+            </TableHead>
+            {report.findings.map((f) => (
+              <TableRow key={f.id} cols={FIND_COLS} align="start">
+                <Chip tone={SEVERITY_TONE[f.severity]} size="xs">
+                  {f.severity}
+                </Chip>
+                <span className="text-[13px] text-muted">
+                  {CATEGORY_LABEL[f.category] ?? f.category}
+                </span>
+                <div>
+                  <div className="mb-0.5 text-sm font-semibold">{f.title}</div>
+                  <div className="text-[13px] leading-relaxed text-muted">
+                    {f.detail}
+                  </div>
+                </div>
+              </TableRow>
+            ))}
+          </>
         )}
-      </div>
+      </Card>
 
-      <div className="bg-surface border border-border rounded-xl p-6 mb-4">
-        <h3 className="text-base font-semibold mb-1.5">Inventory ({report.inventory.length})</h3>
+      <Card className="mb-5">
+        <CardTitle
+          aside={
+            report.inventory.length > inventory.length ? (
+              <span className="text-xs text-faint">
+                showing {inventory.length}
+              </span>
+            ) : null
+          }
+        >
+          Inventory ({report.inventory.length})
+        </CardTitle>
         {report.inventory.length === 0 ? (
-          <p className="text-muted text-sm">No resources found.</p>
+          <p className="text-sm text-muted">No resources found.</p>
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Type</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Name</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Region</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Monthly cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.inventory.map((i, idx) => (
-                <tr key={`${i.externalId}-${idx}`}>
-                  <td className="p-3 border-b border-border">{i.type}</td>
-                  <td className="p-3 border-b border-border">{i.name}</td>
-                  <td className="p-3 border-b border-border">{i.region ?? "—"}</td>
-                  <td className="p-3 border-b border-border">{formatCents(i.monthlyCostCents)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <TableHead cols={INV_COLS}>
+              <span>Type</span>
+              <span>Name</span>
+              <span>Region</span>
+              <span>Monthly</span>
+            </TableHead>
+            {inventory.map((i, idx) => (
+              <TableRow key={`${i.externalId}-${idx}`} cols={INV_COLS}>
+                <span className="font-mono text-xs text-muted">{i.type}</span>
+                <span>{i.name}</span>
+                <span className="text-muted">{i.region ?? "\u2014"}</span>
+                <span className={NUM}>{formatCents(i.monthlyCostCents)}</span>
+              </TableRow>
+            ))}
+          </>
         )}
-      </div>
+      </Card>
+
+      {(report.recommendation || report.quote) && (
+        <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-2">
+          {report.recommendation && (
+            <Card>
+              <CardTitle>Recommendation</CardTitle>
+              <p className="mb-3.5 text-sm leading-relaxed text-muted">
+                {report.recommendation.summary}
+              </p>
+              <div className="flex flex-col gap-2">
+                {report.recommendation.rows.map((r) => (
+                  <div
+                    key={r.label}
+                    className="flex items-center gap-2 rounded-md bg-bg px-2.5 py-2 text-[13px]"
+                  >
+                    <span className="text-muted">{r.label}</span>
+                    <span className="ml-auto text-text">{r.value}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {report.quote && fee !== null && (
+            <div className="rounded-xl border border-accent/20 bg-accent-dim/40 p-6">
+              <h3 className="mb-2.5 text-[15px] font-semibold">
+                Fixed-fee quote
+              </h3>
+              <div
+                className={`mb-0.5 text-[38px] font-bold tracking-[-0.02em] ${NUM}`}
+              >
+                {formatCents(fee)}
+              </div>
+              <div className="mb-4 text-[13px] text-muted">
+                fixed
+                {report.quote.paybackMonths != null && savings > 0 && (
+                  <>
+                    {" "}
+                    &middot; payback in {report.quote.paybackMonths} months on{" "}
+                    {formatCents(savings)}/mo saved
+                  </>
+                )}
+              </div>
+              <div className="mb-4.5 flex flex-col">
+                {report.quote.lines.map((q) => (
+                  <div
+                    key={q.phase}
+                    className="flex border-t border-accent/15 py-2 text-[13px] text-muted"
+                  >
+                    <span>{q.phase}</span>
+                    <span className={`ml-auto text-text ${NUM}`}>
+                      {q.effort}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <PrimaryButton onClick={approve} disabled={approving} full>
+                {approved
+                  ? "Quote approved \u2014 view migration"
+                  : approving
+                    ? "Approving\u2026"
+                    : `Approve ${formatCents(fee)} fixed fee`}
+              </PrimaryButton>
+              <p className="mt-3 text-xs leading-relaxed text-muted">
+                The price in the report is the price you pay. No hourly billing,
+                no scope creep.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 }

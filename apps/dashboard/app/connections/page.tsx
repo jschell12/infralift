@@ -8,123 +8,90 @@ import {
   type ProviderConnectionSummary,
 } from "@infralift/shared";
 import { api } from "../../lib/api";
+import {
+  Card,
+  CardTitle,
+  Chip,
+  H1,
+  INPUT,
+  LABEL,
+  Note,
+  PrimaryButton,
+  TableHead,
+  TableRow,
+} from "../../components/ui";
 
-const SCOPE_HELP: Record<Provider, React.ReactNode> = {
-  vercel: (
-    <>
-      Create a token at <code className="text-accent font-mono text-xs">vercel.com/account/tokens</code>. Scope it to the
-      team you want assessed. Vercel tokens are read/write by scope of your
-      role, so use a <code className="text-accent font-mono text-xs">Viewer</code> role member&apos;s token for strict
-      read-only.
-    </>
-  ),
-  cloudflare: (
-    <>
-      Create a token at <code className="text-accent font-mono text-xs">dash.cloudflare.com/profile/api-tokens</code>{" "}
-      with read-only permissions: <code className="text-accent font-mono text-xs">Account · Workers Scripts · Read</code>
-      , <code className="text-accent font-mono text-xs">Account · Cloudflare Pages · Read</code>,{" "}
-      <code className="text-accent font-mono text-xs">Account · Workers R2 Storage · Read</code>,{" "}
-      <code className="text-accent font-mono text-xs">Zone · Zone · Read</code>, <code className="text-accent font-mono text-xs">Zone · DNS · Read</code>.
-    </>
-  ),
-  heroku: (
-    <>
-      Generate an API key at <code className="text-accent font-mono text-xs">dashboard.heroku.com/account</code>{" "}
-      (under Account, find API Key) or via{" "}
-      <code className="text-accent font-mono text-xs">heroku authorizations:create</code>.
-      We only call read endpoints: apps, formation, add-ons.
-    </>
-  ),
-  aws: (
-    <>
-      Create an IAM role with the AWS-managed <code className="text-accent font-mono text-xs">ReadOnlyAccess</code>{" "}
-      policy plus <code className="text-accent font-mono text-xs">ce:GetCostAndUsage</code>, trusted to our account with
-      an external ID. Paste the role ARN here (or JSON{" "}
-      <code className="text-accent font-mono text-xs">{"{"}&quot;roleArn&quot;, &quot;externalId&quot;{"}"}</code>).
-    </>
-  ),
-  firebase: (
-    <>
-      Create a service account in{" "}
-      <code className="text-accent font-mono text-xs">console.cloud.google.com/iam-admin/serviceaccounts</code> with the{" "}
-      <code className="text-accent font-mono text-xs">Viewer</code> role (or granular: <code className="text-accent font-mono text-xs">Firebase Viewer</code>,{" "}
-      <code className="text-accent font-mono text-xs">Cloud Functions Viewer</code>, <code className="text-accent font-mono text-xs">Cloud Datastore Viewer</code>),
-      generate a JSON key, and paste the full JSON here. We inventory Hosting
-      sites, Cloud Functions, and Firestore databases, read-only.
-    </>
-  ),
-  github: (
-    <>
-      Create a fine-grained personal access token at{" "}
-      <code className="text-accent font-mono text-xs">github.com/settings/tokens</code> scoped to the repository that
-      will receive generated Terraform, with{" "}
-      <code className="text-accent font-mono text-xs">Contents: Read and write</code> permission. Used only to commit
-      rendered <code className="text-accent font-mono text-xs">.tf</code> files.
-    </>
-  ),
-  netlify: (
-    <>
-      Create a personal access token at{" "}
-      <code className="text-accent font-mono text-xs">app.netlify.com/user/applications#personal-access-tokens</code>.
-      We read sites, forms, DNS zones, and build hooks, all read-only.
-    </>
-  ),
-  render: (
-    <>
-      Create an API key at <code className="text-accent font-mono text-xs">dashboard.render.com/account/api-keys</code>.
-      We read services, databases, Redis instances, and env groups, all
-      read-only.
-    </>
-  ),
-  railway: (
-    <>
-      Create an API token at <code className="text-accent font-mono text-xs">railway.com/account/tokens</code>. We read
-      projects, services, plugins (databases), and environments via the GraphQL
-      API, all read-only.
-    </>
-  ),
-  flyio: (
-    <>
-      Create a deploy token or personal access token via{" "}
-      <code className="text-accent font-mono text-xs">fly tokens create</code> (CLI) or the Fly.io dashboard. We read
-      apps, machines, and volumes, all read-only.
-    </>
-  ),
-  digitalocean: (
-    <>
-      Create a personal access token at{" "}
-      <code className="text-accent font-mono text-xs">cloud.digitalocean.com/account/api/tokens</code> with read-only
-      scope. We inventory Droplets, App Platform apps, managed databases,
-      Spaces, and Kubernetes clusters.
-    </>
-  ),
-  gcp: (
-    <>
-      Create a service account in{" "}
-      <code className="text-accent font-mono text-xs">console.cloud.google.com/iam-admin/serviceaccounts</code> with the{" "}
-      <code className="text-accent font-mono text-xs">Viewer</code> role, generate a JSON key, and paste the full JSON
-      here. We inventory Cloud Run, GCE, Cloud SQL, GCS, and Cloud Functions,
-      read-only.
-    </>
-  ),
-  azure: (
-    <>
-      Register an app in Azure AD, create a client secret, and grant{" "}
-      <code className="text-accent font-mono text-xs">Reader</code> role on the subscription. Paste JSON:{" "}
-      <code className="text-accent font-mono text-xs">
-        {"{"}&quot;tenantId&quot;, &quot;clientId&quot;,
-        &quot;clientSecret&quot;, &quot;subscriptionId&quot;{"}"}
-      </code>
-      . We inventory App Services, VMs, SQL databases, and storage accounts,
-      read-only.
-    </>
-  ),
+type FieldKind = "token" | "arn" | "json";
+
+const FIELD: Record<Provider, { kind: FieldKind; label: string; placeholder: string }> = {
+  vercel: { kind: "token", label: "Read-only API token", placeholder: "paste token" },
+  cloudflare: { kind: "token", label: "Read-only API token", placeholder: "paste token" },
+  heroku: { kind: "token", label: "Read-only API key", placeholder: "paste key" },
+  aws: {
+    kind: "arn",
+    label: "Role ARN",
+    placeholder: "arn:aws:iam::123456789012:role/infralift-readonly",
+  },
+  firebase: {
+    kind: "json",
+    label: "Service account JSON key",
+    placeholder: '{"type": "service_account", "project_id": "…", …}',
+  },
+  github: {
+    kind: "token",
+    label: "Fine-grained personal access token",
+    placeholder: "paste token",
+  },
+  netlify: { kind: "token", label: "Personal access token", placeholder: "paste token" },
+  render: { kind: "token", label: "API key", placeholder: "paste key" },
+  railway: { kind: "token", label: "API token", placeholder: "paste token" },
+  flyio: { kind: "token", label: "Deploy or personal access token", placeholder: "paste token" },
+  digitalocean: { kind: "token", label: "Read-only personal access token", placeholder: "paste token" },
+  gcp: {
+    kind: "json",
+    label: "Service account JSON key",
+    placeholder: '{"type": "service_account", "project_id": "…", …}',
+  },
+  azure: {
+    kind: "json",
+    label: "Service principal JSON",
+    placeholder: '{"tenantId": "…", "clientId": "…", "clientSecret": "…", "subscriptionId": "…"}',
+  },
 };
 
+const SCOPE_HELP: Record<Provider, string> = {
+  vercel:
+    "Create a token at vercel.com/account/tokens, scoped to the team you want assessed. Vercel tokens inherit your role, so for strict read-only use a token from a member with the Viewer role. We read projects, domains, env var names (never values), deployments and usage.",
+  cloudflare:
+    "Create a custom token at dash.cloudflare.com/profile/api-tokens with: Account · Workers Scripts · Read, Account · Cloudflare Pages · Read, Account · Workers R2 Storage · Read, Zone · Zone · Read, Zone · DNS · Read.",
+  heroku:
+    "Generate an API key at dashboard.heroku.com/account, or run heroku authorizations:create for a scoped authorization. We only call read endpoints: apps, formation, add-ons.",
+  aws:
+    "Create an IAM role with the AWS-managed ReadOnlyAccess policy plus ce:GetCostAndUsage, trusted to our account with the external ID shown above. ReadOnlyAccess cannot create, modify, or delete anything.",
+  firebase:
+    "Create a service account at console.cloud.google.com/iam-admin/serviceaccounts with the Viewer role (or granular: Firebase Viewer, Cloud Functions Viewer, Cloud Datastore Viewer), generate a JSON key, and paste the full JSON. We inventory Hosting sites, Cloud Functions, and Firestore databases.",
+  github:
+    "Create a fine-grained PAT at github.com/settings/tokens scoped to the repository that will receive generated Terraform, with Contents: Read and write. Used only to commit rendered .tf files.",
+  netlify:
+    "Create a personal access token at app.netlify.com/user/applications. We read sites, forms, DNS zones, and build hooks, all read-only.",
+  render:
+    "Create an API key at dashboard.render.com/account/api-keys. We read services, databases, Redis instances, and env groups, all read-only.",
+  railway:
+    "Create an API token at railway.com/account/tokens. We read projects, services, plugins (databases), and environments via the GraphQL API, all read-only.",
+  flyio:
+    "Create a token via fly tokens create or the Fly.io dashboard. We read apps, machines, and volumes, all read-only.",
+  digitalocean:
+    "Create a personal access token at cloud.digitalocean.com/account/api/tokens with read-only scope. We inventory Droplets, App Platform apps, managed databases, Spaces, and Kubernetes clusters.",
+  gcp:
+    "Create a service account at console.cloud.google.com/iam-admin/serviceaccounts with the Viewer role, generate a JSON key, and paste the full JSON. We inventory Cloud Run, GCE, Cloud SQL, GCS, and Cloud Functions.",
+  azure:
+    "Register an app in Azure AD, create a client secret, and grant the Reader role on the subscription. We inventory App Services, VMs, SQL databases, and storage accounts, read-only.",
+};
+
+const COLS = "grid-cols-[1fr_1fr_90px]";
+
 export default function ConnectionsPage() {
-  const [connections, setConnections] = useState<ProviderConnectionSummary[]>(
-    []
-  );
+  const [connections, setConnections] = useState<ProviderConnectionSummary[]>([]);
   const [provider, setProvider] = useState<Provider>("vercel");
   const [label, setLabel] = useState("");
   const [token, setToken] = useState("");
@@ -133,11 +100,7 @@ export default function ConnectionsPage() {
 
   const load = useCallback(async () => {
     try {
-      setConnections(
-        await api<ProviderConnectionSummary[]>(
-          `/connections`
-        )
-      );
+      setConnections(await api<ProviderConnectionSummary[]>("/connections"));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -147,6 +110,14 @@ export default function ConnectionsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // deep link from the dashboard provider cards: /connections?provider=heroku
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("provider");
+    if (q && (PROVIDERS as readonly string[]).includes(q)) {
+      setProvider(q as Provider);
+    }
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -167,21 +138,24 @@ export default function ConnectionsPage() {
     }
   }
 
+  const field = FIELD[provider];
+  const hasValid = connections.some((c) => c.status === "valid");
+
   return (
     <>
-      <h1 className="text-3xl font-bold tracking-tight mb-2">Provider connections</h1>
-      <p className="text-muted mb-8">
-        Read-only credentials only. Tokens are encrypted at rest, never
-        displayed again, and never used to modify your infrastructure.
+      <h1 className={H1}>Provider connections</h1>
+      <p className="mb-7 max-w-[620px] text-muted">
+        Read-only credentials only. Tokens are encrypted at rest, never displayed
+        again, and never used to modify your infrastructure.
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div className="bg-surface border border-border rounded-xl p-6">
-          <h3 className="text-base font-semibold mb-1.5">Connect a provider</h3>
+      <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-2">
+        <Card>
+          <CardTitle>Connect a provider</CardTitle>
           <form onSubmit={submit}>
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Provider</label>
+            <label className={LABEL}>Provider</label>
             <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+              className={`${INPUT} mb-4`}
               value={provider}
               onChange={(e) => setProvider(e.target.value as Provider)}
             >
@@ -192,119 +166,96 @@ export default function ConnectionsPage() {
               ))}
             </select>
 
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Label</label>
+            <label className={LABEL}>Label</label>
             <input
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+              className={`${INPUT} mb-4`}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g. production team"
               required
             />
 
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">
-              {provider === "aws"
-                ? "Role ARN"
-                : provider === "firebase" || provider === "gcp"
-                  ? "Service account JSON key"
-                  : provider === "azure"
-                    ? "Service principal JSON"
-                    : "Read-only API token"}
-            </label>
-            {provider === "firebase" || provider === "gcp" ? (
+            <label className={LABEL}>{field.label}</label>
+            {field.kind === "json" ? (
               <textarea
-                className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+                className={`${INPUT} mb-3.5 font-mono`}
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                rows={6}
-                placeholder='{"type": "service_account", "project_id": "…", …}'
-                required
-              />
-            ) : provider === "azure" ? (
-              <textarea
-                className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                rows={4}
-                placeholder='{"tenantId": "…", "clientId": "…", "clientSecret": "…", "subscriptionId": "…"}'
+                rows={provider === "azure" ? 4 : 6}
+                placeholder={field.placeholder}
                 required
               />
             ) : (
               <input
-                className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+                className={`${INPUT} mb-3.5 font-mono`}
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                type={provider === "aws" ? "text" : "password"}
-                placeholder={
-                  provider === "aws"
-                    ? "arn:aws:iam::123456789012:role/infralift-readonly"
-                    : "paste token"
-                }
+                type={field.kind === "arn" ? "text" : "password"}
+                placeholder={field.placeholder}
                 required
               />
             )}
 
-            <div className="bg-accent-dim/50 border border-accent/20 rounded-lg p-3 text-sm text-text mt-3 mb-2 flex items-start gap-2">
-              <svg className="w-4 h-4 mt-0.5 text-accent flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m0 0a2 2 0 100 4 2 2 0 000-4zm6-6V7a6 6 0 10-12 0v4m-2 0h16a1 1 0 011 1v8a1 1 0 01-1 1H5a1 1 0 01-1-1v-8a1 1 0 011-1z" />
-              </svg>
-              <span>
+            <div className="mb-3">
+              <Note tone="accent">
                 Your token is encrypted with AES-256 before storage, never
                 displayed again, and only used for read-only API calls. You can
                 revoke it from your provider at any time.
-              </span>
+              </Note>
             </div>
 
-            <div className="bg-bg border border-border rounded-lg p-3 text-muted text-xs font-mono mt-2 mb-4">
+            <div className="mb-5 rounded-lg border border-border bg-bg p-3 font-mono text-xs leading-relaxed text-muted">
               {SCOPE_HELP[provider]}
             </div>
 
-            <button
-              className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={busy}
-            >
+            <PrimaryButton disabled={busy}>
               {busy ? "Verifying..." : "Connect & verify"}
-            </button>
-            {error && <div className="text-danger text-sm mt-2">{error}</div>}
+            </PrimaryButton>
+            {error && <div className="mt-2 text-sm text-danger">{error}</div>}
           </form>
-        </div>
+        </Card>
 
-        <div className="bg-surface border border-border rounded-xl p-6">
-          <h3 className="text-base font-semibold mb-1.5">Connected</h3>
-          {connections.length === 0 ? (
-            <p className="text-muted text-sm">No connections yet.</p>
-          ) : (
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr>
-                  <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Provider</th>
-                  <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Label</th>
-                  <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {connections.map((c) => (
-                  <tr key={c.id}>
-                    <td className="p-3 border-b border-border">{PROVIDER_LABELS[c.provider]}</td>
-                    <td className="p-3 border-b border-border">{c.label}</td>
-                    <td className="p-3 border-b border-border">
-                      <span
-                        className={
-                          c.status === "valid"
-                            ? "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent-dim text-accent"
-                            : c.status === "invalid"
-                              ? "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-danger/20 text-danger"
-                              : "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-border text-muted"
-                        }
-                      >
-                        {c.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <Card>
+          <CardTitle>Connected</CardTitle>
+          <p className="mb-3 text-[13px] text-faint">
+            {connections.length
+              ? "Each connection is assessed independently and combined into one report."
+              : "No connections yet."}
+          </p>
+          {connections.length > 0 && (
+            <>
+              <TableHead cols={COLS}>
+                <span>Provider</span>
+                <span>Label</span>
+                <span>Status</span>
+              </TableHead>
+              {connections.map((c) => (
+                <TableRow key={c.id} cols={COLS}>
+                  <span>{PROVIDER_LABELS[c.provider]}</span>
+                  <span className="text-muted">{c.label}</span>
+                  <Chip
+                    tone={
+                      c.status === "valid"
+                        ? "accent"
+                        : c.status === "invalid"
+                          ? "danger"
+                          : "muted"
+                    }
+                  >
+                    {c.status}
+                  </Chip>
+                </TableRow>
+              ))}
+            </>
           )}
-        </div>
+          {hasValid && (
+            <div className="mt-4">
+              <PrimaryButton href="/assessments">
+                Run assessment &rarr;
+              </PrimaryButton>
+            </div>
+          )}
+        </Card>
       </div>
     </>
   );
