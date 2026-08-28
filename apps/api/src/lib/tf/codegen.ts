@@ -327,9 +327,9 @@ const SOURCE_GENERATORS: Partial<Record<Provider, ResourceGenerator>> = {
   },
 
   heroku: (item) => {
-    const name = sanitizeName(item.name);
     switch (item.type) {
-      case "heroku:app":
+      case "heroku:app": {
+        const name = sanitizeName(item.name);
         return [
           `resource "heroku_app" "${name}" {`,
           `  name   = "${item.name}"`,
@@ -337,22 +337,36 @@ const SOURCE_GENERATORS: Partial<Record<Provider, ResourceGenerator>> = {
           `  stack  = "${(item.metadata?.stack as string) ?? "heroku-24"}"`,
           `}`,
         ].join("\n");
+      }
       case "heroku:dyno": {
-        const appName = sanitizeName((item.metadata?.appName as string) ?? item.name);
+        // Name is "app-name web (Basic x1)", externalId is "uuid:process_type"
+        const appDisplayName = item.name.split(" ")[0] ?? item.name;
+        const appRef = sanitizeName(
+          (item.metadata?.appName as string) ?? appDisplayName
+        );
+        const processType =
+          (item.metadata?.processType as string) ??
+          item.externalId.split(":")[1] ??
+          "web";
+        const formationName = `${appRef}_${processType}`;
         return [
-          `resource "heroku_formation" "${name}" {`,
-          `  app_id   = heroku_app.${appName}.id`,
-          `  type     = "${(item.metadata?.processType as string) ?? "web"}"`,
+          `resource "heroku_formation" "${formationName}" {`,
+          `  app_id   = heroku_app.${appRef}.id`,
+          `  type     = "${processType}"`,
           `  quantity = ${(item.metadata?.quantity as number) ?? 1}`,
           `  size     = "${(item.metadata?.size as string) ?? "Basic"}"`,
           `}`,
         ].join("\n");
       }
       case "heroku:addon": {
-        const appName = sanitizeName((item.metadata?.appName as string) ?? item.name);
+        const name = sanitizeName(item.name);
+        const appDisplayName = item.name.split(" ")[0] ?? item.name;
+        const appRef = sanitizeName(
+          (item.metadata?.appName as string) ?? appDisplayName
+        );
         return [
           `resource "heroku_addon" "${name}" {`,
-          `  app_id = heroku_app.${appName}.id`,
+          `  app_id = heroku_app.${appRef}.id`,
           `  plan   = "${(item.metadata?.plan as string) ?? item.externalId}"`,
           `}`,
         ].join("\n");
