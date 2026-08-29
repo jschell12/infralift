@@ -63,26 +63,35 @@ export async function cfAuth(req: Request, res: Response, next: NextFunction) {
     return next();
   }
 
-  // JWT can come from the header (direct Cloudflare proxy) or the
-  // CF_Authorization cookie (forwarded through Next.js rewrite proxy).
-  const rawToken =
-    req.headers["cf-access-jwt-assertion"] ??
-    parseCookie(req.headers.cookie, "CF_Authorization");
-  const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;
-  if (!token) {
+  // JWT can come from the header (direct Cloudflare proxy) or a
+  // CF_Authorization cookie (forwarded through a Next.js rewrite proxy).
+  // A browser can hold more than one CF_Authorization cookie at once — a
+  // host-scoped one from the app covering this subdomain, plus a
+  // domain-scoped one from a wildcard app — and only the token issued by
+  // the app whose AUD matches CF_ACCESS_AUD will verify. Try them all
+  // rather than betting on cookie order.
+  const candidates = collectTokens(req);
+  if (candidates.length === 0) {
     return res.status(401).json({ error: "Missing Cloudflare Access token" });
   }
 
-  try {
-    const ks = getJwks();
-    if (!ks) {
-      return res.status(500).json({ error: "JWKS not configured" });
-    }
+  const ks = getJwks();
+  if (!ks) {
+    return res.status(500).json({ error: "JWKS not configured" });
+  }
 
-    const { payload } = await jwtVerify(token, ks, {
-      issuer: `https://${CF_TEAM_DOMAIN}`,
-      audience: CF_AUD,
-    });
+  let lastError: unknown;
+  for (const token of candidates) {
+    let payload;
+    try {
+      ({ payload } = await jwtVerify(token, ks, {
+        issuer: `https://${CF_TEAM_DOMAIN}`,
+        audience: CF_AUD,
+      }));
+    } catch (err) {
+      lastError = err;
+      continue;
+    }
 
     const email = payload.email as string | undefined;
     if (!email) {
@@ -93,11 +102,39 @@ export async function cfAuth(req: Request, res: Response, next: NextFunction) {
       (payload as Record<string, unknown>).name as string | undefined;
 
     req.user = await getOrCreateUser(email, name ?? null);
-    next();
-  } catch (err) {
-    console.error("CF Access JWT verification failed:", err);
-    return res.status(401).json({ error: "Invalid access token" });
+    return next();
   }
+
+  // Every candidate failed. The jose error code names the actual cause
+  // (ERR_JWT_EXPIRED, ERR_JWT_CLAIM_VALIDATION_FAILED for an issuer/audience
+  // mismatch, ERR_JWKS_NO_MATCHING_KEY, ...) — return it so the browser shows
+  // something more actionable than a bare "Invalid access token".
+  const code = errorCode(lastError);
+  console.error(
+    `CF Access JWT verification failed (${candidates.length} candidate token(s), aud=${CF_AUD ?? "unset"}):`,
+    lastError
+  );
+  return res
+    .status(401)
+    .json({ error: "Invalid access token", code, detail: `Invalid access token (${code})` });
+}
+
+/** Every token the request carries, header first, then each cookie value. */
+function collectTokens(req: Request): string[] {
+  const header = req.headers["cf-access-jwt-assertion"];
+  const fromHeader = Array.isArray(header) ? header : header ? [header] : [];
+  const all = [
+    ...fromHeader,
+    ...parseCookies(req.headers.cookie, "CF_Authorization"),
+  ];
+  return [...new Set(all.filter(Boolean))];
+}
+
+function errorCode(err: unknown): string {
+  if (err && typeof err === "object" && "code" in err) {
+    return String((err as { code: unknown }).code);
+  }
+  return "unknown";
 }
 
 /**
@@ -111,13 +148,15 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-function parseCookie(
-  header: string | undefined,
-  name: string
-): string | undefined {
-  if (!header) return undefined;
-  const match = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
-  return match?.[1];
+/** All values for `name` in a Cookie header — there can be more than one. */
+export function parseCookies(header: string | undefined, name: string): string[] {
+  if (!header) return [];
+  const re = new RegExp(`(?:^|;\\s*)${name}=([^;]+)`, "g");
+  const values: string[] = [];
+  for (const match of header.matchAll(re)) {
+    if (match[1]) values.push(match[1]);
+  }
+  return values;
 }
 
 /**
