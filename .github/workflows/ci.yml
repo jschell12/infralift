@@ -46,15 +46,10 @@ jobs:
   deploy:
     name: Deploy to Framework
     needs: check
-    # Inert until a self-hosted runner is registered and the DEPLOY_ENABLED
-    # repository variable is set to "true" — without the guard every merge
-    # would queue a job that no runner can pick up.
     if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
-    # The Nomad cluster lives on the LAN (10.0.0.2) and is not reachable from
-    # GitHub-hosted runners, so this runs on a self-hosted runner on the
-    # Framework host itself. Images are then built where they are consumed,
-    # which makes `make deploy-images` (docker save | ssh docker load)
-    # unnecessary.
+    # Runner is on the Mac Mini (always-on, LAN access to Framework).
+    # It rsyncs the checkout to Framework, builds Docker images there,
+    # and restarts Nomad allocations.
     runs-on: [self-hosted, infralift-framework]
     concurrency:
       group: deploy-production
@@ -62,10 +57,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build api, dashboard, and admin images
-        run: make build
-
-      - name: Roll Nomad allocations onto the new images
-        env:
-          NOMAD_JOB: ${{ vars.NOMAD_JOB || 'infralift' }}
-        run: nomad job restart -reschedule -yes "$NOMAD_JOB"
+      - name: Build and deploy via Framework
+        run: $HOME/actions-runner/deploy-infralift.sh "$GITHUB_WORKSPACE"
