@@ -1,9 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { AdminNav } from "../components/nav";
 
 export const metadata: Metadata = {
   title: "infralift admin",
   description: "Internal admin dashboard for infralift.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -14,31 +20,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <div className="flex min-h-screen">
-          <aside className="w-[220px] bg-surface border-r border-border px-4 py-6 flex-shrink-0 flex flex-col gap-1">
-            <a className="block text-lg font-bold text-text mb-6" href="/">
-              infra<span className="text-accent">lift</span>
-              <span className="text-muted text-xs ml-1">admin</span>
-            </a>
-            <nav className="flex flex-col gap-1">
-              <a href="/" className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface">
-                Overview
-              </a>
-              <a href="/leads" className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface">
-                Leads
-              </a>
-              <a href="/communities" className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface">
-                Communities
-              </a>
-              <a href="/report" className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface">
-                Report
-              </a>
-              <a href="/scanner" className="block text-sm text-muted px-3 py-2 rounded-lg hover:text-text hover:bg-surface">
-                Scanner
-              </a>
-            </nav>
-          </aside>
-          <main className="flex-1 p-10 max-w-[1100px]">{children}</main>
+        {/* Column on phones (top bar over content), row on desktop (sidebar
+            beside content). AdminNav renders whichever half is visible. */}
+        <div className="flex min-h-screen flex-col md:flex-row">
+          <AdminNav />
+          <main className="min-w-0 max-w-full flex-1 p-4 md:max-w-[1100px] md:p-10">
+            {children}
+          </main>
         </div>
       </body>
     </html>

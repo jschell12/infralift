@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 /** The repeated utility strings, in one place. No transitions: hover is
  *  colour-only, per the design system. */
 
-export const CARD = "bg-surface border border-border rounded-xl p-6";
+export const CARD = "bg-surface border border-border rounded-xl p-4 sm:p-6";
 export const NUM = "[font-variant-numeric:tabular-nums]";
 export const MONO = "font-mono";
 export const H1 = "text-[26px] font-bold tracking-[-0.02em] mb-1.5";
@@ -209,6 +209,24 @@ export function TableRow({
       className={`grid ${cols} gap-2 border-b border-border py-3 text-[13px] ${align === "center" ? "items-center" : "items-start"} ${selected ? "bg-bg" : ""} ${onClick ? "cursor-pointer hover:bg-bg" : ""}`}
     >
       {children}
+    </div>
+  );
+}
+
+/** Horizontal scroll shell for the grid tables. Below `min` the table keeps
+ *  its column widths and the card scrolls sideways, rather than every column
+ *  collapsing to unreadable slivers on a phone. */
+export function TableScroll({
+  children,
+  min = "min-w-[720px]",
+}: {
+  children: ReactNode;
+  /** Tailwind min-width class for the table body. */
+  min?: string;
+}) {
+  return (
+    <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
+      <div className={min}>{children}</div>
     </div>
   );
 }

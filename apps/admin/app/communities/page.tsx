@@ -51,7 +51,9 @@ export default function CommunitiesPage() {
 
   return (
     <>
-      <h1 className="text-3xl font-bold tracking-tight mb-2">Community sources</h1>
+      <h1 className="mb-2 text-2xl font-bold tracking-tight sm:text-3xl">
+        Community sources
+      </h1>
       <p className="text-muted mb-8">
         Forums, subreddits, Discords, and blogs where infralift&apos;s target
         audience discusses cloud costs and migrations. {communities.length}{" "}
@@ -60,9 +62,9 @@ export default function CommunitiesPage() {
 
       {error && <div className="text-danger text-sm mt-2">{error}</div>}
 
-      <div className="bg-surface border border-border rounded-xl p-6">
-        <div className="flex gap-3 flex-wrap mb-4">
-          <div>
+      <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
+        <div className="mb-4 flex flex-wrap gap-3">
+          <div className="min-w-[150px] flex-1">
             <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Platform</label>
             <select
               className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
@@ -80,7 +82,7 @@ export default function CommunitiesPage() {
               <option value="vendor">Vendor</option>
             </select>
           </div>
-          <div>
+          <div className="min-w-[150px] flex-1">
             <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Category</label>
             <select
               className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
@@ -101,40 +103,42 @@ export default function CommunitiesPage() {
         {communities.length === 0 ? (
           <p className="text-muted text-sm">No communities found.</p>
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Name</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Platform</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Category</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Members</th>
-                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Relevance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {communities.map((c) => (
-                <tr key={c.id}>
-                  <td className="p-3 border-b border-border">
-                    <a href={c.url} target="_blank" rel="noopener noreferrer">
-                      {c.name}
-                    </a>
-                  </td>
-                  <td className="p-3 border-b border-border">{PLATFORM_LABEL[c.platform] ?? c.platform}</td>
-                  <td className="p-3 border-b border-border">{c.category}</td>
-                  <td className="p-3 border-b border-border">
-                    {c.memberCount
-                      ? c.memberCount >= 1000
-                        ? `${Math.round(c.memberCount / 1000)}k`
-                        : c.memberCount
-                      : ""}
-                  </td>
-                  <td className="p-3 border-b border-border max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap">
-                    {c.relevance}
-                  </td>
+          <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
+            <table className="w-full min-w-[620px] border-collapse text-sm">
+              <thead>
+                <tr>
+                  <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Name</th>
+                  <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Platform</th>
+                  <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Category</th>
+                  <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Members</th>
+                  <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Relevance</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {communities.map((c) => (
+                  <tr key={c.id}>
+                    <td className="p-3 border-b border-border">
+                      <a href={c.url} target="_blank" rel="noopener noreferrer">
+                        {c.name}
+                      </a>
+                    </td>
+                    <td className="p-3 border-b border-border">{PLATFORM_LABEL[c.platform] ?? c.platform}</td>
+                    <td className="p-3 border-b border-border">{c.category}</td>
+                    <td className="p-3 border-b border-border">
+                      {c.memberCount
+                        ? c.memberCount >= 1000
+                          ? `${Math.round(c.memberCount / 1000)}k`
+                          : c.memberCount
+                        : ""}
+                    </td>
+                    <td className="p-3 border-b border-border max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap">
+                      {c.relevance}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>

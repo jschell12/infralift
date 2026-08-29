@@ -86,7 +86,7 @@ export default function ScannerPage() {
         Health overview of the community lead scanner pipeline.
       </p>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard label="total leads" value={status.totalLeads} center />
         <StatCard label="last 24h" value={status.last24h} center />
         <StatCard label="last 7 days" value={status.last7d} center />
@@ -128,7 +128,7 @@ export default function ScannerPage() {
             {HEALTH.map((h) => (
               <div
                 key={h.name}
-                className="flex items-center gap-2.5 rounded-md bg-bg px-3 py-2.5 text-[13px]"
+                className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md bg-bg px-3 py-2.5 text-[13px]"
               >
                 <Dot tone={HEALTH_TONE[h.state]} />
                 <span>{h.name}</span>

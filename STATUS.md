@@ -1,5 +1,51 @@
 # infralift status
 
+## 2026-08-29 (session 5)
+
+### Completed
+- **CI/CD pipeline (`.github/workflows/ci.yml`)** — First GitHub Actions workflow in the repo. `check` job runs on every PR and every push to `main`: install, `db:generate`, build `packages/*`, typecheck all four apps, run the 42 api tests, build all four apps. `deploy` job runs after `check` passes on `main` only, builds the three Docker images and rolls the Nomad allocations. This is what makes merge-from-phone work: approve and merge the PR on mobile, and the deploy runs itself.
+- **Admin app responsive on mobile** — `admin.infralift.dev` was a fixed 220px sidebar in a flex row, so a 390px phone left ~90px of content column and every page wrapped one word per line. New `apps/admin/components/nav.tsx` renders a sticky top bar with a hamburger below `md` and the existing sidebar at `md`+, with active-link highlighting on both. Layout is column on phones, row on desktop. Tables now scroll sideways inside their card (`TableScroll`) instead of crushing their columns; the leads table drops to a stacked card per lead below `md`. Stat strips go 2-up (was 1-up) on phones. Verified at 390x844: zero horizontal page overflow on every route, desktop unchanged.
+- **Cloudflare Access token handling hardened (`apps/api/src/lib/cf-auth.ts`)** — The scanner page's "Invalid access token" is the API's generic 401 for *any* `jwtVerify` failure, which hid the actual cause. Two changes: (1) all `CF_Authorization` cookie values are now tried, not just the first one the regex finds — a browser holds one cookie per Access application that has issued a session, and only the token whose `aud` matches `CF_ACCESS_AUD` verifies, so cookie order decided whether requests worked; (2) the 401 now carries the jose error code (`ERR_JWT_EXPIRED`, `ERR_JWT_CLAIM_VALIDATION_FAILED`, `ERR_JWKS_NO_MATCHING_KEY`, ...) and the log line records the candidate count and configured AUD. 5 new unit tests for the cookie parser.
+
+### CI/CD
+
+`.github/workflows/ci.yml`, two jobs:
+
+| Job | Runner | Triggers | Does |
+|---|---|---|---|
+| `check` | `ubuntu-latest` | every PR, every push to `main` | install → `db:generate` → build `packages/*` → `pnpm lint` → `pnpm test` → build `apps/*` |
+| `deploy` | `[self-hosted, infralift-framework]` | push to `main`, after `check` passes | `make build` (api, dashboard, admin images) → `nomad job restart -reschedule -yes $NOMAD_JOB` |
+
+`check` needs nothing set up — it runs today. Ordering matters: the api's types come from the generated Prisma client and three apps import `@infralift/shared`, so `db:generate` and the `packages/*` build both have to precede `tsc`.
+
+`deploy` is gated on `vars.DEPLOY_ENABLED == 'true'` and stays skipped until the following are done by hand (a job pointed at a runner that does not exist queues forever, which is why the gate is there rather than the workflow simply being enabled):
+
+1. Register a self-hosted runner on the Framework host (10.0.0.2) with the label `infralift-framework`. It runs on the Nomad client itself because the LAN is not reachable from GitHub-hosted runners — which also means `make deploy-images` (`docker save | ssh docker load`) is not needed, the images are built where they are consumed.
+2. The runner's user needs Docker access and a `nomad` binary with `NOMAD_ADDR` set for the cluster.
+3. Set repository variable `DEPLOY_ENABLED=true`. Optionally set `NOMAD_JOB` if the job is not named `infralift`.
+4. Optionally set `main` as a protected branch requiring `check` to pass, so a red build cannot deploy.
+
+Not covered yet: `apps/web` (marketing site) still deploys separately via Cloudflare, and Prisma migrations are not run by the pipeline — `prisma migrate deploy` is still a manual step on schema changes.
+
+### Why the scanner page said "Invalid access token"
+
+The string is `apps/api/src/lib/cf-auth.ts` returning 401 after `jwtVerify` threw. It is reached only when a token *was* present (no token gives "Missing Cloudflare Access token"), so the cookie arrived through the Next.js `/api` rewrite and failed verification. The candidates, in order of likelihood:
+
+1. **`aud` mismatch** — `CF_ACCESS_AUD` on the api Nomad job does not match the AUD of the Access application that issued the cookie the browser sent. `admin.infralift.dev` was added in session 3, after the wildcard `*.infralift.dev` app; if admin ended up under its own Access app, or the wildcard app was recreated, the AUD changed and the api was never updated.
+2. **Wrong cookie picked** — with both a wildcard app and a host-scoped app in play the browser sends two `CF_Authorization` cookies; the old parser took whichever came first. Fixed above.
+3. **Expired token** — a long-lived mobile tab holding a stale cookie (`ERR_JWT_EXPIRED`).
+4. **JWKS unreachable** — the api container could not fetch `https://$CF_ACCESS_TEAM_DOMAIN/cdn-cgi/access/certs` (`ERR_JWKS_NO_MATCHING_KEY` / a fetch error).
+
+To settle which: `nomad alloc logs <api-alloc>` now prints the candidate count and the configured AUD alongside the jose error, and the browser shows the error code inline. If it reads `ERR_JWT_CLAIM_VALIDATION_FAILED`, compare `CF_ACCESS_AUD` in the Nomad job against the AUD of the Access app covering `admin.infralift.dev` in the Cloudflare dashboard.
+
+### Next steps
+- Register the self-hosted runner and flip `DEPLOY_ENABLED` to turn merge-to-deploy on
+- Reconcile `CF_ACCESS_AUD` with the Access app actually covering `admin.infralift.dev`
+- Give `apps/dashboard` the same responsive treatment (identical fixed-sidebar layout, same problem on mobile)
+- Add `prisma migrate deploy` to the deploy job once migrations are trusted to run unattended
+- Execute a full migration from Vercel/Heroku to Cloudflare or Hetzner target
+- Wire TFC client with real credentials for workspace creation
+
 ## 2026-08-27 (session 4)
 
 ### Completed
