@@ -105,6 +105,62 @@ export interface AssessmentReport extends AssessmentSummary {
   findings: AssessmentFinding[];
 }
 
+// -- Migration options (GET /assessments/:id/options) ------------------------
+
+/** One workload trait inferred from the assessment inventory. */
+export interface InferredNeed {
+  key: string; // capability key, e.g. "managed_postgres"
+  label: string; // human label, e.g. "Managed Postgres"
+  evidence: string; // which inventory item(s) implied it
+}
+
+export interface OptionPricing {
+  listMonthlyCents: number;
+  year1MonthlyCents: number;
+  steadyStateMonthlyCents: number;
+  applied: { name: string; kind: string; confidence: string; detail: string }[];
+}
+
+/** A companion service that covers a capability the main target lacks. */
+export interface CompanionSuggestion {
+  name: string;
+  covers: string; // capability key it fills
+  monthlyCents: number;
+  note: string;
+}
+
+export interface MigrationOption {
+  slug: string;
+  name: string;
+  category: string;
+  score: number;
+  pricing: OptionPricing;
+  /** steady-state savings vs the assessed current spend (companions included) */
+  monthlySavingsCents: number;
+  benefits: string;
+  drawbacks: string;
+  managedLevel: number;
+  companions: CompanionSuggestion[];
+  /** capability keys the workload needs that this target covers weakly */
+  gaps: string[];
+  /** value for POST /tf/codegen migrationTarget, when supported */
+  codegenTarget: "cloudflare" | "hetzner" | null;
+}
+
+export interface MigrationOptionsReport {
+  assessmentId: string;
+  provider: Provider;
+  currentMonthlyCents: number;
+  needs: InferredNeed[];
+  profile: {
+    runtime: string;
+    requiredCapabilities: string[];
+    budgetMonthlyCents: number;
+    trafficGbMonth: number;
+  };
+  options: MigrationOption[];
+}
+
 export interface MigrationPhase {
   key: string;
   title: string;

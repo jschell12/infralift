@@ -4,6 +4,7 @@ import type { FindingSeverity, Provider } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
 import { decryptToken } from "../lib/crypto.js";
 import { getConnector } from "../connectors/index.js";
+import { buildMigrationOptions } from "../lib/options.js";
 
 export const assessmentsRouter = Router();
 
@@ -135,6 +136,36 @@ assessmentsRouter.post("/run", async (req, res) => {
   }
 
   res.status(201).json(await summarize(assessment.id));
+});
+
+// Migration options: rank target providers against the assessed workload.
+assessmentsRouter.get("/:id/options", async (req, res) => {
+  const assessment = await prisma.assessment.findUnique({
+    where: { id: req.params.id },
+    include: { inventory: true },
+  });
+  if (!assessment || assessment.orgId !== req.user!.orgId) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  if (assessment.status !== "completed") {
+    return res.status(400).json({ error: "Assessment not completed" });
+  }
+
+  const report = await buildMigrationOptions({
+    id: assessment.id,
+    provider: assessment.provider,
+    estimatedMonthlyCostCents: assessment.estimatedMonthlyCostCents,
+    inventory: assessment.inventory.map((i) => ({
+      provider: i.provider as Provider,
+      type: i.type,
+      externalId: i.externalId,
+      name: i.name,
+      region: i.region ?? undefined,
+      monthlyCostCents: i.monthlyCostCents ?? undefined,
+      metadata: (i.metadata as Record<string, unknown> | null) ?? undefined,
+    })),
+  });
+  res.json(report);
 });
 
 // Full report: summary + inventory + findings.
