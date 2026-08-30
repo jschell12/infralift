@@ -177,10 +177,17 @@ export async function buildMigrationOptions(assessment: {
 
   const ranked = await recommend(input);
 
-  // Everything except the provider being left, top 6.
-  const candidates = ranked
-    .filter((r) => r.slug !== assessment.provider)
-    .slice(0, 6);
+  // Everything except the provider being left, top 6 — plus any target we can
+  // generate IaC for that cleared the hard filter but ranked below the cut.
+  // Those are the migrations infralift can actually execute; a customer
+  // should always see them (ranked honestly) rather than have the cut hide
+  // them. Hetzner routinely lands at #7 for PaaS workloads because its
+  // managedLevel of 0 is penalized by opsFit.
+  const eligible = ranked.filter((r) => r.slug !== assessment.provider);
+  const candidates = [
+    ...eligible.slice(0, 6),
+    ...eligible.slice(6).filter((r) => CODEGEN_TARGETS[r.slug] !== undefined),
+  ];
 
   // Capability scores for gap/companion detection.
   const needKeys = needs.map((n) => n.key);
