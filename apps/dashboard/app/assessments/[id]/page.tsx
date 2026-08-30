@@ -106,6 +106,11 @@ export default function AssessmentReportPage({
     api<AssessmentReport & ReportExtras>(`/assessments/${id}`)
       .then(setReport)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    // Deep link from the options page: /assessments/:id?codegen=hetzner#codegen
+    const target = new URLSearchParams(window.location.search).get("codegen");
+    if (target === "cloudflare" || target === "hetzner") {
+      setCodegenTarget(target);
+    }
   }, [id]);
 
   async function approve() {
@@ -188,6 +193,23 @@ export default function AssessmentReportPage({
           value={formatCents(report.estimatedMonthlySavingsCents)}
           center
         />
+      </div>
+
+      <div className="mb-5 flex items-center gap-4 rounded-xl border border-accent/20 bg-accent-dim/40 px-5 py-4">
+        <div className="min-w-0">
+          <div className="text-[15px] font-semibold">
+            Where could this run instead?
+          </div>
+          <div className="text-[13px] text-muted">
+            Ranked migration targets with estimated costs, sized from this
+            inventory.
+          </div>
+        </div>
+        <div className="ml-auto shrink-0">
+          <PrimaryButton href={`/assessments/${report.id}/options`}>
+            View migration options
+          </PrimaryButton>
+        </div>
       </div>
 
       {projection.length > 0 && (
@@ -304,6 +326,7 @@ export default function AssessmentReportPage({
         )}
       </Card>
 
+      <div id="codegen" />
       <Card className="mb-5">
         <CardTitle>Generate infrastructure as code</CardTitle>
         <p className="mb-4 text-[13px] leading-relaxed text-muted">
