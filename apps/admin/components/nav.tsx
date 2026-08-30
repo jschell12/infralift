@@ -9,6 +9,7 @@ const ITEMS = [
   { href: "/communities", label: "Communities" },
   { href: "/report", label: "Report" },
   { href: "/scanner", label: "Scanner" },
+  { href: "/analytics", label: "Analytics" },
 ] as const;
 
 function Wordmark() {
