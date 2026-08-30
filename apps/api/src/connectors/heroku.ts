@@ -97,7 +97,10 @@ export const herokuConnector: Connector = {
             externalId: a.id,
             name: `${app.name}: ${a.addon_service?.name ?? a.name}`,
             monthlyCostCents: typeof cents === "number" ? cents : undefined,
-            metadata: { plan: a.plan?.name ?? null },
+            // appName is what codegen uses to reference the owning heroku_app.
+            // Without it, it has to parse the display name above, where the
+            // app name carries a trailing colon.
+            metadata: { plan: a.plan?.name ?? null, appName: app.name },
           });
           if ((a.addon_service?.name ?? "").includes("postgresql")) {
             findings.push({

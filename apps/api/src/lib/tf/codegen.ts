@@ -360,7 +360,14 @@ const SOURCE_GENERATORS: Partial<Record<Provider, ResourceGenerator>> = {
       }
       case "heroku:addon": {
         const name = sanitizeName(item.name);
-        const appDisplayName = item.name.split(" ")[0] ?? item.name;
+        // Name is "app-name: addon-service". Drop the trailing colon before
+        // sanitizing, or the reference becomes heroku_app.app_name_ and the
+        // config fails to validate. Assessments stored before the connector
+        // recorded appName still reach this fallback.
+        const appDisplayName = (item.name.split(" ")[0] ?? item.name).replace(
+          /:$/,
+          ""
+        );
         const appRef = sanitizeName(
           (item.metadata?.appName as string) ?? appDisplayName
         );
