@@ -429,3 +429,21 @@ model CommunityLead {
   @@index([status])
   @@index([scrapedAt])
 }
+
+// Daily marketing-site analytics rollups. Populated by the in-process
+// rollup job (src/analytics/rollup.ts) from the Workers Analytics Engine
+// dataset `marketing_analytics`. One row per (date, dimension, key):
+//   dimension "total"   key ""          — site-wide views/visitors
+//   dimension "channel" key <channel>   — hn, reddit, google, direct, ...
+//   dimension "path"    key <path>      — per-page views (visitors = 0)
+model AnalyticsDaily {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  dimension String
+  key       String   @default("")
+  views     Int
+  visitors  Int
+  createdAt DateTime @default(now())
+
+  @@unique([date, dimension, key])
+}

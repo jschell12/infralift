@@ -9,6 +9,8 @@ import { providersRouter } from "./routes/providers.js";
 import { tfRouter } from "./routes/tf.js";
 import { communitiesRouter } from "./routes/communities.js";
 import { leadsRouter } from "./routes/leads.js";
+import { analyticsRouter } from "./routes/analytics.js";
+import { startAnalyticsRollup } from "./analytics/rollup.js";
 
 const app = express();
 
@@ -43,8 +45,10 @@ app.use("/tf", tfRouter);
 // Admin-only routes
 app.use("/communities", requireAdmin, communitiesRouter);
 app.use("/leads", requireAdmin, leadsRouter);
+app.use("/analytics", requireAdmin, analyticsRouter);
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => {
   console.log(`infralift api listening on :${port}`);
+  startAnalyticsRollup();
 });

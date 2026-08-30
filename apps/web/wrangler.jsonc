@@ -2,17 +2,24 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "infralift-web",
   "compatibility_date": "2026-08-24",
-  // Static-assets-only Worker: `pnpm build` produces ./out via Next static
-  // export. Deploy with `npx wrangler deploy` from this directory.
+  // Worker script handles POST /a/e (first-party analytics beacon →
+  // Workers Analytics Engine); everything else falls through to static
+  // assets. `pnpm build` produces ./out via Next static export. Deploy
+  // with `npx wrangler deploy` from this directory.
   // Disable workers.dev + preview URLs so the only entry points are the
   // custom domains (which sit behind Cloudflare Access).
+  "main": "worker/index.ts",
   "workers_dev": false,
   "preview_urls": false,
   "assets": {
     "directory": "./out",
+    "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   },
+  "analytics_engine_datasets": [
+    { "binding": "ANALYTICS", "dataset": "marketing_analytics" }
+  ],
   "routes": [
     { "pattern": "infralift.dev", "custom_domain": true },
     { "pattern": "www.infralift.dev", "custom_domain": true }
