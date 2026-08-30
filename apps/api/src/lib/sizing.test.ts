@@ -60,6 +60,19 @@ describe("sizeTarget", () => {
     expect(sized!.monthlyCents).toBeGreaterThan(500);
   });
 
+  it("floors Hetzner instance count on bandwidth, not just RAM", () => {
+    // 10TB/mo cannot credibly ride on one small box even if RAM fits.
+    const sized = sizeTarget("hetzner", vercelFootprint);
+    const instanceLines = sized!.lineItems.filter((l) =>
+      l.label.includes("CCX")
+    );
+    const count = instanceLines.reduce(
+      (n, l) => n + Number(l.label.match(/^(\d+)×/)?.[1] ?? 1),
+      0
+    );
+    expect(count).toBeGreaterThanOrEqual(2);
+  });
+
   it("returns null for targets without a sizing model", () => {
     for (const slug of ["railway", "render", "aws", "digitalocean"]) {
       expect(sizeTarget(slug, herokuFootprint)).toBeNull();

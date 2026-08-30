@@ -198,12 +198,27 @@ function sizeHetzner(footprint: WorkloadFootprint): OptionSizing {
   let neededGb = Math.ceil((footprint.totalRamMb / 1024) * 1.3);
   if (neededGb < 4) neededGb = 4;
   const picks = new Map<string, number>();
+  let instanceCount = 0;
   while (neededGb > 0) {
     const fit =
       HETZNER_CCX.find((i) => i.ramGb <= neededGb) ??
       HETZNER_CCX[HETZNER_CCX.length - 1];
     picks.set(fit.name, (picks.get(fit.name) ?? 0) + 1);
+    instanceCount += 1;
     neededGb -= fit.ramGb;
+  }
+
+  // Heavy traffic needs boxes, not just RAM: one small instance per ~5TB/mo
+  // keeps the claim believable (a lone 2-vCPU box "serving 10TB" is the same
+  // kind of too-good number this module exists to kill).
+  const minForBandwidth = Math.ceil(footprint.bandwidthGbMonth / 5000);
+  if (instanceCount < minForBandwidth) {
+    const smallest = HETZNER_CCX[HETZNER_CCX.length - 1];
+    picks.set(
+      smallest.name,
+      (picks.get(smallest.name) ?? 0) + (minForBandwidth - instanceCount)
+    );
+    instanceCount = minForBandwidth;
   }
   for (const [name, count] of picks) {
     const spec = HETZNER_CCX.find((i) => i.name === name)!;
