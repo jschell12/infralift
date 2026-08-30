@@ -172,9 +172,48 @@ const VC_DOMAINS = [
   "northwind.dev",
 ];
 
-// 20 Pro seats ($400) + ~10TB bandwidth overage (~$1,350) + worker/cron
-// invocations, edge config, blob storage (~$1,010).
-const VC_MODELED_MONTHLY_CENTS = 276000;
+// Cost drivers, itemized the way the bill bleeds. `vercel:usage` items are
+// not migratable resources — codegen skips them — but they make the report's
+// inventory table read like the invoice, which is the demo.
+const VC_USAGE: {
+  id: string;
+  name: string;
+  cents: number;
+  metadata: Record<string, unknown>;
+}[] = [
+  {
+    id: "usage_demo_seats",
+    name: "Pro seats ×20",
+    cents: 40000,
+    metadata: { kind: "seats", quantity: 20 },
+  },
+  {
+    id: "usage_demo_bandwidth",
+    name: "Bandwidth overage (~10TB beyond included 1TB @ $0.15/GB)",
+    cents: 135000,
+    metadata: { kind: "bandwidth", gbMonth: 10000 },
+  },
+  {
+    id: "usage_demo_invocations",
+    name: "Function invocations (~50M/mo)",
+    cents: 30000,
+    metadata: { kind: "invocations", millions: 50 },
+  },
+  {
+    id: "usage_demo_images",
+    name: "Image optimization",
+    cents: 25000,
+    metadata: { kind: "image_optimization" },
+  },
+  {
+    id: "usage_demo_storage",
+    name: "Edge config reads + blob storage (~500GB)",
+    cents: 46000,
+    metadata: { kind: "storage", storedGb: 500 },
+  },
+];
+
+const VC_MODELED_MONTHLY_CENTS = VC_USAGE.reduce((s, u) => s + u.cents, 0); // 276,000
 
 export function buildDemoVercelAssessment(): DemoAssessment {
   const inventory: ResourceInventoryItem[] = [];
@@ -221,6 +260,34 @@ export function buildDemoVercelAssessment(): DemoAssessment {
       metadata: { serviceType: "external" },
     });
   }
+
+  // The bill, itemized.
+  for (const u of VC_USAGE) {
+    inventory.push({
+      provider: "vercel",
+      type: "vercel:usage",
+      externalId: u.id,
+      name: u.name,
+      monthlyCostCents: u.cents,
+      metadata: u.metadata,
+    });
+  }
+  findings.push({
+    category: "cost",
+    severity: "high",
+    title: "Bandwidth overage is half the bill",
+    detail:
+      "~10TB/mo beyond the included 1TB, billed at $0.15/GB, is roughly $1,350 of the $2,760 monthly run-rate. Cloudflare and most VPS providers do not bill egress at all — this line item disappears on migration.",
+    resourceRef: "usage_demo_bandwidth",
+  });
+  findings.push({
+    category: "cost",
+    severity: "medium",
+    title: "20 Pro seats bill $400/mo before any traffic",
+    detail:
+      "Vercel charges $20/seat/mo for every team member who deploys. Targets without per-seat pricing (Cloudflare Workers, any VPS) zero this out.",
+    resourceRef: "usage_demo_seats",
+  });
 
   findings.push({
     category: "cost",

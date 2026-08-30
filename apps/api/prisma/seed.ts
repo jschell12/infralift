@@ -340,7 +340,10 @@ const providers: SeedProvider[] = [
     egressFreeGb: 20000,
     notes: "infralift's default VPS target paired with Coolify or Docker Compose.",
     caps: {
-      static_hosting: 1, ssr: 1, full_node_runtime: 3, containers: 3,
+      // ssr 2, not 1: Next.js standalone output behind Caddy/nginx is a
+      // supported migration pattern — the score must clear the hard filter
+      // so the primary Vercel-exit VPS target appears for SSR workloads.
+      static_hosting: 1, ssr: 2, full_node_runtime: 3, containers: 3,
       background_workers: 2, cron: 2, websockets: 3, managed_postgres: 0,
       object_storage: 2, edge_network: 0, autoscaling: 1, zero_devops: 0,
       terraform_provider: 3, gpu: 2,
