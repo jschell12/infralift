@@ -129,14 +129,33 @@ export interface CompanionSuggestion {
   note: string;
 }
 
+/** One line of a workload-sized cost estimate. Zero-cost lines are the
+ * point — "$0 egress" is the argument for leaving. */
+export interface SizingLineItem {
+  label: string;
+  monthlyCents: number;
+  note?: string;
+}
+
+export interface OptionSizing {
+  lineItems: SizingLineItem[];
+  /** all-in sized monthly total (companions folded in) */
+  monthlyCents: number;
+  /** corroborated | advisor | anecdote — how solid the price table is */
+  confidence: string;
+}
+
 export interface MigrationOption {
   slug: string;
   name: string;
   category: string;
   score: number;
   pricing: OptionPricing;
-  /** steady-state savings vs the assessed current spend (companions included) */
-  monthlySavingsCents: number;
+  /** workload-sized estimate; null when this target has no sizing model */
+  sizing: OptionSizing | null;
+  /** steady-state savings vs assessed spend; null when the target is unsized
+   *  (no claim beats an absurd claim) */
+  monthlySavingsCents: number | null;
   benefits: string;
   drawbacks: string;
   managedLevel: number;

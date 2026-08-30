@@ -283,6 +283,9 @@ function renderSourceResources(
   ];
 
   for (const item of inventory) {
+    // "*:usage" items are billing line items (bandwidth, seats), not
+    // infrastructure — there is nothing to declare or import.
+    if (item.type.endsWith(":usage")) continue;
     const hcl = gen(item);
     if (hcl) lines.push(hcl, ``);
   }

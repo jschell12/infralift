@@ -16,6 +16,7 @@ import type {
 } from "@infralift/shared";
 import { prisma } from "./db.js";
 import { recommend, type RecommendInput } from "./recommend.js";
+import { computeFootprint, sizeTarget } from "./sizing.js";
 
 // ---------------------------------------------------------------------------
 // Need inference
@@ -205,6 +206,9 @@ export async function buildMigrationOptions(assessment: {
     capScore.set(`${row.provider.slug}:${row.key}`, row.score);
   }
 
+  // Workload footprint for sized target pricing.
+  const footprint = computeFootprint(assessment.inventory);
+
   const options: MigrationOption[] = candidates.map((c) => {
     const companions: CompanionSuggestion[] = [];
     const gaps: string[] = [];
@@ -218,11 +222,15 @@ export async function buildMigrationOptions(assessment: {
       if (companion) companions.push(companion);
     }
 
-    const companionMonthly = companions.reduce(
-      (sum, comp) => sum + comp.monthlyCents,
-      0
-    );
-    const allInSteady = c.pricing.steadyStateMonthlyCents + companionMonthly;
+    // Sized targets: the estimate is built from the measured workload
+    // (data services folded into the line items) and owns the savings math.
+    // Unsized targets: flat catalog pricing stays visible but no savings
+    // claim is made — an absent number beats an absurd one.
+    const sizing = sizeTarget(c.slug, footprint);
+    let monthlySavingsCents: number | null = null;
+    if (sizing) {
+      monthlySavingsCents = currentMonthlyCents - sizing.monthlyCents;
+    }
 
     return {
       slug: c.slug,
@@ -230,14 +238,28 @@ export async function buildMigrationOptions(assessment: {
       category: c.category,
       score: c.score,
       pricing: c.pricing,
-      monthlySavingsCents: currentMonthlyCents - allInSteady,
+      sizing,
+      monthlySavingsCents,
       benefits: c.benefits,
       drawbacks: c.drawbacks,
       managedLevel: c.managedLevel,
-      companions,
+      // Sized line items already include the data services; keep companions
+      // only for unsized targets so nothing double-counts.
+      companions: sizing ? [] : companions,
       gaps,
       codegenTarget: CODEGEN_TARGETS[c.slug] ?? null,
     };
+  });
+
+  // Sized options lead: their numbers are defensible line by line, and they
+  // are the migrations infralift can execute. Within each group, best
+  // savings first, then score.
+  options.sort((a, b) => {
+    if (!!a.sizing !== !!b.sizing) return a.sizing ? -1 : 1;
+    if (a.sizing && b.sizing) {
+      return (b.monthlySavingsCents ?? 0) - (a.monthlySavingsCents ?? 0);
+    }
+    return b.score - a.score;
   });
 
   return {

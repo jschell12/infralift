@@ -38,7 +38,11 @@ function OptionCard({
     (sum, c) => sum + c.monthlyCents,
     0
   );
-  const allIn = option.pricing.steadyStateMonthlyCents + companionMonthly;
+  // Sized targets own the all-in number; unsized fall back to catalog price
+  // plus companions and make no savings claim.
+  const allIn = option.sizing
+    ? option.sizing.monthlyCents
+    : option.pricing.steadyStateMonthlyCents + companionMonthly;
   const saves = option.monthlySavingsCents;
 
   return (
@@ -52,36 +56,74 @@ function OptionCard({
         <Chip size="xs" tone={option.managedLevel >= 2 ? "accent" : "warn"}>
           {MANAGED_LABEL[option.managedLevel] ?? "unknown ops model"}
         </Chip>
-        {saves > 0 && (
+        {saves !== null && saves > 0 && (
           <span className={`ml-auto text-[15px] font-semibold text-accent ${NUM}`}>
             saves {formatCents(saves)}/mo
           </span>
         )}
-        {saves <= 0 && currentMonthlyCents > 0 && (
+        {saves !== null && saves <= 0 && currentMonthlyCents > 0 && (
           <span className={`ml-auto text-[15px] font-semibold text-warn ${NUM}`}>
             +{formatCents(-saves)}/mo vs today
           </span>
         )}
+        {saves === null && (
+          <span className="ml-auto text-[13px] text-faint">
+            sized estimate on request
+          </span>
+        )}
       </div>
 
-      <div className="mb-4 grid grid-cols-3 gap-3 max-w-[520px]">
-        {(
-          [
-            ["List", option.pricing.listMonthlyCents],
-            ["Year 1", option.pricing.year1MonthlyCents],
-            ["Steady state", option.pricing.steadyStateMonthlyCents],
-          ] as const
-        ).map(([label, cents]) => (
-          <div key={label} className="rounded-lg bg-bg px-3 py-2">
-            <div className="text-[10px] uppercase tracking-[0.06em] text-faint">
-              {label}
-            </div>
-            <div className={`text-[15px] font-semibold ${NUM}`}>
-              {formatCents(cents)}/mo
-            </div>
+      {option.sizing ? (
+        <div className="mb-4">
+          <div className="mb-2 flex items-baseline gap-2.5">
+            <span className={`text-[22px] font-bold tracking-[-0.02em] ${NUM}`}>
+              {formatCents(option.sizing.monthlyCents)}/mo
+            </span>
+            <span className="text-[13px] text-muted">
+              all-in, sized to this workload
+            </span>
+            <Chip size="xs" tone="accent">
+              {option.sizing.confidence}
+            </Chip>
           </div>
-        ))}
-      </div>
+          <div className="mb-1.5 text-[11px] uppercase tracking-[0.06em] text-faint">
+            How we sized it
+          </div>
+          {option.sizing.lineItems.map((li) => (
+            <div
+              key={li.label}
+              className="mb-1.5 flex items-baseline gap-2 rounded-md bg-bg px-2.5 py-2 text-[13px]"
+            >
+              <span className="font-medium">{li.label}</span>
+              <span
+                className={`shrink-0 font-semibold ${NUM} ${li.monthlyCents === 0 ? "text-accent" : "text-text"}`}
+              >
+                {li.monthlyCents === 0 ? "$0" : `${formatCents(li.monthlyCents)}/mo`}
+              </span>
+              {li.note && <span className="text-faint">{li.note}</span>}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mb-4 grid grid-cols-3 gap-3 max-w-[520px]">
+          {(
+            [
+              ["Catalog typical", option.pricing.listMonthlyCents],
+              ["Year 1", option.pricing.year1MonthlyCents],
+              ["Steady state", option.pricing.steadyStateMonthlyCents],
+            ] as const
+          ).map(([label, cents]) => (
+            <div key={label} className="rounded-lg bg-bg px-3 py-2">
+              <div className="text-[10px] uppercase tracking-[0.06em] text-faint">
+                {label}
+              </div>
+              <div className={`text-[15px] font-semibold ${NUM}`}>
+                {formatCents(cents)}/mo
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {option.companions.length > 0 && (
         <div className="mb-4">
@@ -126,11 +168,20 @@ function OptionCard({
       </div>
 
       {option.codegenTarget ? (
-        <PrimaryButton
-          href={`/assessments/${assessmentId}?codegen=${option.codegenTarget}#codegen`}
-        >
-          Preview sample IaC
-        </PrimaryButton>
+        <>
+          <PrimaryButton
+            href={`/assessments/${assessmentId}?codegen=${option.codegenTarget}#codegen`}
+          >
+            Preview sample IaC
+          </PrimaryButton>
+          {option.sizing && (
+            <p className="mt-3 text-[13px] leading-relaxed text-muted">
+              infralift builds this environment in parallel with your live
+              site, then cuts over DNS with instant rollback. No downtime,
+              fixed fee.
+            </p>
+          )}
+        </>
       ) : (
         <span className="text-[13px] text-faint">
           Sample IaC generation for {option.name} coming soon
@@ -158,10 +209,19 @@ export default function MigrationOptionsPage({
   if (error) return <div className="mt-2 text-sm text-danger">{error}</div>;
   if (!report) return <p className="text-muted">Loading options...</p>;
 
-  const best = report.options[0];
+  // Prefer the best sized option for the headline — it's the one whose
+  // number we can defend line by line.
+  const best =
+    report.options
+      .filter((o) => o.sizing && o.monthlySavingsCents !== null)
+      .sort((a, b) => (b.monthlySavingsCents ?? 0) - (a.monthlySavingsCents ?? 0))[0] ??
+    report.options[0];
+  // Only sized targets make a savings claim.
   const bestSavings = Math.max(
     0,
-    ...report.options.map((o) => o.monthlySavingsCents)
+    ...report.options
+      .map((o) => o.monthlySavingsCents)
+      .filter((s): s is number => s !== null)
   );
 
   return (

@@ -79,6 +79,18 @@ describe("demo vercel fixture", () => {
     expect(modeled?.detail).toContain("no billing read API");
   });
 
+  it("itemizes the bill as usage line items that sum to the run-rate", () => {
+    const usage = fixture.inventory.filter((i) => i.type === "vercel:usage");
+    expect(usage.length).toBeGreaterThanOrEqual(5);
+    const sum = usage.reduce((s, u) => s + (u.monthlyCostCents ?? 0), 0);
+    expect(sum).toBe(276000);
+    // Bandwidth is the dominant line — the reason to leave.
+    const bandwidth = usage.find(
+      (u) => (u.metadata as Record<string, unknown>)?.kind === "bandwidth"
+    );
+    expect(bandwidth?.monthlyCostCents).toBe(135000);
+  });
+
   it("emits 11 nextjs projects and 4 domains", () => {
     const projects = fixture.inventory.filter(
       (i) => i.type === "vercel:project"
@@ -89,6 +101,18 @@ describe("demo vercel fixture", () => {
     for (const p of projects) {
       expect(p.metadata?.framework).toBe("nextjs");
     }
+  });
+
+  it("keeps usage items out of generated HCL", () => {
+    const files = generateHcl({
+      provider: "vercel",
+      inventory: fixture.inventory,
+      backend: "local",
+      migrationTarget: null,
+    });
+    const body = files.find((f) => f.fileName === "vercel.tf")?.content ?? "";
+    expect(body).not.toContain("usage");
+    expect(body).not.toContain("(no HCL mapping yet)");
   });
 
   it("infers ssr + cron from the project shapes", () => {
