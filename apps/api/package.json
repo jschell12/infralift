@@ -11,6 +11,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "seed:demo": "node dist/scripts/seed-demo.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
