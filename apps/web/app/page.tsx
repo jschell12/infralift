@@ -163,7 +163,7 @@ const PLANS = [
       "Cost projection at three prices",
       "Ranked target recommendation",
       "Risk & effort breakdown",
-      "A fixed-fee quote, same day",
+      "A fixed-fee quote to follow",
     ],
   },
   {
