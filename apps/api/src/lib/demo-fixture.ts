@@ -314,3 +314,503 @@ export function buildDemoVercelAssessment(): DemoAssessment {
     estimatedMonthlySavingsCents: savings,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Render: 5 services, managed Postgres + Redis — ~$1,189/mo
+// Service plans are priced by the connector's PLAN_COST_CENTS; databases,
+// seats, and bandwidth arrive as render:usage items because the connector
+// cannot price them from the API.
+// ---------------------------------------------------------------------------
+
+export function buildDemoRenderAssessment(): DemoAssessment {
+  const inventory: ResourceInventoryItem[] = [];
+  const findings: Omit<AssessmentFinding, "id">[] = [];
+
+  const service = (
+    n: number,
+    name: string,
+    type: string,
+    plan: string,
+    cents: number
+  ) => {
+    inventory.push({
+      provider: "render",
+      type: `render:${type}`,
+      externalId: `srv-demo-northwind-${n}`,
+      name,
+      region: "oregon",
+      monthlyCostCents: cents,
+      metadata: {
+        type,
+        plan,
+        runtime: "node",
+        repo: "https://github.com/northwind/platform",
+        autoDeploy: "yes",
+      },
+    });
+  };
+  service(1, "northwind-web", "web_service", "pro plus", 17500);
+  service(2, "northwind-api", "web_service", "pro plus", 17500);
+  service(3, "northwind-admin", "web_service", "pro plus", 17500);
+  service(4, "northwind-worker", "background_worker", "pro", 8500);
+  service(5, "northwind-emails", "background_worker", "pro", 8500);
+
+  inventory.push({
+    provider: "render",
+    type: "render:postgres",
+    externalId: "dpg-demo-northwind-1",
+    name: "northwind-db",
+    region: "oregon",
+    metadata: { plan: "pro_4gb", version: "16", status: "available" },
+  });
+  inventory.push({
+    provider: "render",
+    type: "render:redis",
+    externalId: "red-demo-northwind-1",
+    name: "northwind-cache",
+    region: "oregon",
+    metadata: { plan: "pro", status: "available" },
+  });
+  inventory.push({
+    provider: "render",
+    type: "render:env_group",
+    externalId: "evg-demo-northwind-1",
+    name: "northwind-shared-env",
+    metadata: { envVarCount: 24 },
+  });
+
+  const usage = (
+    id: string,
+    name: string,
+    cents: number,
+    metadata: Record<string, unknown>
+  ) => {
+    inventory.push({
+      provider: "render",
+      type: "render:usage",
+      externalId: id,
+      name,
+      monthlyCostCents: cents,
+      metadata,
+    });
+  };
+  usage("usage_demo_render_pg", "Managed Postgres pro (4GB RAM, 256GB)", 19000, {
+    kind: "database",
+  });
+  usage("usage_demo_render_redis", "Managed Redis pro (5GB)", 3200, {
+    kind: "database",
+  });
+  usage(
+    "usage_demo_render_bw",
+    "Bandwidth beyond included 500GB (~600GB total @ $0.30/GB)",
+    12000,
+    { kind: "bandwidth", gbMonth: 600 }
+  );
+  usage("usage_demo_render_seats", "Organization seats ×8", 15200, {
+    kind: "seats",
+    quantity: 8,
+  });
+
+  const total = inventory.reduce((s, i) => s + (i.monthlyCostCents ?? 0), 0);
+
+  findings.push({
+    category: "recommendation",
+    severity: "info",
+    title: "northwind-db: Render Postgres",
+    detail:
+      "Render managed Postgres migrates via pg_dump/pg_restore to Neon, a VPS Postgres, or any managed provider. Connection strings move to Terraform-managed env vars.",
+    resourceRef: "dpg-demo-northwind-1",
+  });
+  const savings = Math.max(0, total - 2000);
+  findings.push({
+    category: "cost",
+    severity: "high",
+    title: `~$${(total / 100).toFixed(0)}/mo on Render services`,
+    detail: `Five always-on services, managed Postgres and Redis, seats, and bandwidth total roughly $${(total / 100).toFixed(2)}/mo. Per-instance plan pricing compounds fast once every service needs pro-tier RAM.`,
+    monthlySavingsCents: savings,
+  });
+
+  return {
+    inventory,
+    findings,
+    estimatedMonthlyCostCents: total,
+    estimatedMonthlySavingsCents: savings,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Railway: usage-billed everything — ~$980/mo
+// The connector only prices subscriptions; compute, egress, and plugin
+// storage arrive as railway:usage items.
+// ---------------------------------------------------------------------------
+
+export function buildDemoRailwayAssessment(): DemoAssessment {
+  const inventory: ResourceInventoryItem[] = [];
+  const findings: Omit<AssessmentFinding, "id">[] = [];
+
+  inventory.push({
+    provider: "railway",
+    type: "railway:project",
+    externalId: "prj-demo-northwind-rw",
+    name: "northwind",
+    metadata: { description: "Northwind production" },
+  });
+
+  const services = [
+    "web",
+    "api",
+    "admin",
+    "worker",
+    "scheduler-cron",
+    "webhooks",
+  ];
+  for (const [i, s] of services.entries()) {
+    inventory.push({
+      provider: "railway",
+      type: "railway:service",
+      externalId: `svc-demo-northwind-rw-${i + 1}`,
+      name: `northwind/${s}`,
+      metadata: { icon: null },
+    });
+  }
+  inventory.push({
+    provider: "railway",
+    type: "railway:plugin",
+    externalId: "plg-demo-northwind-pg",
+    name: "northwind/PostgreSQL",
+    metadata: { pluginType: "postgresql" },
+  });
+  inventory.push({
+    provider: "railway",
+    type: "railway:plugin",
+    externalId: "plg-demo-northwind-redis",
+    name: "northwind/Redis",
+    metadata: { pluginType: "redis" },
+  });
+  for (const env of ["production", "staging"]) {
+    inventory.push({
+      provider: "railway",
+      type: "railway:environment",
+      externalId: `env-demo-northwind-${env}`,
+      name: `northwind/${env}`,
+    });
+  }
+
+  const usage = (
+    id: string,
+    name: string,
+    cents: number,
+    metadata: Record<string, unknown>
+  ) => {
+    inventory.push({
+      provider: "railway",
+      type: "railway:usage",
+      externalId: id,
+      name,
+      monthlyCostCents: cents,
+      metadata,
+    });
+  };
+  usage("usage_demo_rw_seats", "Pro seats ×8", 16000, {
+    kind: "seats",
+    quantity: 8,
+  });
+  usage(
+    "usage_demo_rw_compute",
+    "Service compute (vCPU-hours + GB-hours, 6 always-on services)",
+    52000,
+    { kind: "compute" }
+  );
+  usage("usage_demo_rw_egress", "Egress (~1.5TB @ $0.10/GB)", 15000, {
+    kind: "bandwidth",
+    gbMonth: 1500,
+  });
+  usage(
+    "usage_demo_rw_plugins",
+    "Plugin compute + storage (Postgres, Redis)",
+    15000,
+    { kind: "database" }
+  );
+
+  const total = inventory.reduce((s, i) => s + (i.monthlyCostCents ?? 0), 0);
+
+  findings.push({
+    category: "recommendation",
+    severity: "info",
+    title: "northwind: Railway Postgres plugin",
+    detail:
+      "Railway Postgres migrates via pg_dump/pg_restore to Neon, a VPS Postgres, or any managed provider.",
+    resourceRef: "plg-demo-northwind-pg",
+  });
+  const savings = Math.max(0, total - 2000);
+  findings.push({
+    category: "cost",
+    severity: "high",
+    title: `~$${(total / 100).toFixed(0)}/mo of Railway usage billing`,
+    detail: `Usage-based compute, egress, and per-seat pricing total roughly $${(total / 100).toFixed(2)}/mo, and the bill moves with traffic instead of with plan changes you approve.`,
+    monthlySavingsCents: savings,
+  });
+
+  return {
+    inventory,
+    findings,
+    estimatedMonthlyCostCents: total,
+    estimatedMonthlySavingsCents: savings,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// DigitalOcean: droplets + DOKS + managed databases — ~$1,066/mo
+// ---------------------------------------------------------------------------
+
+export function buildDemoDigitaloceanAssessment(): DemoAssessment {
+  const inventory: ResourceInventoryItem[] = [];
+  const findings: Omit<AssessmentFinding, "id">[] = [];
+
+  const droplet = (
+    n: number,
+    name: string,
+    sizeSlug: string,
+    memoryMb: number,
+    vcpus: number,
+    cents: number
+  ) => {
+    inventory.push({
+      provider: "digitalocean",
+      type: "digitalocean:droplet",
+      externalId: String(400000000 + n),
+      name,
+      region: "nyc3",
+      monthlyCostCents: cents,
+      metadata: {
+        sizeSlug,
+        image: "docker-20-04",
+        vcpus,
+        memoryMb,
+        diskGb: 160,
+        status: "active",
+      },
+    });
+  };
+  droplet(1, "northwind-web-1", "gd-2vcpu-8gb", 8192, 2, 7200);
+  droplet(2, "northwind-web-2", "gd-2vcpu-8gb", 8192, 2, 7200);
+  droplet(3, "northwind-web-3", "gd-2vcpu-8gb", 8192, 2, 7200);
+  droplet(4, "northwind-worker-1", "gd-2vcpu-8gb", 8192, 2, 7200);
+  droplet(5, "doks-node-pool-1", "s-4vcpu-8gb", 8192, 4, 4800);
+  droplet(6, "doks-node-pool-2", "s-4vcpu-8gb", 8192, 4, 4800);
+  droplet(7, "doks-node-pool-3", "s-4vcpu-8gb", 8192, 4, 4800);
+
+  inventory.push({
+    provider: "digitalocean",
+    type: "digitalocean:database",
+    externalId: "db-demo-northwind-pg",
+    name: "northwind-pg",
+    region: "nyc3",
+    monthlyCostCents: 24000,
+    metadata: {
+      engine: "pg",
+      version: "16",
+      size: "gd-2vcpu-8gb",
+      numNodes: 3,
+      status: "online",
+    },
+  });
+  inventory.push({
+    provider: "digitalocean",
+    type: "digitalocean:database",
+    externalId: "db-demo-northwind-redis",
+    name: "northwind-redis",
+    region: "nyc3",
+    monthlyCostCents: 18000,
+    metadata: {
+      engine: "redis",
+      version: "7",
+      size: "gd-1vcpu-4gb",
+      numNodes: 2,
+      status: "online",
+    },
+  });
+  inventory.push({
+    provider: "digitalocean",
+    type: "digitalocean:kubernetes",
+    externalId: "k8s-demo-northwind",
+    name: "northwind-doks",
+    region: "nyc3",
+    metadata: { version: "1.31", nodePoolCount: 1, status: "running" },
+  });
+  for (const s of ["northwind-uploads", "northwind-assets"]) {
+    inventory.push({
+      provider: "digitalocean",
+      type: "digitalocean:space",
+      externalId: s,
+      name: s,
+      region: "nyc3",
+      monthlyCostCents: 500,
+      metadata: {},
+    });
+  }
+  inventory.push({
+    provider: "digitalocean",
+    type: "digitalocean:usage",
+    externalId: "usage_demo_do_extras",
+    name: "Load balancers, backups, snapshots, bandwidth overage",
+    monthlyCostCents: 20400,
+    metadata: { kind: "bandwidth", gbMonth: 2200 },
+  });
+
+  const total = inventory.reduce((s, i) => s + (i.monthlyCostCents ?? 0), 0);
+
+  findings.push({
+    category: "recommendation",
+    severity: "info",
+    title: "northwind-pg: DO Managed Postgres",
+    detail:
+      "DigitalOcean managed Postgres migrates via pg_dump/pg_restore. A 3-node HA cluster at $240/mo compares against Neon with built-in replication.",
+    resourceRef: "db-demo-northwind-pg",
+  });
+  findings.push({
+    category: "risk",
+    severity: "medium",
+    title: "northwind-doks: DOKS Kubernetes cluster",
+    detail:
+      "Kubernetes adds an operations tax most teams this size do not need. The workloads on it are containers that run anywhere.",
+    resourceRef: "k8s-demo-northwind",
+  });
+  const savings = Math.max(0, total - 2000);
+  findings.push({
+    category: "cost",
+    severity: "high",
+    title: `~$${(total / 100).toFixed(0)}/mo on DigitalOcean`,
+    detail: `Seven droplets, two managed database clusters, DOKS, and extras total roughly $${(total / 100).toFixed(2)}/mo.`,
+    monthlySavingsCents: savings,
+  });
+
+  return {
+    inventory,
+    findings,
+    estimatedMonthlyCostCents: total,
+    estimatedMonthlySavingsCents: savings,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Firebase: per-operation billing at scale — ~$2,570/mo
+// The connector prices nothing (billing needs the Cloud Billing API), so the
+// whole bill arrives as firebase:usage items.
+// ---------------------------------------------------------------------------
+
+export function buildDemoFirebaseAssessment(): DemoAssessment {
+  const inventory: ResourceInventoryItem[] = [];
+  const findings: Omit<AssessmentFinding, "id">[] = [];
+
+  inventory.push({
+    provider: "firebase",
+    type: "firebase:project",
+    externalId: "northwind-prod",
+    name: "northwind-prod",
+  });
+  for (const s of ["northwind-app", "northwind-marketing", "northwind-docs"]) {
+    inventory.push({
+      provider: "firebase",
+      type: "firebase:hosting_site",
+      externalId: `projects/northwind-prod/sites/${s}`,
+      name: s,
+      metadata: { defaultUrl: `https://${s}.web.app`, type: "DEFAULT_SITE" },
+    });
+  }
+  const fns: { name: string; trigger: string }[] = [
+    { name: "api", trigger: "https" },
+    { name: "webhooks", trigger: "https" },
+    { name: "auth-hooks", trigger: "https" },
+    { name: "image-resize", trigger: "google.storage.object.finalize" },
+    { name: "search-index", trigger: "google.firestore.document.write" },
+    { name: "notifications", trigger: "google.firestore.document.create" },
+    { name: "daily-rollup", trigger: "google.pubsub.topic.publish" },
+    { name: "hourly-sync", trigger: "google.pubsub.topic.publish" },
+    { name: "billing-check", trigger: "google.pubsub.topic.publish" },
+    { name: "cleanup", trigger: "google.pubsub.topic.publish" },
+    { name: "export-reports", trigger: "https" },
+    { name: "stripe-events", trigger: "https" },
+  ];
+  for (const f of fns) {
+    inventory.push({
+      provider: "firebase",
+      type: "firebase:function",
+      externalId: `projects/northwind-prod/locations/us-central1/functions/${f.name}`,
+      name: f.name,
+      region: "us-central1",
+      metadata: { runtime: "nodejs22", trigger: f.trigger, state: "ACTIVE" },
+    });
+  }
+  inventory.push({
+    provider: "firebase",
+    type: "firebase:firestore_database",
+    externalId: "projects/northwind-prod/databases/(default)",
+    name: "(default)",
+    metadata: { locationId: "nam5", firestoreType: "FIRESTORE_NATIVE" },
+  });
+
+  const usage = (
+    id: string,
+    name: string,
+    cents: number,
+    metadata: Record<string, unknown>
+  ) => {
+    inventory.push({
+      provider: "firebase",
+      type: "firebase:usage",
+      externalId: id,
+      name,
+      monthlyCostCents: cents,
+      metadata,
+    });
+  };
+  usage(
+    "usage_demo_fb_firestore",
+    "Firestore reads/writes/deletes (~1.4B reads/mo)",
+    90000,
+    { kind: "operations" }
+  );
+  usage("usage_demo_fb_egress", "Network egress (~6TB/mo)", 70000, {
+    kind: "bandwidth",
+    gbMonth: 6000,
+  });
+  usage(
+    "usage_demo_fb_functions",
+    "Cloud Functions invocations + GB-seconds (~120M/mo)",
+    40000,
+    { kind: "invocations", millions: 120 }
+  );
+  usage("usage_demo_fb_hosting", "Hosting bandwidth beyond free tier", 30000, {
+    kind: "bandwidth",
+    gbMonth: 1500,
+  });
+  usage("usage_demo_fb_auth", "Firebase Auth MAU beyond free tier", 27000, {
+    kind: "seats",
+  });
+
+  const total = inventory.reduce((s, i) => s + (i.monthlyCostCents ?? 0), 0);
+
+  findings.push({
+    category: "risk",
+    severity: "medium",
+    title: "Firestore data model is the migration's critical path",
+    detail:
+      "Firestore's document model and per-operation billing shape the whole app. Migration means a relational redesign (usually Postgres) and a data backfill; infralift scopes this phase explicitly before quoting.",
+  });
+  const savings = Math.max(0, total - 20000);
+  findings.push({
+    category: "cost",
+    severity: "high",
+    title: `~$${(total / 100).toFixed(0)}/mo of per-operation Firebase billing`,
+    detail: `Reads, writes, egress, invocations, and MAU pricing total roughly $${(total / 100).toFixed(2)}/mo, and every one of those meters scales with growth. This is the bill that produced the famous $70k-in-a-day stories.`,
+    monthlySavingsCents: savings,
+  });
+
+  return {
+    inventory,
+    findings,
+    estimatedMonthlyCostCents: total,
+    estimatedMonthlySavingsCents: savings,
+  };
+}

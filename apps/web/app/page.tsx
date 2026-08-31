@@ -342,6 +342,15 @@ export default function Home() {
               the risk of getting it wrong. A fixed fee starting at $3,000 is
               cheaper than DIY before you count the monthly savings.
             </p>
+            <p className="text-muted text-sm mt-6">
+              Itemized cost breakdowns:{" "}
+              <a href="/leaving/vercel">leaving Vercel</a> &middot;{" "}
+              <a href="/leaving/heroku">Heroku</a> &middot;{" "}
+              <a href="/leaving/render">Render</a> &middot;{" "}
+              <a href="/leaving/railway">Railway</a> &middot;{" "}
+              <a href="/leaving/digitalocean">DigitalOcean</a> &middot;{" "}
+              <a href="/leaving/firebase">Firebase</a>
+            </p>
           </div>
         </section>
 
