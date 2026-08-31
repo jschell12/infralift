@@ -232,10 +232,11 @@ export default function Home() {
             infrastructure you own for a fixed fee.
           </p>
           <div className="flex gap-3 justify-center">
-            <a
-              className={`${BTN} bg-accent text-bg`}
-              href={LEAD_FORM_ENABLED ? "#assessment" : DASHBOARD_URL}
-            >
+            {/* Scrolls rather than linking straight to the sign-in. The click
+                target below is an OAuth redirect off this domain, which is a
+                surprising thing for a hero button to do before the page has
+                said what signing in gets you. */}
+            <a className={`${BTN} bg-accent text-bg`} href="#assessment">
               Get your free assessment
             </a>
             <a
@@ -445,23 +446,37 @@ export default function Home() {
               The assessment is free. The report is yours to keep.
             </h2>
             <p className="text-muted mb-7 text-center">
-              Tell us where you run today. We reply with what your stack costs,
-              where it could run instead, and a fixed fee to move it. No
-              obligation, and no account to create first.
+              Sign in, connect a read-only token, and the report comes back with
+              what your stack costs today, where it could run instead, and a
+              fixed fee to move it. No card, no sales call.
             </p>
-            {LEAD_FORM_ENABLED ? (
-              <AssessmentForm />
-            ) : (
-              <div className="text-center">
-                <a className={`${BTN} bg-accent text-bg`} href={DASHBOARD_URL}>
-                  Start your free assessment
-                </a>
+            <div className="text-center">
+              <a className={`${BTN} bg-accent text-bg`} href={DASHBOARD_URL}>
+                Start your free assessment
+              </a>
+              <p className="mt-3.5 text-[13px] text-faint">
+                Sign in with Google or GitHub. Same button whether you are new
+                or coming back.
+              </p>
+            </div>
+
+            {/* Secondary path. Signing in means handing over a provider token,
+                which is a bigger ask than most people will make on a first
+                visit, so the form stays for anyone who would rather describe
+                their stack and get a reply by email. */}
+            {LEAD_FORM_ENABLED && (
+              <div className="mt-11 border-t border-border pt-9">
+                <h3 className="mb-1.5 text-lg font-semibold">
+                  Not ready to connect an account?
+                </h3>
+                <p className="mb-6 text-[15px] text-muted">
+                  Tell us where you run today and roughly what it costs. We will
+                  come back by email with whether an assessment is worth your
+                  time.
+                </p>
+                <AssessmentForm />
               </div>
             )}
-            <p className="mt-6 text-center text-[13px] text-faint">
-              Already a customer?{" "}
-              <a href={DASHBOARD_URL}>Sign in to the dashboard</a>.
-            </p>
           </div>
         </div>
       </main>

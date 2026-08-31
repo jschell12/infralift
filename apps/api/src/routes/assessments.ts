@@ -176,6 +176,18 @@ assessmentsRouter.get("/:id/options", async (req, res) => {
 
 // Full report: summary + inventory + findings.
 assessmentsRouter.get("/:id", async (req, res) => {
+  // Ownership first. summarize() looks the assessment up by id alone, which
+  // was safe while Cloudflare Access admitted exactly one email address and
+  // stopped being safe the moment signup opened to any Google or GitHub
+  // account: an id out of a shared dashboard URL would otherwise hand a
+  // stranger another org's inventory, findings and costs. 404 rather than 403,
+  // matching /:id/options, so the response does not confirm the id exists.
+  const owned = await prisma.assessment.findFirst({
+    where: { id: req.params.id, orgId: req.user!.orgId },
+    select: { id: true },
+  });
+  if (!owned) return res.status(404).json({ error: "Not found" });
+
   const summary = await summarize(req.params.id);
   if (!summary) return res.status(404).json({ error: "Not found" });
 

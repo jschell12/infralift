@@ -142,17 +142,28 @@ export default async function LeavingPage({
               </a>
               .
             </p>
-            {LEAD_FORM_ENABLED ? (
+            <a href={DASHBOARD_URL} className={BTN}>
+              Run the free assessment
+            </a>
+            <p className="mt-3.5 text-[13px] text-faint">
+              Sign in with Google or GitHub, then connect a read-only{" "}
+              {page.provider} token.
+            </p>
+
+            {LEAD_FORM_ENABLED && (
               // The provider is already known on these pages, so prefill it
               // rather than making a visitor who just read about their own
               // bill tell us which one it was.
-              <div className="mt-6 max-w-[620px]">
+              <div className="mt-9 max-w-[620px] border-t border-border pt-8">
+                <h3 className="mb-1.5 text-lg font-semibold">
+                  Not ready to connect an account?
+                </h3>
+                <p className="mb-6 text-[15px] text-muted">
+                  Tell us roughly what you are running and we will reply by
+                  email.
+                </p>
                 <AssessmentForm provider={page.provider} />
               </div>
-            ) : (
-              <a href={DASHBOARD_URL} className={BTN}>
-                Run the free assessment
-              </a>
             )}
           </div>
         </section>
