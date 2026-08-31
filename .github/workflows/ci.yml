@@ -43,6 +43,60 @@ jobs:
       - name: Build apps
         run: pnpm --filter './apps/*' build
 
+  deploy-web:
+    name: Deploy marketing site
+    needs: check
+    # Gated on its own variable so the job stays dormant until
+    # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are set. Without the
+    # gate a missing secret turns main red on every merge.
+    if: github.ref == 'refs/heads/main' && vars.WEB_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-web
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # apps/web imports nothing from packages/shared and needs no Prisma
+      # client, so it builds on its own. The docs pages are SSG from the
+      # repo-root markdown, which is why this runs from a full checkout.
+      - name: Build static export
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_DASHBOARD_URL: https://dashboard.infralift.dev
+        run: pnpm build
+
+      # Guard against the class of bug this job was added to stop shipping:
+      # a localhost dashboard URL baked into the export.
+      - name: Check the export for localhost links
+        working-directory: apps/web
+        run: |
+          if grep -rl "localhost:" out/ >/dev/null 2>&1; then
+            echo "::error::static export contains localhost links:"
+            grep -rl "localhost:" out/ | head -20
+            exit 1
+          fi
+          echo "no localhost links in export"
+
+      # `pnpm deploy` is a pnpm builtin (deploy a workspace package to a
+      # directory), so calling the package script by that name would silently
+      # run the wrong thing. Invoke the pinned wrangler directly.
+      - name: Deploy to Cloudflare
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy
+
   deploy:
     name: Deploy to Framework
     needs: check
