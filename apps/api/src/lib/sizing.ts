@@ -50,6 +50,18 @@ const HEROKU_DYNO_RAM_MB: Record<string, number> = {
   "performance-l": 14336,
 };
 
+// RAM per Render instance plan (published specs).
+const RENDER_PLAN_RAM_MB: Record<string, number> = {
+  free: 512,
+  starter: 512,
+  "starter plus": 1024,
+  standard: 2048,
+  pro: 4096,
+  "pro plus": 8192,
+  "pro max": 16384,
+  "pro ultra": 32768,
+};
+
 export function computeFootprint(
   inventory: ResourceInventoryItem[]
 ): WorkloadFootprint {
@@ -65,6 +77,21 @@ export function computeFootprint(
 
   for (const item of inventory) {
     const meta = (item.metadata ?? {}) as Record<string, unknown>;
+
+    // Usage items (any provider): observed billing volumes, not resources.
+    if (item.type.endsWith(":usage")) {
+      const kind = String(meta.kind ?? "");
+      if (kind === "bandwidth") {
+        bandwidthGbMonth += Number(meta.gbMonth ?? 0);
+      }
+      if (kind === "invocations") {
+        requestsMillionsMonth += Number(meta.millions ?? 0);
+      }
+      if (kind === "storage") {
+        objectStorageGb += Number(meta.storedGb ?? 0);
+      }
+      continue;
+    }
 
     switch (item.type) {
       case "heroku:dyno": {
@@ -99,25 +126,71 @@ export function computeFootprint(
         }
         break;
       }
-      case "vercel:project": {
+      case "vercel:project":
+      case "firebase:hosting_site": {
         frontendProjects += 1;
         break;
       }
-      case "vercel:usage": {
-        const kind = String(meta.kind ?? "");
-        if (kind === "bandwidth") {
-          bandwidthGbMonth += Number(meta.gbMonth ?? 0);
+      case "render:postgres": {
+        const plan = String(meta.plan ?? "").toLowerCase();
+        postgresTier =
+          plan.includes("pro") || plan.includes("standard")
+            ? "large"
+            : (postgresTier ?? "small");
+        break;
+      }
+      case "render:redis": {
+        const plan = String(meta.plan ?? "").toLowerCase();
+        redisTier = plan.includes("pro") ? "large" : (redisTier ?? "small");
+        break;
+      }
+      case "railway:service": {
+        // Railway's API exposes no instance sizes; a service is a container,
+        // assume a modest node process.
+        totalRamMb += 1024;
+        webInstances += 1;
+        break;
+      }
+      case "railway:plugin": {
+        const kind =
+          `${meta.pluginType ?? ""} ${item.name}`.toLowerCase();
+        if (kind.includes("postgres")) postgresTier = postgresTier ?? "small";
+        if (kind.includes("redis")) redisTier = redisTier ?? "small";
+        break;
+      }
+      case "digitalocean:app": {
+        totalRamMb += 1024;
+        webInstances += 1;
+        break;
+      }
+      case "digitalocean:database": {
+        const engine = String(meta.engine ?? "").toLowerCase();
+        const size = String(meta.size ?? "").toLowerCase();
+        const nodes = Number(meta.numNodes ?? 1);
+        const large = nodes > 1 || !size.includes("db-s");
+        if (engine === "pg" || engine.includes("postgres")) {
+          postgresTier = large ? "large" : (postgresTier ?? "small");
         }
-        if (kind === "invocations") {
-          requestsMillionsMonth += Number(meta.millions ?? 0);
-        }
-        if (kind === "storage") {
-          objectStorageGb += Number(meta.storedGb ?? 0);
+        if (engine.includes("redis") || engine.includes("valkey")) {
+          redisTier = large ? "large" : (redisTier ?? "small");
         }
         break;
       }
-      default:
+      default: {
+        // Render services arrive as render:<type> with type in metadata.
+        if (item.type.startsWith("render:") && meta.plan !== undefined) {
+          const plan = String(meta.plan ?? "").toLowerCase();
+          const ram = RENDER_PLAN_RAM_MB[plan] ?? 512;
+          totalRamMb += ram;
+          const svcType = String(meta.type ?? item.type.slice(7));
+          if (svcType.includes("worker") || svcType.includes("cron")) {
+            workerInstances += 1;
+          } else {
+            webInstances += 1;
+          }
+        }
         break;
+      }
     }
   }
 

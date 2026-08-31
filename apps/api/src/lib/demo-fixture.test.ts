@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildDemoDigitaloceanAssessment,
+  buildDemoFirebaseAssessment,
   buildDemoHerokuAssessment,
+  buildDemoRailwayAssessment,
+  buildDemoRenderAssessment,
   buildDemoVercelAssessment,
 } from "./demo-fixture.js";
 import { inferProfile } from "./options.js";
+import { computeFootprint, sizeTarget } from "./sizing.js";
 import { generateHcl } from "./tf/codegen.js";
 
 describe("demo heroku fixture", () => {
@@ -120,4 +125,82 @@ describe("demo vercel fixture", () => {
     expect(runtime).toBe("ssr");
     expect(needs.map((n) => n.key)).toContain("cron");
   });
+});
+
+describe("provider demo fixtures (render, railway, digitalocean, firebase)", () => {
+  const cases = [
+    {
+      name: "render",
+      build: buildDemoRenderAssessment,
+      totalCents: 118900,
+      runtime: "node_server",
+      needs: ["full_node_runtime", "background_workers", "managed_postgres", "managed_redis"],
+      sizedTarget: "hetzner",
+      sizedBand: [30000, 45000],
+    },
+    {
+      name: "railway",
+      build: buildDemoRailwayAssessment,
+      totalCents: 98000,
+      runtime: "node_server",
+      needs: ["full_node_runtime", "managed_postgres", "managed_redis"],
+      sizedTarget: "hetzner",
+      sizedBand: [8000, 16000],
+    },
+    {
+      name: "digitalocean",
+      build: buildDemoDigitaloceanAssessment,
+      totalCents: 106600,
+      runtime: "node_server",
+      needs: ["full_node_runtime", "managed_postgres", "managed_redis"],
+      sizedTarget: "hetzner",
+      sizedBand: [35000, 50000],
+    },
+    {
+      name: "firebase",
+      build: buildDemoFirebaseAssessment,
+      totalCents: 257000,
+      runtime: "serverless_fn",
+      needs: ["cron"],
+      sizedTarget: "cloudflare",
+      sizedBand: [4000, 9000],
+    },
+  ] as const;
+
+  for (const c of cases) {
+    it(`${c.name}: items sum to the bill and the sized exit is credible`, () => {
+      const fixture = c.build();
+      const itemSum = fixture.inventory.reduce(
+        (s, i) => s + (i.monthlyCostCents ?? 0),
+        0
+      );
+      expect(itemSum).toBe(c.totalCents);
+      expect(fixture.estimatedMonthlyCostCents).toBe(c.totalCents);
+
+      const { runtime, needs } = inferProfile(fixture.inventory);
+      expect(runtime).toBe(c.runtime);
+      expect(needs.map((n) => n.key)).toEqual(expect.arrayContaining([...c.needs]));
+
+      const sized = sizeTarget(
+        c.sizedTarget,
+        computeFootprint(fixture.inventory)
+      );
+      expect(sized).not.toBeNull();
+      expect(sized!.monthlyCents).toBeGreaterThanOrEqual(c.sizedBand[0]);
+      expect(sized!.monthlyCents).toBeLessThanOrEqual(c.sizedBand[1]);
+    });
+
+    it(`${c.name}: usage items stay out of generated HCL`, () => {
+      const fixture = c.build();
+      const files = generateHcl({
+        provider: c.name,
+        inventory: fixture.inventory,
+        backend: "local",
+        migrationTarget: null,
+      });
+      const body =
+        files.find((f) => f.fileName === `${c.name}.tf`)?.content ?? "";
+      expect(body).not.toContain(":usage");
+    });
+  }
 });

@@ -11,7 +11,11 @@
 import { prisma } from "../lib/db.js";
 import { encryptToken } from "../lib/crypto.js";
 import {
+  buildDemoDigitaloceanAssessment,
+  buildDemoFirebaseAssessment,
   buildDemoHerokuAssessment,
+  buildDemoRailwayAssessment,
+  buildDemoRenderAssessment,
   buildDemoVercelAssessment,
   type DemoAssessment,
 } from "../lib/demo-fixture.js";
@@ -21,6 +25,10 @@ export const DEMO_LABEL = "demo large-tier";
 const BUILDERS: Record<string, () => DemoAssessment> = {
   heroku: buildDemoHerokuAssessment,
   vercel: buildDemoVercelAssessment,
+  render: buildDemoRenderAssessment,
+  railway: buildDemoRailwayAssessment,
+  digitalocean: buildDemoDigitaloceanAssessment,
+  firebase: buildDemoFirebaseAssessment,
 };
 
 function parseArgs(argv: string[]) {
@@ -146,7 +154,7 @@ async function main() {
   }
 
   const which =
-    typeof args.provider === "string" ? [args.provider] : ["heroku", "vercel"];
+    typeof args.provider === "string" ? [args.provider] : Object.keys(BUILDERS);
   for (const provider of which) {
     if (!BUILDERS[provider]) {
       throw new Error(

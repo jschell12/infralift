@@ -49,6 +49,7 @@ export function inferProfile(
 
   let hasWebDyno = false;
   let hasFrontendProject = false;
+  let hasServerlessFns = false;
 
   for (const item of inventory) {
     const meta = (item.metadata ?? {}) as Record<string, unknown>;
@@ -95,16 +96,78 @@ export function inferProfile(
         add("managed_postgres", item.name);
         break;
       }
-      default:
+      case "render:redis": {
+        add("managed_redis", item.name);
         break;
+      }
+      case "railway:service": {
+        hasWebDyno = true;
+        add("full_node_runtime", item.name);
+        if (name.includes("cron") || name.includes("worker")) {
+          add("background_workers", item.name);
+        }
+        break;
+      }
+      case "railway:plugin": {
+        const kind = `${meta.pluginType ?? ""} ${name}`.toLowerCase();
+        if (kind.includes("postgres")) add("managed_postgres", item.name);
+        if (kind.includes("redis")) add("managed_redis", item.name);
+        break;
+      }
+      case "digitalocean:droplet":
+      case "digitalocean:app": {
+        hasWebDyno = true;
+        add("full_node_runtime", item.name);
+        break;
+      }
+      case "digitalocean:database": {
+        const engine = String(meta.engine ?? "").toLowerCase();
+        if (engine === "pg" || engine.includes("postgres")) {
+          add("managed_postgres", item.name);
+        }
+        if (engine.includes("redis") || engine.includes("valkey")) {
+          add("managed_redis", item.name);
+        }
+        break;
+      }
+      case "firebase:hosting_site": {
+        hasFrontendProject = true;
+        break;
+      }
+      case "firebase:function": {
+        hasServerlessFns = true;
+        const trigger = String(meta.trigger ?? "").toLowerCase();
+        if (trigger.includes("schedule") || trigger.includes("pubsub")) {
+          add("cron", item.name);
+        }
+        break;
+      }
+      default: {
+        // Render services arrive as render:<type>; anything with a plan and
+        // a service-ish type is compute.
+        if (item.type.startsWith("render:") && meta.plan !== undefined) {
+          const svcType = String(meta.type ?? item.type.slice(7));
+          if (svcType.includes("worker")) {
+            add("background_workers", item.name);
+          } else if (svcType.includes("cron")) {
+            add("cron", item.name);
+          } else {
+            hasWebDyno = true;
+            add("full_node_runtime", item.name);
+          }
+        }
+        break;
+      }
     }
   }
 
   const runtime: RecommendInput["runtime"] = hasWebDyno
     ? "node_server"
-    : hasFrontendProject
-      ? "ssr"
-      : "static";
+    : hasServerlessFns
+      ? "serverless_fn"
+      : hasFrontendProject
+        ? "ssr"
+        : "static";
 
   return { runtime, needs: Array.from(needs.values()) };
 }
