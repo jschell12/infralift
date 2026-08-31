@@ -218,35 +218,122 @@ export function computeFootprint(
 }
 
 // ---------------------------------------------------------------------------
-// Companion sizing shared by both targets
+// Target plan: the architecture decision, shared by pricing and codegen
 // ---------------------------------------------------------------------------
+//
+// Pricing and code generation used to decide the target shape independently.
+// This module fitted CCX instances to the measured RAM; codegen emitted a
+// comment recommending a CPX31 and no servers at all. A customer could read
+// "$422/mo across a CCX43 and two CCX13s" on the options page and then
+// generate Terraform that stood up none of it. Both now read the same plan, so
+// the estimate and the HCL describe the same infrastructure by construction.
 
-function dataLineItems(footprint: WorkloadFootprint): SizingLineItem[] {
-  const items: SizingLineItem[] = [];
+export interface HetznerInstanceGroup {
+  /** hcloud `server_type` argument, e.g. "ccx43" */
+  serverType: string;
+  /** name as it appears in pricing labels, e.g. "CCX43" */
+  displayName: string;
+  vcpu: number;
+  ramGb: number;
+  count: number;
+  monthlyCentsEach: number;
+}
+
+export interface PostgresPlan {
+  tier: "small" | "large";
+  /** Neon autoscaling bounds, in compute units */
+  minComputeUnits: number;
+  maxComputeUnits: number;
+  monthlyCents: number;
+  label: string;
+  note: string;
+}
+
+export interface RedisPlan {
+  tier: "small" | "large";
+  /** headline size the price is quoted against */
+  sizeLabel: string;
+  /** Upstash spend cap, whole dollars */
+  budgetUsd: number;
+  monthlyCents: number;
+  label: string;
+  note: string;
+}
+
+export interface TargetPlan {
+  target: string;
+  hetzner: { instances: HetznerInstanceGroup[]; loadBalancer: boolean } | null;
+  cloudflare: { r2Gb: number; requestsMillionsMonth: number } | null;
+  postgres: PostgresPlan | null;
+  redis: RedisPlan | null;
+  webInstances: number;
+  workerInstances: number;
+  bandwidthGbMonth: number;
+}
+
+function planData(footprint: WorkloadFootprint): {
+  postgres: PostgresPlan | null;
+  redis: RedisPlan | null;
+} {
+  let postgres: PostgresPlan | null = null;
   if (footprint.postgresTier === "large") {
-    items.push({
-      label: "Neon Postgres (2 CU always-on + storage)",
+    postgres = {
+      tier: "large",
+      minComputeUnits: 0.5,
+      maxComputeUnits: 2,
       monthlyCents: 18000,
+      label: "Neon Postgres (2 CU always-on + storage)",
       note: "Replaces a premium/standard Heroku Postgres; usage-based, scales to zero off-peak.",
-    });
+    };
   } else if (footprint.postgresTier === "small") {
-    items.push({
-      label: "Neon Postgres (1 CU + storage)",
+    postgres = {
+      tier: "small",
+      minComputeUnits: 0.25,
+      maxComputeUnits: 1,
       monthlyCents: 8000,
+      label: "Neon Postgres (1 CU + storage)",
       note: "Usage-based; scales to zero when idle.",
+    };
+  }
+
+  let redis: RedisPlan | null = null;
+  if (footprint.redisTier === "large") {
+    redis = {
+      tier: "large",
+      sizeLabel: "5GB",
+      budgetUsd: 100,
+      monthlyCents: 10000,
+      label: "Upstash Redis (5GB fixed)",
+      note: "Flat-rate serverless Redis.",
+    };
+  } else if (footprint.redisTier === "small") {
+    redis = {
+      tier: "small",
+      sizeLabel: "250MB",
+      budgetUsd: 10,
+      monthlyCents: 1000,
+      label: "Upstash Redis (250MB fixed)",
+      note: "Flat-rate serverless Redis.",
+    };
+  }
+
+  return { postgres, redis };
+}
+
+function dataLineItems(plan: TargetPlan): SizingLineItem[] {
+  const items: SizingLineItem[] = [];
+  if (plan.postgres) {
+    items.push({
+      label: plan.postgres.label,
+      monthlyCents: plan.postgres.monthlyCents,
+      note: plan.postgres.note,
     });
   }
-  if (footprint.redisTier === "large") {
+  if (plan.redis) {
     items.push({
-      label: "Upstash Redis (5GB fixed)",
-      monthlyCents: 10000,
-      note: "Flat-rate serverless Redis.",
-    });
-  } else if (footprint.redisTier === "small") {
-    items.push({
-      label: "Upstash Redis (250MB fixed)",
-      monthlyCents: 1000,
-      note: "Flat-rate serverless Redis.",
+      label: plan.redis.label,
+      monthlyCents: plan.redis.monthlyCents,
+      note: plan.redis.note,
     });
   }
   return items;
@@ -264,9 +351,10 @@ const HETZNER_CCX: { name: string; ramGb: number; vcpu: number; cents: number }[
   { name: "CCX13", ramGb: 8, vcpu: 2, cents: 1400 },
 ];
 
-function sizeHetzner(footprint: WorkloadFootprint): OptionSizing {
-  const items: SizingLineItem[] = [];
-
+function planHetzner(footprint: WorkloadFootprint): {
+  instances: HetznerInstanceGroup[];
+  loadBalancer: boolean;
+} {
   // Cover total RAM with ~30% headroom using the largest instances first.
   let neededGb = Math.ceil((footprint.totalRamMb / 1024) * 1.3);
   if (neededGb < 4) neededGb = 4;
@@ -293,16 +381,68 @@ function sizeHetzner(footprint: WorkloadFootprint): OptionSizing {
     );
     instanceCount = minForBandwidth;
   }
+
+  const instances: HetznerInstanceGroup[] = [];
   for (const [name, count] of picks) {
     const spec = HETZNER_CCX.find((i) => i.name === name)!;
+    instances.push({
+      serverType: name.toLowerCase(),
+      displayName: name,
+      vcpu: spec.vcpu,
+      ramGb: spec.ramGb,
+      count,
+      monthlyCentsEach: spec.cents,
+    });
+  }
+
+  return { instances, loadBalancer: footprint.webInstances > 1 };
+}
+
+/** The target architecture inferred from the workload, or null when no model
+ * exists for the slug. Both the priced estimate and the generated HCL are
+ * derived from this. */
+export function planTarget(
+  slug: string,
+  footprint: WorkloadFootprint
+): TargetPlan | null {
+  if (slug !== "hetzner" && slug !== "cloudflare") return null;
+
+  const { postgres, redis } = planData(footprint);
+  const base = {
+    target: slug,
+    postgres,
+    redis,
+    webInstances: footprint.webInstances,
+    workerInstances: footprint.workerInstances,
+    bandwidthGbMonth: footprint.bandwidthGbMonth,
+  };
+
+  if (slug === "hetzner") {
+    return { ...base, hetzner: planHetzner(footprint), cloudflare: null };
+  }
+  return {
+    ...base,
+    hetzner: null,
+    cloudflare: {
+      r2Gb: footprint.objectStorageGb,
+      requestsMillionsMonth: footprint.requestsMillionsMonth,
+    },
+  };
+}
+
+function sizeHetzner(plan: TargetPlan): OptionSizing {
+  const items: SizingLineItem[] = [];
+  const hetzner = plan.hetzner!;
+
+  for (const group of hetzner.instances) {
     items.push({
-      label: `${count}× ${name} (${spec.vcpu} vCPU / ${spec.ramGb}GB, dedicated)`,
-      monthlyCents: spec.cents * count,
+      label: `${group.count}× ${group.displayName} (${group.vcpu} vCPU / ${group.ramGb}GB, dedicated)`,
+      monthlyCents: group.monthlyCentsEach * group.count,
       note: "Sized to cover measured RAM with 30% headroom. 20TB+ egress included per instance.",
     });
   }
 
-  if (footprint.webInstances > 1) {
+  if (hetzner.loadBalancer) {
     items.push({
       label: "Load balancer (LB11)",
       monthlyCents: 700,
@@ -311,12 +451,12 @@ function sizeHetzner(footprint: WorkloadFootprint): OptionSizing {
   }
 
   items.push({
-    label: `Egress (~${Math.round(footprint.bandwidthGbMonth)}GB/mo)`,
+    label: `Egress (~${Math.round(plan.bandwidthGbMonth)}GB/mo)`,
     monthlyCents: 0,
     note: "Included — every instance ships with 20TB+ of free egress.",
   });
 
-  items.push(...dataLineItems(footprint));
+  items.push(...dataLineItems(plan));
 
   return {
     lineItems: items,
@@ -325,8 +465,9 @@ function sizeHetzner(footprint: WorkloadFootprint): OptionSizing {
   };
 }
 
-function sizeCloudflare(footprint: WorkloadFootprint): OptionSizing {
+function sizeCloudflare(plan: TargetPlan): OptionSizing {
   const items: SizingLineItem[] = [];
+  const { r2Gb, requestsMillionsMonth } = plan.cloudflare!;
 
   items.push({
     label: "Workers Paid plan",
@@ -334,7 +475,7 @@ function sizeCloudflare(footprint: WorkloadFootprint): OptionSizing {
     note: "Includes 10M requests and 30M CPU-ms per month. No per-seat pricing.",
   });
 
-  const overageM = Math.max(0, footprint.requestsMillionsMonth - 10);
+  const overageM = Math.max(0, requestsMillionsMonth - 10);
   if (overageM > 0) {
     items.push({
       label: `Requests beyond included (~${Math.round(overageM)}M/mo)`,
@@ -343,10 +484,7 @@ function sizeCloudflare(footprint: WorkloadFootprint): OptionSizing {
     });
     // ~10ms CPU per request is a generous SSR estimate; billed on active
     // CPU only, not wall-clock waiting on fetches or the database.
-    const cpuOverageM = Math.max(
-      0,
-      footprint.requestsMillionsMonth * 10 - 30
-    );
+    const cpuOverageM = Math.max(0, requestsMillionsMonth * 10 - 30);
     if (cpuOverageM > 0) {
       items.push({
         label: "CPU time beyond included",
@@ -356,16 +494,16 @@ function sizeCloudflare(footprint: WorkloadFootprint): OptionSizing {
     }
   }
 
-  if (footprint.objectStorageGb > 0) {
+  if (r2Gb > 0) {
     items.push({
-      label: `R2 storage (~${Math.round(footprint.objectStorageGb)}GB)`,
-      monthlyCents: Math.round(footprint.objectStorageGb * 1.5),
+      label: `R2 storage (~${Math.round(r2Gb)}GB)`,
+      monthlyCents: Math.round(r2Gb * 1.5),
       note: "$0.015/GB-month, and reads leave the building free.",
     });
   }
 
   items.push({
-    label: `Egress (~${Math.round(footprint.bandwidthGbMonth)}GB/mo)`,
+    label: `Egress (~${Math.round(plan.bandwidthGbMonth)}GB/mo)`,
     monthlyCents: 0,
     note: "Cloudflare does not bill bandwidth. This line is usually why people leave Vercel.",
   });
@@ -376,7 +514,7 @@ function sizeCloudflare(footprint: WorkloadFootprint): OptionSizing {
     note: "No per-seat pricing on Workers. Everyone deploys.",
   });
 
-  items.push(...dataLineItems(footprint));
+  items.push(...dataLineItems(plan));
 
   return {
     lineItems: items,
@@ -385,7 +523,7 @@ function sizeCloudflare(footprint: WorkloadFootprint): OptionSizing {
   };
 }
 
-const MODELS: Record<string, (f: WorkloadFootprint) => OptionSizing> = {
+const MODELS: Record<string, (p: TargetPlan) => OptionSizing> = {
   cloudflare: sizeCloudflare,
   hetzner: sizeHetzner,
 };
@@ -396,6 +534,7 @@ export function sizeTarget(
   slug: string,
   footprint: WorkloadFootprint
 ): OptionSizing | null {
-  const model = MODELS[slug];
-  return model ? model(footprint) : null;
+  const plan = planTarget(slug, footprint);
+  const model = plan ? MODELS[slug] : undefined;
+  return plan && model ? model(plan) : null;
 }
