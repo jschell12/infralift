@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { LEAVING_PAGES, getLeavingPage } from "../../../lib/leaving";
 
-const DASHBOARD_URL =
-  process.env.NEXT_PUBLIC_DASHBOARD_URL ?? "https://dashboard.infralift.dev";
+import { DASHBOARD_URL } from "../../../lib/links";
 
 const CONTAINER = "max-w-[880px] mx-auto px-6";
 const CARD = "bg-surface border border-border rounded-xl p-6";

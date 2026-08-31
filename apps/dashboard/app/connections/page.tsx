@@ -71,7 +71,7 @@ const SCOPE_HELP: Record<Provider, string> = {
   firebase:
     "Create a service account at console.cloud.google.com/iam-admin/serviceaccounts with the Viewer role (or granular: Firebase Viewer, Cloud Functions Viewer, Cloud Datastore Viewer), generate a JSON key, and paste the full JSON. We inventory Hosting sites, Cloud Functions, and Firestore databases.",
   github:
-    "Create a fine-grained PAT at github.com/settings/tokens scoped to the repository that will receive generated Terraform, with Contents: Read and write. Used only to commit rendered .tf files.",
+    "Create a fine-grained PAT at github.com/settings/tokens with Contents: Read and write. This is the one credential that is not read-only: it is used to commit generated Terraform, and nothing else. Scope it to the repository that will receive the code if you create that repository yourself. If you want infralift to create it for you, the token needs permission to create repositories for the owner instead.",
   netlify:
     "Create a personal access token at app.netlify.com/user/applications. We read sites, forms, DNS zones, and build hooks, all read-only.",
   render:

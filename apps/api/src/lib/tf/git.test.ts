@@ -256,4 +256,17 @@ describe("ensureRepo", () => {
       ensureRepo({ token: "t", repo: "acme/infra" })
     ).rejects.toBeInstanceOf(GitCommitError);
   });
+
+  it("says what to do when the token cannot create repositories", async () => {
+    // A fine-grained PAT scoped to selected repositories can commit into an
+    // existing repo but cannot create one, and GitHub's own message
+    // ("Resource not accessible by personal access token") does not say which
+    // permission is missing. This is the most likely failure of the approval
+    // flow, so the error has to be actionable.
+    fakeGitHub({ repoExists: false, createRepoStatus: 403 });
+
+    await expect(
+      ensureRepo({ token: "t", repo: "acme/infra" })
+    ).rejects.toThrow(/create acme\/infra on GitHub first/);
+  });
 });
