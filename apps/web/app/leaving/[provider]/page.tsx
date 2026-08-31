@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { LEAVING_PAGES, getLeavingPage } from "../../../lib/leaving";
 
-import { DASHBOARD_URL } from "../../../lib/links";
+import { DASHBOARD_URL, LEAD_FORM_ENABLED } from "../../../lib/links";
+import { AssessmentForm } from "../../assessment-form";
 
 const CONTAINER = "max-w-[880px] mx-auto px-6";
 const CARD = "bg-surface border border-border rounded-xl p-6";
@@ -141,9 +142,18 @@ export default async function LeavingPage({
               </a>
               .
             </p>
-            <a href={DASHBOARD_URL} className={BTN}>
-              Run the free assessment
-            </a>
+            {LEAD_FORM_ENABLED ? (
+              // The provider is already known on these pages, so prefill it
+              // rather than making a visitor who just read about their own
+              // bill tell us which one it was.
+              <div className="mt-6 max-w-[620px]">
+                <AssessmentForm provider={page.provider} />
+              </div>
+            ) : (
+              <a href={DASHBOARD_URL} className={BTN}>
+                Run the free assessment
+              </a>
+            )}
           </div>
         </section>
       </main>

@@ -206,3 +206,64 @@ leadsRouter.patch("/:id", async (req, res) => {
     throw e;
   }
 });
+
+// ---------------------------------------------------------------------------
+// Inbound leads (marketing site form)
+// ---------------------------------------------------------------------------
+
+const INBOUND_STATUSES = [
+  "new",
+  "contacted",
+  "qualified",
+  "dismissed",
+  "converted",
+] as const;
+
+// Kept on a separate path from the community leads above: the two have almost
+// no fields in common, and folding them together would make every count in
+// /leads/summary mean two different things.
+leadsRouter.get("/inbound", async (req, res) => {
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const limit = Math.min(Number(req.query.limit) || 100, 500);
+
+  const leads = await prisma.inboundLead.findMany({
+    where: status ? { status } : undefined,
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+
+  const byStatus = await prisma.inboundLead.groupBy({
+    by: ["status"],
+    _count: { _all: true },
+  });
+
+  res.json({
+    leads,
+    total: leads.length,
+    byStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count._all])),
+  });
+});
+
+leadsRouter.patch("/inbound/:id", async (req, res) => {
+  const { status, notes } = req.body ?? {};
+  if (status !== undefined && !INBOUND_STATUSES.includes(status)) {
+    return res.status(400).json({
+      error: `status must be one of: ${INBOUND_STATUSES.join(", ")}`,
+    });
+  }
+  try {
+    const lead = await prisma.inboundLead.update({
+      where: { id: req.params.id },
+      data: {
+        ...(status !== undefined ? { status } : {}),
+        ...(notes !== undefined ? { notes } : {}),
+      },
+    });
+    res.json(lead);
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Record to update not found")) {
+      return res.status(404).json({ error: "lead not found" });
+    }
+    throw err;
+  }
+});

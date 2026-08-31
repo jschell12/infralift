@@ -6,6 +6,7 @@ import { useState } from "react";
 const ITEMS = [
   { href: "/", label: "Overview" },
   { href: "/leads", label: "Leads" },
+  { href: "/inbound", label: "Inbound" },
   { href: "/communities", label: "Communities" },
   { href: "/report", label: "Report" },
   { href: "/scanner", label: "Scanner" },

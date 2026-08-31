@@ -467,3 +467,38 @@ model AnalyticsDaily {
 
   @@unique([date, dimension, key])
 }
+
+// Someone who asked us for an assessment, from the marketing site.
+//
+// Deliberately separate from CommunityLead. That model is shaped for a scraped
+// forum post (community FK, sourceUrl, engagementScore, a classification from
+// the scanner's three buckets) and carries no email, so reusing it would mean
+// a synthetic CommunitySource, a fake sourceId to satisfy its unique key, and
+// an email smuggled into authorName. Every admin query over that table would
+// then be counting two different things.
+model InboundLead {
+  id        String   @id @default(cuid())
+  email     String
+  name      String?
+  company   String?
+  // Provider they want to leave, when they told us. Free text: this is the
+  // customer's word for it, not a validated Provider enum.
+  provider  String?
+  monthlySpend String?
+  message   String?  @db.Text
+  // new | contacted | qualified | dismissed | converted
+  status    String   @default("new")
+  notes     String?
+  // Attribution, captured from the page that submitted the form.
+  sourcePath String?
+  referrer   String?
+  utmSource  String?
+  utmMedium  String?
+  utmCampaign String?
+  country    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([createdAt])
+}

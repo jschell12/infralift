@@ -41,6 +41,13 @@ interface Env {
   ANALYTICS: AnalyticsEngineDataset;
   /** Optional Worker secret mixed into the daily visitor hash. */
   ANALYTICS_SALT?: string;
+  /** Base URL of the API that records leads, e.g. https://api.infralift.dev.
+   * Unset means the form is not wired up yet and /a/lead answers 503. */
+  LEAD_INTAKE_URL?: string;
+  /** Cloudflare Access service token, when the intake URL sits behind Access.
+   * Both halves are required or neither header is sent. */
+  LEAD_INTAKE_CF_CLIENT_ID?: string;
+  LEAD_INTAKE_CF_CLIENT_SECRET?: string;
 }
 
 interface IncomingRequestCf {
@@ -56,6 +63,10 @@ export default {
     if (url.pathname === "/a/e") {
       if (request.method !== "POST") return new Response(null, { status: 405 });
       return collect(request, env, "infralift");
+    }
+    if (url.pathname === "/a/lead") {
+      if (request.method !== "POST") return new Response(null, { status: 405 });
+      return submitLead(request, env);
     }
     return env.ASSETS.fetch(request);
   },
@@ -130,4 +141,90 @@ async function collect(
     // Analytics must never break the site — swallow everything.
   }
   return new Response(null, { status: 204 });
+}
+
+
+/**
+ * Lead intake, proxied to the API.
+ *
+ * The browser posts here rather than straight to the API for two reasons: it
+ * is same-origin, so there is no CORS preflight and no credentialed public
+ * origin to widen; and the API lives behind the Cloudflare tunnel, so the
+ * Worker is the only place that can hold a service token for it.
+ *
+ * Unlike /a/e, this does NOT swallow failures. An analytics event that goes
+ * missing costs a row in a chart; a lead that goes missing costs a customer,
+ * so the browser is told the truth and the visitor can try again.
+ */
+async function submitLead(request: Request, env: Env): Promise<Response> {
+  const json = (body: unknown, status: number) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  if (!env.LEAD_INTAKE_URL) {
+    return json(
+      { error: "Lead intake is not configured on this environment." },
+      503
+    );
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    const text = await request.text();
+    if (text.length > 8192) return json({ error: "Too large." }, 413);
+    payload = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return json({ error: "Malformed submission." }, 400);
+  }
+
+  const ua = request.headers.get("user-agent") ?? "";
+  if (BOT_UA.test(ua)) {
+    // Same shape as success: a bot learns nothing from being refused.
+    return json({ ok: true }, 202);
+  }
+
+  const cf = (request as { cf?: IncomingRequestCf }).cf;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    // The API rate-limits on this, so it has to be the visitor rather than
+    // the Worker's egress address.
+    "CF-Connecting-IP":
+      request.headers.get("cf-connecting-ip") ?? "0.0.0.0",
+    "CF-IPCountry": cf?.country ?? "",
+  };
+  if (env.LEAD_INTAKE_CF_CLIENT_ID && env.LEAD_INTAKE_CF_CLIENT_SECRET) {
+    headers["CF-Access-Client-Id"] = env.LEAD_INTAKE_CF_CLIENT_ID;
+    headers["CF-Access-Client-Secret"] = env.LEAD_INTAKE_CF_CLIENT_SECRET;
+  }
+
+  try {
+    const upstream = await fetch(`${env.LEAD_INTAKE_URL}/intake/lead`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (upstream.ok) return json({ ok: true }, 202);
+
+    // An Access login redirect means the service token is missing or wrong.
+    // Say so rather than reporting a generic failure that looks like a bug in
+    // the form.
+    if (upstream.status === 302 || upstream.status === 401) {
+      return json(
+        { error: "Lead intake is not reachable. We have been notified." },
+        502
+      );
+    }
+    if (upstream.status === 429) {
+      return json({ error: "Too many submissions. Try again later." }, 429);
+    }
+    if (upstream.status === 400) {
+      return json({ error: "Please check the details and try again." }, 400);
+    }
+    return json({ error: "Could not record that. Please try again." }, 502);
+  } catch {
+    return json({ error: "Could not reach us. Please try again." }, 502);
+  }
 }
