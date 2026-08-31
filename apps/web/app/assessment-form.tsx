@@ -98,9 +98,9 @@ export function AssessmentForm({ provider }: { provider?: string }) {
       <div className="rounded-xl border border-accent/20 bg-accent-dim/40 p-6">
         <h3 className="mb-1.5 text-lg font-semibold">Got it.</h3>
         <p className="text-[15px] text-muted">
-          We read every one of these ourselves. Expect a reply within a working
-          day, with a read-only token request if the assessment makes sense for
-          your stack. If it does not, we will tell you that instead.
+          We read every one of these ourselves. If an assessment makes sense
+          for your stack we will come back asking for a read-only token. If it
+          does not, we will tell you that instead.
         </p>
       </div>
     );

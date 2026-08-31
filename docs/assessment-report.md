@@ -37,8 +37,8 @@ Where your app should live, scored against your actual requirements (runtime, re
 
 A precise migration fee (from $3,000), the phase plan, and the risk/effort breakdown behind the number. The quote is fixed: the price you are given is the price you pay.
 
-Unlike the four sections above, this one is not generated. A person reads your report and prices the work, usually the same day. We would rather quote late and be right than have a model guess at your migration.
+Unlike the four sections above, this one is not generated. A person reads your report and prices the work. We would rather quote late and be right than have a model guess at your migration.
 
 ## How long it takes
 
-Minutes for the automated inventory; the full report with cost modeling and the quote is typically ready the same day.
+The automated inventory takes minutes. The cost modeling and the quote depend on a person reading it, so we would rather tell you where it is than commit to a turnaround we might miss.
