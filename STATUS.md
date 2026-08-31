@@ -1,5 +1,152 @@
 # infralift status
 
+> **Note on the gap below.** Entries for sessions 6 through 9 exist only in the
+> local working copy of this file (~268 uncommitted lines) and were never
+> committed. They cover PRs #54-#72. Commit them and this history is whole
+> again; until then the committed file jumps from session 5 to session 10.
+
+## 2026-08-31 (session 10)
+
+Seven PRs here (#72-#78) and two in schellout (#279, #280). The through-line:
+the product could not do several things the site said it did, and there was no
+way for anyone who believed the site to get in touch.
+
+### Completed
+
+- **Target codegen now generates from the workload, not source resource types (PR #72).**
+  The options page priced a Heroku exit at $422/mo (1x CCX43, 2x CCX13, LB11,
+  Neon 2CU, Upstash 5GB) while `target-hetzner.tf` emitted a comment
+  recommending a CPX31, zero servers, and a `neon_project` whose provider was
+  never declared. `planTarget()` in `sizing.ts` is now the single source both
+  the priced estimate and the HCL read, so they cannot drift. All existing
+  prices verified byte-identical after the refactor.
+  - Fixed four provider-schema bugs found by running `tofu validate` against
+    all six demo fixtures: `cloudflare_workers_script` used `name`/`module`
+    (v5 wants `script_name`, no `module`); `render_web_service` used `runtime`,
+    which is not an argument, and needs `runtime_source` plus `start_command`;
+    Render plans emitted as display names not slugs; `vercel_project_domain`
+    referenced a `vercel_project` never generated, because Vercel's domains API
+    is account-scoped and does not report the owning project.
+  - All 12 fixture x target combinations pass `tofu init` + `validate`.
+    Hetzner was previously 0/6.
+
+- **Approval flow: assessment to repo to workspace (PR #73).** Generated HCL
+  was a dead end; `/tf/codegen` returned JSON to a browser and nothing ever
+  committed it. Added `ensureRepo()` and `commitFiles()` (git data API, one
+  atomic commit for the whole directory), `POST /tf/approve`, an
+  "Approve and build it" drawer, and schema support for codegen-shaped
+  projects/jobs.
+  - **Security fix:** `POST /tf/jobs` fetched the project with no org check, so
+    any authenticated user could launch a job against another org's project and
+    make infralift commit into that org's repo with that org's GitHub token.
+    Same gap on three other routes.
+  - **Migrations were broken:** `0001_initial/migration.sql` had Prisma CLI
+    output pasted into it (a deprecation warning and an "update available"
+    banner), so applying migrations from scratch failed on the first one.
+  - Exit toll computed (`lib/exit-toll.ts`), which docs/migration-process.md
+    had promised and no connector produced.
+
+- **Marketing honesty pass (PRs #74, #76, #78).** An audit against the live
+  site found it selling several things that did not exist.
+  - Removed: "10x scale" projections (four places, zero implementation),
+    GitLab support (`git.ts` is hardcoded to api.github.com), drift detection
+    (`driftDetected` is written by nothing), IaC standards enforcement (a
+    hardcoded array of `status: "pass"`), workspace management (nothing ever
+    creates a `Workspace` row). The $99/mo tier now lists what the dashboard
+    actually does.
+  - Shipped rather than removed: cost projection and recommendation were
+    advertised and appeared nowhere; the logic already existed on the options
+    page, so `GET /assessments/:id` now derives both from the same
+    `buildMigrationOptions` call.
+  - Fixed two live defects: every docs page shipped
+    `href="http://localhost:3001"` as its CTA, and `/docs/cost-scenarios` was
+    publicly serving internal sales strategy ("Marketing angles to extract",
+    "Sweat thresholds ... they are the target customers") plus a pricing tier
+    that contradicted the pricing page. Edited rather than removed; it is now
+    linked in the nav.
+  - The read-only credential claim is reconciled with the GitHub write token
+    the pipeline requires, which appeared in neither security.md nor
+    connect-providers.md.
+  - Removed every response-time promise ("same day", "within a working day").
+
+- **Marketing site deploys from CI (PR #75).** `apps/web` had no deploy job;
+  every change needed a manual `wrangler deploy`, which is why the localhost
+  CTA stayed live. The job carries a guard that fails the build if any
+  `localhost:` URL reaches the export. Minted a dedicated Cloudflare token
+  (`infralift/CF_DEPLOY_TOKEN`, expires 2027-08-30).
+
+- **Lead capture built (PR #76), gated off.** There was no way to become a
+  customer: the CTA pointed at a Cloudflare Access login page and `/health` was
+  the only unauthenticated route. Added `InboundLead`, `POST /intake/lead`
+  registered above `cfAuth`, a Worker `/a/lead` that forwards, the first client
+  component on the marketing site, and an admin page.
+
+- **Test gaps closed (PR #77).** `apps/web/lib/leaving.ts` carries hard-coded
+  figures for six public pages with nothing enforcing they match the pricing
+  engine; a change to `sizing.ts` would have left them quoting numbers the
+  product no longer produces, silently. There is now a guard, mutation-tested.
+  The Worker had no tests and CI could not have run them (`pnpm test` only ran
+  the api package). Tests 82 to 155.
+
+- **schellout: terraform plan-on-PR, apply-on-merge (#279, #280).** Terraform
+  was the last thing deployed by hand. State lives in HCP Terraform with remote
+  execution, so CI never holds a Cloudflare token. The first plan caught
+  pre-existing drift: state held the duplicate GitHub IdP deleted by hand on
+  2026-08-30 and wanted to recreate it. Resolved with a `removed` block.
+  Also added the Access service token that unblocks lead intake.
+
+### In progress
+
+- **Lead capture is two steps from live.** The Access service token and
+  application are applied. Remaining: set `LEAD_INTAKE_URL` plus the two token
+  halves as Worker secrets, and flip `NEXT_PUBLIC_LEAD_FORM_ENABLED=true` in
+  the `deploy-web` job. Held deliberately: turning it on starts collecting
+  email addresses from strangers, which is a launch decision.
+
+### Blockers
+
+- None technical. The lead form is a decision, not a blocker.
+
+### Next steps
+
+- Turn on the lead form, then go after the 42 Vercel billing-pain leads. The
+  landing pages, demo assessments, applyable target IaC and intake path all
+  exist now.
+- HCP Terraform still sets no VCS relationship and uploads no configuration
+  version, so codegen-created workspaces land on `awaiting_configuration`.
+  Needs a per-org TFC OAuth token id that nothing obtains.
+- No workspace-variables API at the client or adapter layer, so generated infra
+  has no way to get cloud credentials into TFC.
+- Codegen jobs are fire-and-forget `void runJob()` with no queue, retry,
+  timeout or reaper; a restart mid-job strands the row at `pending` and the
+  dashboard polls it forever.
+- Delete the one-shot `removed` block in schellout's tunnel.tf now that it has
+  applied.
+- Still open from the codegen findings: source-side Vercel import fidelity, and
+  `vercel:postgres` emitting the retired `vercel_postgres_database` (no fixture
+  exercises it).
+- Move infralift-testenv Terraform state to a remote backend; it is still local
+  and gitignored, and was wiped once by `git worktree remove --force`.
+
+### Decisions worth remembering
+
+- **Edit, do not delete, cost-scenarios.** I first recommended removing the
+  page based on a subagent's summary without reading it. It was ~210 lines of
+  good public content and ~10 lines of internal framing. Scenario 1's
+  "not an infralift customer" verdict was kept and sharpened: telling someone
+  not to hire you is the most trustworthy thing on the page.
+- **`non_identity`, not `bypass`, for the intake path.** The trip-wizard admin
+  API can use bypass because the Worker behind it checks a bearer token.
+  Nothing sits behind `/intake/lead` except an unauthenticated Express route.
+- **The browser posts to the Worker, not the API.** Same-origin, so no CORS
+  preflight and no public origin added to a `credentials: true` allowlist that
+  every authenticated route also reads.
+- **`/a/lead` does not swallow errors, `/a/e` does.** A lost pageview costs a
+  row in a chart; a lost lead costs a customer.
+- **Auto-apply was acceptable because WireGuard is Ansible-managed.** The
+  terraform blast radius includes the Access app in front of SSH and the tunnel
+  carrying it, so there had to be a second way into the fleet.
+
 ## 2026-08-29 (session 5)
 
 ### Completed
