@@ -1,6 +1,3 @@
-warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.config.ts`).
-For more information, see: https://pris.ly/prisma-config
-
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
@@ -408,14 +405,3 @@ ALTER TABLE "TfJob" ADD CONSTRAINT "TfJob_projectId_fkey" FOREIGN KEY ("projectI
 
 -- AddForeignKey
 ALTER TABLE "TfJob" ADD CONSTRAINT "TfJob_renderingId_fkey" FOREIGN KEY ("renderingId") REFERENCES "TfRendering"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-┌─────────────────────────────────────────────────────────┐
-│  Update available 6.19.3 -> 8.0.0-rc.10                 │
-│                                                         │
-│  This is a major update - please follow the guide at    │
-│  https://pris.ly/d/major-version-upgrade                │
-│                                                         │
-│  Run the following to update                            │
-│    npm i --save-dev prisma@latest                       │
-│    npm i @prisma/client@latest                          │
-└─────────────────────────────────────────────────────────┘
-

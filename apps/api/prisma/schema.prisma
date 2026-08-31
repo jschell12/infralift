@@ -80,6 +80,7 @@ model Assessment {
   connection ProviderConnection @relation(fields: [connectionId], references: [id])
   inventory  InventoryItem[]
   findings   Finding[]
+  tfProjects TfProject[]
 }
 
 model InventoryItem {
@@ -323,10 +324,18 @@ model TfTemplateVersion {
 }
 
 model TfProject {
-  id                String   @id @default(cuid())
-  orgId             String
-  name              String
-  templateVersionId String
+  id     String @id @default(cuid())
+  orgId  String
+  name   String
+  // template | codegen. A codegen project is generated from an assessment and
+  // has no template version; a template project has no assessment.
+  source String @default("template")
+  // Null for codegen projects.
+  templateVersionId String?
+  // Set for codegen projects: the assessment whose inventory produced the HCL.
+  assessmentId      String?
+  // cloudflare | hetzner, for codegen projects.
+  migrationTarget   String?
   destRepo          String // owner/repo
   destPath          String   @default("") // work dir inside repo, "" = root
   destBranch        String   @default("main")
@@ -334,26 +343,30 @@ model TfProject {
   providerConfig    Json
   createdAt         DateTime @default(now())
 
-  templateVersion TfTemplateVersion @relation(fields: [templateVersionId], references: [id])
+  templateVersion TfTemplateVersion? @relation(fields: [templateVersionId], references: [id])
+  assessment      Assessment?        @relation(fields: [assessmentId], references: [id])
   renderings      TfRendering[]
   jobs            TfJob[]
 
   @@unique([orgId, name])
+  @@index([assessmentId])
 }
 
 model TfRendering {
-  id            String   @id @default(cuid())
-  projectId     String
-  templateVersionId String
-  fileName      String
-  argumentsJson Json
-  renderedBody  String
-  commitSha     String?
-  managed       Boolean  @default(true)
-  createdAt     DateTime @default(now())
+  id                String   @id @default(cuid())
+  projectId         String
+  // Null for codegen renderings, which come from an assessment rather than a
+  // template version.
+  templateVersionId String?
+  fileName          String
+  argumentsJson     Json
+  renderedBody      String
+  commitSha         String?
+  managed           Boolean  @default(true)
+  createdAt         DateTime @default(now())
 
-  project         TfProject         @relation(fields: [projectId], references: [id])
-  templateVersion TfTemplateVersion @relation(fields: [templateVersionId], references: [id])
+  project         TfProject          @relation(fields: [projectId], references: [id])
+  templateVersion TfTemplateVersion? @relation(fields: [templateVersionId], references: [id])
   jobs            TfJob[]
 
   @@unique([projectId, fileName])
@@ -362,13 +375,20 @@ model TfRendering {
 model TfJob {
   id            String   @id @default(cuid())
   projectId     String
+  // template | codegen
+  kind          String   @default("template")
   // queued | render | commit | workspace | complete
   stage         String   @default("queued")
   // pending | running | errored | success
   status        String   @default("pending")
   statusMessage String   @default("") // short human-readable, <= 280 chars
-  argumentsJson Json
+  argumentsJson Json     @default("{}")
+  // Template jobs render exactly one file. Codegen jobs write a whole
+  // directory, so the commit is recorded on the job rather than on a single
+  // rendering.
   renderingId   String?
+  commitSha     String?
+  fileCount     Int      @default(0)
   workspaceName String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

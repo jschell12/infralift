@@ -15,6 +15,7 @@ import type {
   ResourceInventoryItem,
 } from "@infralift/shared";
 import { prisma } from "./db.js";
+import { computeExitToll } from "./exit-toll.js";
 import { recommend, type RecommendInput } from "./recommend.js";
 import { computeFootprint, sizeTarget } from "./sizing.js";
 
@@ -336,6 +337,12 @@ export async function buildMigrationOptions(assessment: {
       budgetMonthlyCents,
       trafficGbMonth: input.trafficGbMonth,
     },
+    // The migration doc promises this before approval, and it is the question
+    // every buyer asks after seeing the monthly savings.
+    exitToll: computeExitToll(
+      assessment.provider as Provider,
+      assessment.inventory
+    ),
     options,
   };
 }

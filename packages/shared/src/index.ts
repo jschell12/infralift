@@ -166,6 +166,29 @@ export interface MigrationOption {
   codegenTarget: "cloudflare" | "hetzner" | null;
 }
 
+export interface ExitTollComponent {
+  label: string;
+  gb: number;
+  centsPerGb: number;
+  cents: number;
+  /** true when the volume came from the provider's API, not a plan tier */
+  measured: boolean;
+  note: string;
+}
+
+/** One-time cost of moving stored data off the source provider. Distinct from
+ * the monthly egress line, which is serving traffic and stops at cutover. */
+export interface ExitTollEstimate {
+  cents: number;
+  centsAfterWaiver: number;
+  totalGb: number;
+  components: ExitTollComponent[];
+  waiverAvailable: boolean;
+  waiverNote: string | null;
+  confidence: "measured" | "estimated" | "none";
+  notes: string[];
+}
+
 export interface MigrationOptionsReport {
   assessmentId: string;
   provider: Provider;
@@ -177,6 +200,8 @@ export interface MigrationOptionsReport {
     budgetMonthlyCents: number;
     trafficGbMonth: number;
   };
+  /** what it costs once to get the data out, before any target is chosen */
+  exitToll: ExitTollEstimate;
   options: MigrationOption[];
 }
 

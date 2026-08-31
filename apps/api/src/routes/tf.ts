@@ -198,8 +198,15 @@ tfRouter.post("/projects", async (req, res) => {
 });
 
 tfRouter.get("/projects/:id/renderings", async (req, res) => {
+  // Scope by org: a project id is guessable, and its renderings carry the
+  // customer's infrastructure.
+  const project = await prisma.tfProject.findFirst({
+    where: { id: req.params.id, orgId: req.user!.orgId },
+    select: { id: true },
+  });
+  if (!project) return res.status(404).json({ error: "project not found" });
   const renderings = await prisma.tfRendering.findMany({
-    where: { projectId: req.params.id },
+    where: { projectId: project.id },
     orderBy: { createdAt: "desc" },
   });
   res.json(renderings);
@@ -220,8 +227,8 @@ tfRouter.post("/jobs", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const project = await prisma.tfProject.findUnique({
-    where: { id: parsed.data.projectId },
+  const project = await prisma.tfProject.findFirst({
+    where: { id: parsed.data.projectId, orgId: req.user!.orgId },
   });
   if (!project) return res.status(404).json({ error: "project not found" });
   const job = await prisma.tfJob.create({
@@ -241,7 +248,7 @@ tfRouter.get("/jobs", async (req, res) => {
   const projectId = String(req.query.projectId ?? "");
   if (!projectId) return res.status(400).json({ error: "projectId required" });
   const jobs = await prisma.tfJob.findMany({
-    where: { projectId },
+    where: { projectId, project: { orgId: req.user!.orgId } },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
@@ -249,8 +256,8 @@ tfRouter.get("/jobs", async (req, res) => {
 });
 
 tfRouter.get("/jobs/:id", async (req, res) => {
-  const job = await prisma.tfJob.findUnique({
-    where: { id: req.params.id },
+  const job = await prisma.tfJob.findFirst({
+    where: { id: req.params.id, project: { orgId: req.user!.orgId } },
     include: { rendering: true },
   });
   if (!job) return res.status(404).json({ error: "job not found" });
@@ -336,4 +343,111 @@ tfRouter.post("/codegen/preview", async (req, res) => {
   });
 
   res.json({ files, resourceCount: parsed.data.inventory.length });
+});
+
+// -- approval: assessment to a real repo and workspace ------------------------
+
+const approveSchema = z.object({
+  assessmentId: z.string().min(1),
+  migrationTarget: z.enum(["cloudflare", "hetzner"]),
+  /** owner/name. Created if it does not exist. */
+  repo: z.string().regex(/^[\w.-]+\/[\w.-]+$/, "repo must be owner/name"),
+  destPath: z.string().default("infrastructure"),
+  destBranch: z.string().default("main"),
+  projectName: z
+    .string()
+    .regex(/^[a-z0-9-]+$/, "lowercase letters, digits and dashes only")
+    .max(32)
+    .optional(),
+  backend: z.enum(["tfc", "s3", "local"]).default("tfc"),
+  tfcOrg: z.string().optional(),
+  s3Bucket: z.string().optional(),
+  s3Endpoint: z.string().optional(),
+});
+
+/** The approval step of the funnel. The customer has seen their options and
+ * picked a target; this turns the assessment into a repository of Terraform
+ * and a workspace to run it in.
+ *
+ * Re-approving the same assessment and target reuses the project and adds a
+ * job, so the repo converges rather than forking into a second project. */
+tfRouter.post("/approve", async (req, res) => {
+  const parsed = approveSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const orgId = req.user!.orgId;
+  const input = parsed.data;
+
+  const assessment = await prisma.assessment.findFirst({
+    where: { id: input.assessmentId, orgId },
+    select: { id: true, provider: true, status: true },
+  });
+  if (!assessment) return res.status(404).json({ error: "assessment not found" });
+  if (assessment.status !== "completed") {
+    return res.status(400).json({ error: "Assessment not completed" });
+  }
+
+  const name =
+    input.projectName ??
+    `${assessment.provider}-to-${input.migrationTarget}-${assessment.id.slice(-6)}`;
+
+  const existing = await prisma.tfProject.findFirst({
+    where: { orgId, name },
+  });
+  if (existing && existing.assessmentId !== assessment.id) {
+    return res.status(409).json({
+      error: `project "${name}" already exists for a different assessment`,
+    });
+  }
+
+  const projectData = {
+    orgId,
+    name,
+    source: "codegen",
+    assessmentId: assessment.id,
+    migrationTarget: input.migrationTarget,
+    destRepo: input.repo,
+    destPath: input.destPath,
+    destBranch: input.destBranch,
+    // Codegen writes its own versions.tf and provider.tf, so this is recorded
+    // for reference rather than used to render a provider file.
+    providerConfig: {
+      name: input.migrationTarget,
+      target: input.migrationTarget,
+      source: assessment.provider,
+    },
+  };
+
+  const project = existing
+    ? await prisma.tfProject.update({
+        where: { id: existing.id },
+        data: {
+          destRepo: projectData.destRepo,
+          destPath: projectData.destPath,
+          destBranch: projectData.destBranch,
+          migrationTarget: projectData.migrationTarget,
+        },
+      })
+    : await prisma.tfProject.create({ data: projectData });
+
+  const job = await prisma.tfJob.create({
+    data: {
+      projectId: project.id,
+      kind: "codegen",
+      argumentsJson: {
+        backend: input.backend,
+        ...(input.tfcOrg ? { tfcOrg: input.tfcOrg } : {}),
+        ...(input.s3Bucket ? { s3Bucket: input.s3Bucket } : {}),
+        ...(input.s3Endpoint ? { s3Endpoint: input.s3Endpoint } : {}),
+      },
+    },
+  });
+
+  // Fire-and-forget, same as template jobs: the dashboard polls stage/status.
+  void runJob(job.id).catch((err) => {
+    console.error(`tf codegen job ${job.id} failed:`, err);
+  });
+
+  res.status(202).json({ project, job });
 });

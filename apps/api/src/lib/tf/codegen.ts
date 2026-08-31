@@ -348,6 +348,25 @@ function renderPlan(plan: string | undefined, fallback = "starter"): string {
   return plan.trim().toLowerCase().replace(/[\s-]+/g, "_");
 }
 
+// Heroku items name their app in prose ("app-name web (Basic x1)", "app-name:
+// addon-service") because that is what reads well in the inventory UI. Both
+// the resource generator and the import mapper need the app back out of it,
+// and they must agree or the import block targets a resource that does not
+// exist. Older assessments predate the connector recording appName.
+function herokuApp(item: ResourceInventoryItem): {
+  appName: string;
+  appRef: string;
+  processType: string;
+} {
+  const fromName = (item.name.split(" ")[0] ?? item.name).replace(/:$/, "");
+  const appName = (item.metadata?.appName as string) ?? fromName;
+  const processType =
+    (item.metadata?.processType as string) ??
+    item.externalId.split(":")[1] ??
+    "web";
+  return { appName, appRef: sanitizeName(appName), processType };
+}
+
 // Runtimes render_web_service accepts under runtime_source.native_runtime.
 const RENDER_NATIVE_RUNTIMES = new Set([
   "elixir",
@@ -368,13 +387,58 @@ const SOURCE_GENERATORS: Partial<Record<Provider, ResourceGenerator>> = {
   vercel: (item) => {
     const name = sanitizeName(item.name);
     switch (item.type) {
-      case "vercel:project":
-        return [
+      case "vercel:project": {
+        const meta = item.metadata ?? {};
+
+        // Only settings the assessment actually observed are emitted. A
+        // vercel_project carrying just name and framework imports cleanly and
+        // then plans "to change", because every omitted attribute reads as
+        // null and the first apply wipes the project's real build_command,
+        // output_directory and root_directory. Guessing a value would be
+        // worse; omitting one the API did report is what caused the drift.
+        const attrs: [string, unknown][] = [
+          ["framework", meta.framework],
+          ["build_command", meta.buildCommand],
+          ["output_directory", meta.outputDirectory],
+          ["root_directory", meta.rootDirectory],
+          ["install_command", meta.installCommand],
+          ["dev_command", meta.devCommand],
+          ["node_version", meta.nodeVersion],
+          ["serverless_function_region", meta.serverlessFunctionRegion],
+        ];
+        const present = attrs.filter(
+          ([, v]) => typeof v === "string" && v.length > 0
+        ) as [string, string][];
+
+        const width = Math.max(4, ...present.map(([k]) => k.length));
+        const pad = (k: string) => k.padEnd(width);
+
+        const lines = [
           `resource "vercel_project" "${name}" {`,
-          `  name      = "${item.name}"`,
-          `  framework = "${(item.metadata?.framework as string) ?? "nextjs"}"`,
-          `}`,
-        ].join("\n");
+          `  ${pad("name")} = ${JSON.stringify(item.name)}`,
+          ...present.map(([k, v]) => `  ${pad(k)} = ${JSON.stringify(v)}`),
+        ];
+
+        const repo = meta.gitRepo as string | undefined;
+        const repoType = meta.gitRepoType as string | undefined;
+        if (repo && repoType) {
+          const branch = meta.productionBranch as string | undefined;
+          const gitPad = branch ? "production_branch".length : 4;
+          lines.push(
+            ``,
+            `  git_repository = {`,
+            `    ${"type".padEnd(gitPad)} = ${JSON.stringify(repoType)}`,
+            `    ${"repo".padEnd(gitPad)} = ${JSON.stringify(repo)}`,
+            ...(branch
+              ? [`    production_branch = ${JSON.stringify(branch)}`]
+              : []),
+            `  }`
+          );
+        }
+
+        lines.push(`}`);
+        return lines.join("\n");
+      }
       case "vercel:domain": {
         // Vercel's /v5/domains is account-scoped and does not say which
         // project a domain serves, so there is no project_id to reference.
@@ -400,11 +464,16 @@ const SOURCE_GENERATORS: Partial<Record<Provider, ResourceGenerator>> = {
         ].join("\n");
       }
       case "vercel:postgres":
+        // vercel_postgres_database was removed from the provider when Vercel
+        // moved managed Postgres to the Neon marketplace. There is no
+        // replacement resource in vercel/vercel, so nothing here can manage
+        // this store in place; it is a migration candidate, not a resource.
         return [
-          `resource "vercel_postgres_database" "${name}" {`,
-          `  name   = "${item.name}"`,
-          `  region = "${item.region ?? "iad1"}"`,
-          `}`,
+          `# ${item.name}: Vercel Postgres, ${item.region ?? "iad1"}.`,
+          `# Vercel moved managed Postgres to the Neon marketplace and the`,
+          `# provider dropped vercel_postgres_database, so this store cannot be`,
+          `# expressed here. It is already priced into the migration target as`,
+          `# a Neon project; move the data as part of cutover.`,
         ].join("\n");
       default:
         return `# ${item.type}: ${item.name} (no HCL mapping yet)`;
@@ -425,14 +494,7 @@ const SOURCE_GENERATORS: Partial<Record<Provider, ResourceGenerator>> = {
       }
       case "heroku:dyno": {
         // Name is "app-name web (Basic x1)", externalId is "uuid:process_type"
-        const appDisplayName = item.name.split(" ")[0] ?? item.name;
-        const appRef = sanitizeName(
-          (item.metadata?.appName as string) ?? appDisplayName
-        );
-        const processType =
-          (item.metadata?.processType as string) ??
-          item.externalId.split(":")[1] ??
-          "web";
+        const { appRef, processType } = herokuApp(item);
         const formationName = `${appRef}_${processType}`;
         return [
           `resource "heroku_formation" "${formationName}" {`,
@@ -445,17 +507,10 @@ const SOURCE_GENERATORS: Partial<Record<Provider, ResourceGenerator>> = {
       }
       case "heroku:addon": {
         const name = sanitizeName(item.name);
-        // Name is "app-name: addon-service". Drop the trailing colon before
-        // sanitizing, or the reference becomes heroku_app.app_name_ and the
-        // config fails to validate. Assessments stored before the connector
-        // recorded appName still reach this fallback.
-        const appDisplayName = (item.name.split(" ")[0] ?? item.name).replace(
-          /:$/,
-          ""
-        );
-        const appRef = sanitizeName(
-          (item.metadata?.appName as string) ?? appDisplayName
-        );
+        // Name is "app-name: addon-service". herokuApp drops the trailing
+        // colon before sanitizing, or the reference becomes
+        // heroku_app.app_name_ and the config fails to validate.
+        const { appRef } = herokuApp(item);
         return [
           `resource "heroku_addon" "${name}" {`,
           `  app_id = heroku_app.${appRef}.id`,
@@ -568,8 +623,12 @@ const SOURCE_GENERATORS: Partial<Record<Provider, ResourceGenerator>> = {
   firebase: (item) => {
     const name = sanitizeName(item.name);
     switch (item.type) {
+      // The GCP connector emits gcp:cloud_run_service; only the bare
+      // gcp:cloud_run spelling was handled, so every Cloud Run service found
+      // by a real GCP assessment fell through to the "no HCL mapping" comment.
       case "firebase:cloud_run":
       case "gcp:cloud_run":
+      case "gcp:cloud_run_service":
         return [
           `resource "google_cloud_run_v2_service" "${name}" {`,
           `  name     = "${item.name}"`,
@@ -641,12 +700,20 @@ function renderImports(
 
 type ImportMapper = (item: ResourceInventoryItem) => { to: string; id: string } | null;
 
+// Every resource the source generators emit needs a matching import block.
+// Without one the resource plans as "to add" against infrastructure that
+// already exists, which at best is noise in the plan and at worst creates a
+// duplicate. Import ID formats are per-provider and verified against each
+// provider's import documentation.
 const IMPORT_MAPPERS: Partial<Record<Provider, ImportMapper>> = {
   vercel: (item) => {
     const name = sanitizeName(item.name);
     switch (item.type) {
       case "vercel:project":
         return { to: `vercel_project.${name}`, id: item.externalId };
+      // vercel:domain generates a commented-out block (the domains API does
+      // not report the owning project) and vercel:postgres no longer has a
+      // resource at all, so neither can be imported.
       default:
         return null;
     }
@@ -658,6 +725,27 @@ const IMPORT_MAPPERS: Partial<Record<Provider, ImportMapper>> = {
         return { to: `heroku_app.${name}`, id: item.externalId };
       case "heroku:addon":
         return { to: `heroku_addon.${name}`, id: item.externalId };
+      case "heroku:dyno": {
+        // heroku_formation imports as "<app name>:<process type>", not by ID.
+        // externalId is "<app uuid>:<type>", so the name is derived the same
+        // way the resource generator derives it.
+        const { appName, appRef, processType } = herokuApp(item);
+        return {
+          to: `heroku_formation.${appRef}_${processType}`,
+          id: `${appName}:${processType}`,
+        };
+      }
+      default:
+        return null;
+    }
+  },
+  render: (item) => {
+    const name = sanitizeName(item.name);
+    switch (item.type) {
+      case "render:web_service":
+        return { to: `render_web_service.${name}`, id: item.externalId };
+      case "render:postgres":
+        return { to: `render_postgres.${name}`, id: item.externalId };
       default:
         return null;
     }
@@ -673,7 +761,34 @@ const IMPORT_MAPPERS: Partial<Record<Provider, ImportMapper>> = {
         return null;
     }
   },
+  firebase: gcpImportMapper,
+  gcp: gcpImportMapper,
 };
+
+function gcpImportMapper(
+  item: ResourceInventoryItem
+): { to: string; id: string } | null {
+  const name = sanitizeName(item.name);
+  switch (item.type) {
+    case "firebase:cloud_run":
+    case "gcp:cloud_run":
+    case "gcp:cloud_run_service": {
+      // The Cloud Run API returns the full resource path as externalId, which
+      // is already an accepted import format. Otherwise "<location>/<name>"
+      // resolves against the project configured on the provider.
+      const id = item.externalId.startsWith("projects/")
+        ? item.externalId
+        : `${item.region ?? "us-east1"}/${item.name}`;
+      return { to: `google_cloud_run_v2_service.${name}`, id };
+    }
+    case "firebase:cloud_sql":
+    case "gcp:cloud_sql":
+      // The bare instance name resolves against the provider's project.
+      return { to: `google_sql_database_instance.${name}`, id: item.name };
+    default:
+      return null;
+  }
+}
 
 
 // ---------------------------------------------------------------------------
