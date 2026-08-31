@@ -356,9 +356,9 @@ export default function Home() {
         <section className={SECTION} id="how">
           <h2 className={H2}>How it works</h2>
           <p className={LEAD}>
-            Your current provider only ever hands us a read-only token. The
-            one credential that can write is a GitHub token, and all it writes
-            is the Terraform we deliver to you.
+            We never get write access to your current provider. The one
+            credential that writes is a GitHub token, scoped to the repo that
+            holds your Terraform.
           </p>
           <div className="grid gap-5 grid-cols-1 md:grid-cols-4">
             {STEPS.map((s, i) => (
