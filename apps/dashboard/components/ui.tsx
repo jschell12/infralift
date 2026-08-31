@@ -228,3 +228,28 @@ export function Note({
     </div>
   );
 }
+
+/** Right-side slide-over. Forms live here rather than in a modal so the page
+ *  behind them stays readable while a customer fills one in. */
+export function Drawer({
+  title,
+  subtitle,
+  onClose,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+      <div className="fixed top-0 right-0 bottom-0 w-[440px] max-w-[92vw] bg-surface border-l border-border p-6 overflow-y-auto z-50">
+        <h2 className="text-xl font-bold mb-1">{title}</h2>
+        <div className="text-muted text-sm mb-6">{subtitle}</div>
+        {children}
+      </div>
+    </>
+  );
+}

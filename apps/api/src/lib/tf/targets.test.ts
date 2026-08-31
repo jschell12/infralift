@@ -237,6 +237,74 @@ describe("migration target codegen", () => {
     }
   });
 
+  it("gives every generated source resource an import block", () => {
+    // A source resource with no import block plans as "to add" against
+    // infrastructure that already exists. Nine resource types used to be in
+    // that state; anything still uncovered has to be a deliberate exception
+    // with a reason, not an oversight.
+    const NO_IMPORT_POSSIBLE = new Set([
+      // Vercel's domains API does not report the owning project, so the
+      // resource is emitted commented out and there is nothing to import.
+      "vercel_project_domain",
+    ]);
+
+    for (const [provider, build] of FIXTURES) {
+      const { files } = generate(provider, build().inventory, "hetzner");
+      const source = files.find((f) => f.fileName === `${provider}.tf`);
+      if (!source) continue;
+      const imports =
+        files.find((f) => f.fileName === "imports.tf")?.content ?? "";
+
+      const imported = new Set(
+        [...imports.matchAll(/to\s+=\s+(\S+)/g)].map((m) => m[1])
+      );
+
+      for (const match of source.content.matchAll(
+        /^resource\s+"([a-z0-9_]+)"\s+"([a-zA-Z0-9_]+)"/gm
+      )) {
+        const [, type, name] = match;
+        if (NO_IMPORT_POSSIBLE.has(type)) continue;
+        expect(
+          imported,
+          `${provider}: ${type}.${name} generated with no import block`
+        ).toContain(`${type}.${name}`);
+      }
+    }
+  });
+
+  it("carries Vercel build settings into the generated project", () => {
+    // Without these the resource imports cleanly and then plans "to change",
+    // nulling out build_command/output_directory/root_directory on apply.
+    const { inventory } = buildDemoVercelAssessment();
+    const hcl = generate("vercel", inventory, "cloudflare").byName.get(
+      "vercel.tf"
+    )!;
+
+    expect(hcl).toContain('build_command');
+    expect(hcl).toContain('output_directory');
+    expect(hcl).toContain('root_directory');
+    expect(hcl).toContain('git_repository = {');
+    expect(hcl).toContain('production_branch = "main"');
+
+    // Settings the assessment did not observe stay absent rather than being
+    // invented: a wrong value overwrites production on the first apply.
+    expect(hcl).not.toContain("dev_command");
+  });
+
+  it("no longer emits the retired vercel_postgres_database resource", () => {
+    const item = {
+      provider: "vercel",
+      type: "vercel:postgres",
+      externalId: "store_demo",
+      name: "northwind-db",
+      region: "iad1",
+    } as ResourceInventoryItem;
+
+    const hcl = generate("vercel", [item], "cloudflare").byName.get("vercel.tf")!;
+    expect(hcl).not.toContain("resource \"vercel_postgres_database\"");
+    expect(hcl).toContain("Neon marketplace");
+  });
+
   it("separates what the target replaces from what it does not", () => {
     const { inventory } = buildDemoHerokuAssessment();
     const hcl = generate("heroku", inventory, "hetzner").byName.get(

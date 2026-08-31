@@ -3,18 +3,28 @@
 import { use, useEffect, useState } from "react";
 import {
   PROVIDER_LABELS,
+  type ExitTollEstimate,
   type MigrationOption,
   type MigrationOptionsReport,
+  type Provider,
 } from "@infralift/shared";
 import { api, formatCents } from "../../../../lib/api";
 import {
   Card,
   Chip,
+  Drawer,
+  INPUT,
+  LABEL,
   NUM,
   Note,
   PrimaryButton,
   StatCard,
 } from "../../../../components/ui";
+
+interface ApproveResult {
+  project: { id: string; name: string; destRepo: string; destPath: string };
+  job: { id: string; stage: string; status: string };
+}
 
 const MANAGED_LABEL: Record<number, string> = {
   0: "you run the servers",
@@ -23,12 +33,83 @@ const MANAGED_LABEL: Record<number, string> = {
   3: "fully managed",
 };
 
+// The one-time cost of getting data out. Buyers conflate this with the
+// monthly egress line, so it is stated as its own number with the volume it
+// was computed from rather than folded into any target's estimate.
+function ExitTollCard({
+  toll,
+  provider,
+}: {
+  toll: ExitTollEstimate;
+  provider: Provider;
+}) {
+  if (!toll) return null;
+
+  const headline =
+    toll.confidence === "none"
+      ? "Nothing to move"
+      : toll.waiverAvailable
+        ? `${formatCents(toll.cents)} once, waived`
+        : `${formatCents(toll.cents)} once`;
+
+  return (
+    <Card className="mb-5">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <div className="text-[11px] uppercase tracking-[0.06em] text-faint">
+          One-time cost to leave {PROVIDER_LABELS[provider]}
+        </div>
+        {toll.confidence !== "none" && (
+          <Chip tone={toll.confidence === "measured" ? "info" : "muted"} size="sm">
+            {toll.confidence === "measured" ? "measured" : "estimated"}
+          </Chip>
+        )}
+      </div>
+
+      <div className={`${NUM} text-[22px]`}>{headline}</div>
+      {toll.confidence !== "none" && (
+        <div className="mt-0.5 text-[13px] text-muted">
+          {toll.totalGb}GB of stored data leaving, once. Separate from the
+          monthly bandwidth bill, which stops at cutover.
+        </div>
+      )}
+
+      {toll.components.length > 0 && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <tbody>
+              {toll.components.map((c) => (
+                <tr key={c.label} className="align-top">
+                  <td className="py-1 pr-3">{c.label}</td>
+                  <td className={`${NUM} py-1 pr-3 text-right whitespace-nowrap`}>
+                    {c.gb}GB
+                  </td>
+                  <td className={`${NUM} py-1 text-right whitespace-nowrap`}>
+                    {formatCents(c.cents)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {toll.notes.map((n) => (
+        <p key={n} className="mt-2 text-[13px] text-muted">
+          {n}
+        </p>
+      ))}
+    </Card>
+  );
+}
+
 function OptionCard({
   option,
   rank,
   assessmentId,
   currentMonthlyCents,
+  onApprove,
 }: {
+  onApprove: (target: "cloudflare" | "hetzner") => void;
   option: MigrationOption;
   rank: number;
   assessmentId: string;
@@ -169,11 +250,20 @@ function OptionCard({
 
       {option.codegenTarget ? (
         <>
-          <PrimaryButton
-            href={`/assessments/${assessmentId}?codegen=${option.codegenTarget}#codegen`}
-          >
-            Preview sample IaC
-          </PrimaryButton>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <PrimaryButton
+              href={`/assessments/${assessmentId}?codegen=${option.codegenTarget}#codegen`}
+            >
+              Preview sample IaC
+            </PrimaryButton>
+            <button
+              type="button"
+              onClick={() => onApprove(option.codegenTarget!)}
+              className="rounded-lg border border-accent/40 px-3.5 py-2 text-[13px] font-semibold text-accent hover:bg-accent-dim/40"
+            >
+              Approve and build it
+            </button>
+          </div>
           {option.sizing && (
             <p className="mt-3 text-[13px] leading-relaxed text-muted">
               infralift builds this environment in parallel with your live
@@ -200,11 +290,44 @@ export default function MigrationOptionsPage({
   const [report, setReport] = useState<MigrationOptionsReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Approval drawer
+  const [approving, setApproving] = useState<"cloudflare" | "hetzner" | null>(
+    null
+  );
+  const [repo, setRepo] = useState("");
+  const [destPath, setDestPath] = useState("infrastructure");
+  const [busy, setBusy] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [approved, setApproved] = useState<ApproveResult | null>(null);
+
   useEffect(() => {
     api<MigrationOptionsReport>(`/assessments/${id}/options`)
       .then(setReport)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [id]);
+
+  async function submitApproval() {
+    if (!approving) return;
+    setBusy(true);
+    setApproveError(null);
+    try {
+      const result = await api<ApproveResult>("/tf/approve", {
+        method: "POST",
+        body: JSON.stringify({
+          assessmentId: id,
+          migrationTarget: approving,
+          repo: repo.trim(),
+          destPath: destPath.trim(),
+        }),
+      });
+      setApproved(result);
+      setApproving(null);
+    } catch (e) {
+      setApproveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (error) return <div className="mt-2 text-sm text-danger">{error}</div>;
   if (!report) return <p className="text-muted">Loading options...</p>;
@@ -282,6 +405,8 @@ export default function MigrationOptionsPage({
         </Card>
       )}
 
+      <ExitTollCard toll={report.exitToll} provider={report.provider} />
+
       {report.options.length === 0 ? (
         <Note>
           No targets cleared the workload&apos;s hard requirements. That
@@ -296,6 +421,12 @@ export default function MigrationOptionsPage({
             rank={i + 1}
             assessmentId={report.assessmentId}
             currentMonthlyCents={report.currentMonthlyCents}
+            onApprove={(target) => {
+              setApproved(null);
+              setApproveError(null);
+              setRepo((r) => r || `your-org/${report.provider}-migration`);
+              setApproving(target);
+            }}
           />
         ))
       )}
@@ -307,6 +438,66 @@ export default function MigrationOptionsPage({
           what you actually pay us.
         </Note>
       </div>
+
+      {approving && (
+        <Drawer
+          title={`Build the ${approving} environment`}
+          subtitle="infralift creates the repository, commits the Terraform, and provisions a workspace. Nothing is applied until you review the plan."
+          onClose={() => setApproving(null)}
+        >
+          <label className={LABEL}>GitHub repository</label>
+          <input
+            className={INPUT}
+            value={repo}
+            onChange={(e) => setRepo(e.target.value)}
+            placeholder="your-org/infrastructure"
+          />
+          <p className="mt-1.5 mb-4 text-[13px] text-muted">
+            Created as a private repo if it does not exist. Needs a GitHub
+            connection on this organization.
+          </p>
+
+          <label className={LABEL}>Directory in the repo</label>
+          <input
+            className={INPUT}
+            value={destPath}
+            onChange={(e) => setDestPath(e.target.value)}
+            placeholder="infrastructure"
+          />
+          <p className="mt-1.5 mb-5 text-[13px] text-muted">
+            Leave blank to write at the repository root.
+          </p>
+
+          {approveError && (
+            <div className="mb-3 text-sm text-danger">{approveError}</div>
+          )}
+
+          <PrimaryButton
+            onClick={submitApproval}
+            disabled={busy || repo.trim().length === 0}
+          >
+            {busy ? "Building..." : "Create repo and commit"}
+          </PrimaryButton>
+        </Drawer>
+      )}
+
+      {approved && (
+        <div className="mt-4">
+          <Note tone="accent">
+            Building <strong>{approved.project.name}</strong> into{" "}
+            <a
+              href={`https://github.com/${approved.project.destRepo}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {approved.project.destRepo}
+            </a>
+            . Track it on the{" "}
+            <a href="/terraform">Terraform page</a> &mdash; job{" "}
+            {approved.job.id.slice(-8)} is {approved.job.status}.
+          </Note>
+        </div>
+      )}
     </>
   );
 }

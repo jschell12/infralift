@@ -41,6 +41,20 @@ export const vercelConnector: Connector = {
           nodeVersion: p.nodeVersion ?? null,
           serverlessFunctionRegion: p.serverlessFunctionRegion ?? null,
           envVarCount: Array.isArray(p.env) ? p.env.length : undefined,
+          // Build settings. Without these, generated HCL carries only name and
+          // framework, so importing a real project plans "to change" and wipes
+          // whatever the project actually had configured.
+          buildCommand: p.buildCommand ?? null,
+          outputDirectory: p.outputDirectory ?? null,
+          rootDirectory: p.rootDirectory ?? null,
+          installCommand: p.installCommand ?? null,
+          devCommand: p.devCommand ?? null,
+          gitRepoType: p.link?.type ?? null,
+          gitRepo:
+            p.link?.org && p.link?.repo
+              ? `${p.link.org}/${p.link.repo}`
+              : (p.link?.repo ?? null),
+          productionBranch: p.link?.productionBranch ?? null,
         },
       });
 

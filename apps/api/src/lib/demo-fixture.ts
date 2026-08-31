@@ -232,6 +232,16 @@ export function buildDemoVercelAssessment(): DemoAssessment {
         nodeVersion: "22.x",
         serverlessFunctionRegion: "iad1",
         envVarCount: p.envVarCount,
+        // Build settings the connector reads off /v9/projects. Generated HCL
+        // that omits these imports cleanly and then plans "to change",
+        // wiping them on the first apply.
+        buildCommand: "pnpm turbo build",
+        outputDirectory: ".next",
+        rootDirectory: `apps/${p.key}`,
+        installCommand: "pnpm install --frozen-lockfile",
+        gitRepoType: "github",
+        gitRepo: "northwind/platform",
+        productionBranch: "main",
       },
     });
     findings.push({
