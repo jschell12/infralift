@@ -11,12 +11,16 @@ import {
 } from "../lib/tf/render.js";
 import { getTfcClient } from "../lib/tf/tfc-client.js";
 import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
+import { requireAdmin } from "../lib/cf-auth.js";
 
 export const tfRouter = Router();
 
 // -- TFC connection status ---------------------------------------------------
 
-tfRouter.get("/tfc-status", async (_req, res) => {
+// Admin-only: this reports on infralift's own HCP Terraform org, not on
+// anything belonging to the caller, so the org name and workspace count are
+// internal detail rather than a customer's own data.
+tfRouter.get("/tfc-status", requireAdmin, async (_req, res) => {
   const client = getTfcClient();
   if (!client) {
     return res.json({ connected: false, org: null, workspaceCount: null });
@@ -62,7 +66,14 @@ const templateSchema = z.object({
   inputSchema: z.record(z.string(), z.unknown()),
 });
 
-tfRouter.post("/templates", async (req, res) => {
+// Admin-only. TfTemplate has no orgId: it is one catalog shared by every org,
+// keyed on slug, and templateBody is Terraform that the pipeline renders,
+// commits to a repo and hands to a workspace. An unauthenticated-shaped write
+// here was fine while the only account was the owner's; with signup open it
+// would let anyone who can sign in with GitHub upsert a template other orgs
+// build from. The GET below stays open because reading the catalog is what
+// the dashboard's terraform page does.
+tfRouter.post("/templates", requireAdmin, async (req, res) => {
   const parsed = templateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });

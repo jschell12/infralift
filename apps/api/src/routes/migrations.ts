@@ -98,8 +98,12 @@ migrationsRouter.post("/", async (req, res) => {
 });
 
 migrationsRouter.get("/:id", async (req, res) => {
-  const migration = await prisma.migration.findUnique({
-    where: { id: req.params.id },
+  // Scoped to the caller's org like its sibling list route. Looking up by id
+  // alone was safe while Cloudflare Access admitted one email address; with
+  // self-serve signup open it would let any signed-in stranger read another
+  // org's migration plan and phases.
+  const migration = await prisma.migration.findFirst({
+    where: { id: req.params.id, orgId: req.user!.orgId },
     include: { phases: true },
   });
   if (!migration) return res.status(404).json({ error: "Not found" });

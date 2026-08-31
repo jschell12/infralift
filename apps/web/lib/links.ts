@@ -8,14 +8,20 @@
 export const DASHBOARD_URL =
   process.env.NEXT_PUBLIC_DASHBOARD_URL ?? "https://dashboard.infralift.dev";
 
-/** Whether to render the lead form instead of linking to the dashboard.
+/** Whether to render the lead form underneath the sign-in CTA.
  *
- * The dashboard sits behind Cloudflare Access, so for anyone without an
- * account the "free assessment" CTA is a login wall. The form fixes that, but
- * it only works once the Worker has LEAD_INTAKE_URL set and the API's
- * /intake/lead path is reachable from the public internet. Until both are
- * true this stays off and the CTA keeps its old behaviour, so a half-wired
- * deploy cannot start dropping leads on the floor.
+ * This used to decide whether the "free assessment" CTA was a form or a link
+ * to the dashboard, because the dashboard was a login wall: Cloudflare Access
+ * let exactly one email through, so everyone else got a login page and then a
+ * refusal. That is no longer true. The Access app now allows any Google or
+ * GitHub sign-in (schellout PR #284), so the CTA is a real signup and the form
+ * is the secondary path for people who would rather not connect an account
+ * yet.
+ *
+ * It stays a flag because the form still needs LEAD_INTAKE_URL and the two
+ * LEAD_INTAKE_CF_* service-token halves set as Worker secrets. Without them
+ * /a/lead answers 503, and a submit button that always fails is worse than no
+ * form at all. Turning it on is documented in the README.
  */
 export const LEAD_FORM_ENABLED =
   process.env.NEXT_PUBLIC_LEAD_FORM_ENABLED === "true";
