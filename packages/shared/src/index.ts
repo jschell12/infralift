@@ -166,6 +166,33 @@ export interface MigrationOption {
   codegenTarget: "cloudflare" | "hetzner" | null;
 }
 
+/** How much to trust a price. "invoiced" is what the account actually bills;
+ * everything below that is modelled, and the report says which. */
+export type PriceConfidence =
+  | "invoiced"
+  | "corroborated"
+  | "advisor"
+  | "anecdote"
+  | "unverified";
+
+export interface AssessmentCostProjectionRow {
+  stack: string;
+  note: string;
+  listCents: number | null;
+  year1Cents: number | null;
+  steadyStateCents: number | null;
+  confidence: PriceConfidence;
+  sourceDate?: string;
+  /** the stack being migrated away from */
+  isCurrent?: boolean;
+}
+
+export interface AssessmentRecommendation {
+  target: string;
+  summary: string;
+  rows: { label: string; value: string }[];
+}
+
 export interface ExitTollComponent {
   label: string;
   gb: number;

@@ -35,7 +35,9 @@ Where your app should live, scored against your actual requirements (runtime, re
 
 ### 5. Fixed-fee quote
 
-A precise migration fee (from $3,000), the phase plan, and the risk/effort breakdown behind the number. The quote is fixed: the price in the report is the price you pay.
+A precise migration fee (from $3,000), the phase plan, and the risk/effort breakdown behind the number. The quote is fixed: the price you are given is the price you pay.
+
+Unlike the four sections above, this one is not generated. A person reads your report and prices the work, usually the same day. We would rather quote late and be right than have a model guess at your migration.
 
 ## How long it takes
 

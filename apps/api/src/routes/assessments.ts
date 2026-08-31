@@ -1,10 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
-import type { FindingSeverity, Provider } from "@infralift/shared";
+import type {
+  AssessmentCostProjectionRow,
+  AssessmentRecommendation,
+  FindingSeverity,
+  Provider,
+} from "@infralift/shared";
 import { prisma } from "../lib/db.js";
 import { decryptToken } from "../lib/crypto.js";
 import { getConnector } from "../connectors/index.js";
 import { buildMigrationOptions } from "../lib/options.js";
+import { buildReportExtras } from "../lib/report-extras.js";
 
 export const assessmentsRouter = Router();
 
@@ -178,8 +184,44 @@ assessmentsRouter.get("/:id", async (req, res) => {
     prisma.finding.findMany({ where: { assessmentId: req.params.id } }),
   ]);
 
+  // The cost projection and recommendation are advertised as part of the
+  // report and used to live only on the options page. They are derived from
+  // the same buildMigrationOptions() call, so the two pages cannot disagree.
+  // A failure here must not take down the report: the inventory and findings
+  // are the part a customer paid nothing for and still expects to see.
+  let extras: {
+    costProjection?: AssessmentCostProjectionRow[];
+    recommendation?: AssessmentRecommendation;
+  } = {};
+  if (summary.status === "completed") {
+    try {
+      const options = await buildMigrationOptions({
+        id: summary.id,
+        provider: summary.provider,
+        estimatedMonthlyCostCents: summary.estimatedMonthlyCostCents,
+        inventory: inventory.map((i) => ({
+          provider: i.provider as Provider,
+          type: i.type,
+          externalId: i.externalId,
+          name: i.name,
+          region: i.region ?? undefined,
+          monthlyCostCents: i.monthlyCostCents ?? undefined,
+          metadata: (i.metadata as Record<string, unknown> | null) ?? undefined,
+        })),
+      });
+      const built = buildReportExtras(options);
+      extras = {
+        costProjection: built.costProjection,
+        ...(built.recommendation ? { recommendation: built.recommendation } : {}),
+      };
+    } catch (err) {
+      console.error(`report extras failed for assessment ${summary.id}:`, err);
+    }
+  }
+
   res.json({
     ...summary,
+    ...extras,
     inventory: inventory.map((i) => ({
       provider: i.provider,
       type: i.type,

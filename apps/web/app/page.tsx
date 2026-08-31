@@ -1,4 +1,5 @@
-import { DASHBOARD_URL } from "../lib/links";
+import { DASHBOARD_URL, LEAD_FORM_ENABLED } from "../lib/links";
+import { AssessmentForm } from "./assessment-form";
 
 const CONTAINER = "max-w-[1080px] mx-auto px-6";
 const CARD = "bg-surface border border-border rounded-xl p-6";
@@ -139,15 +140,15 @@ const STEPS = [
   },
   {
     title: "Assessment report",
-    body: "We inventory your projects, services, databases, functions, domains, and storage. You get a migration plan with monthly cost projections at current and 10x scale, plus risk notes.",
+    body: "We inventory your projects, services, databases, functions, domains, and storage. You get a migration plan with cost projections at three prices (list, year-1 after credits, steady state), a ranked recommendation, and risk notes.",
   },
   {
     title: "Fixed-fee migration",
-    body: "We build the target environment in parallel, with zero downtime on your current stack, as Terraform in a new GitHub or GitLab repo with state in Terraform Cloud.",
+    body: "We build the target environment in parallel, with zero downtime on your current stack, as Terraform in a new GitHub repo, with state in Terraform Cloud.",
   },
   {
     title: "Keep the platform",
-    body: "After cutover, the dashboard keeps working: drift visibility, IaC standards enforcement, and workspace management. You own the repo and state either way.",
+    body: "After cutover the dashboard keeps working: your inventory, cost tracking, and assessments you can re-run as the stack changes. You own the repo and state either way.",
   },
 ];
 
@@ -159,16 +160,17 @@ const PLANS = [
     sub: "Read-only inventory + migration report",
     lines: [
       "Full resource inventory",
-      "Cost projection at current and 10x scale",
-      "Fixed-fee migration quote",
+      "Cost projection at three prices",
+      "Ranked target recommendation",
       "Risk & effort breakdown",
+      "A fixed-fee quote, same day",
     ],
   },
   {
     name: "Migration",
     price: "from $3,000",
     unit: " fixed",
-    sub: "Quoted precisely in your assessment report",
+    sub: "Quoted from your assessment, before you commit",
     lines: [
       "Terraform repo you own",
       "Terraform Cloud workspaces",
@@ -184,9 +186,8 @@ const PLANS = [
     sub: "Keep the dashboard after migration",
     lines: [
       "Unlimited users",
-      "Drift detection & alerts",
-      "IaC standards enforcement",
-      "Workspace management",
+      "Re-runnable assessments",
+      "Migration options & IaC generation",
       "Cost tracking",
     ],
   },
@@ -227,11 +228,14 @@ export default function Home() {
           <p className="text-xl text-muted max-w-[640px] mx-auto mb-9">
             Vercel, Heroku, and Firebase got you to launch. Now usage-based
             pricing is compounding. We assess what your stack costs today,
-            project what it&apos;ll cost at 10x, and migrate you to
+            show you what it would cost elsewhere, and migrate you to
             infrastructure you own for a fixed fee.
           </p>
           <div className="flex gap-3 justify-center">
-            <a className={`${BTN} bg-accent text-bg`} href={DASHBOARD_URL}>
+            <a
+              className={`${BTN} bg-accent text-bg`}
+              href={LEAD_FORM_ENABLED ? "#assessment" : DASHBOARD_URL}
+            >
               Get your free assessment
             </a>
             <a
@@ -376,24 +380,25 @@ export default function Home() {
         <section className={SECTION} id="standards">
           <h2 className={H2}>Everything is infrastructure as code</h2>
           <p className={LEAD}>
-            Every resource is Terraform, checked into your repo, planned and
-            applied through Terraform Cloud. You own the repo and state. Fire us
-            anytime and keep everything.
+            Every resource is Terraform, committed to your repo and planned
+            through Terraform Cloud, with the apply gated behind your review.
+            You own the repo and state. Fire us anytime and keep everything.
           </p>
           <div className="grid gap-5 grid-cols-1 md:grid-cols-2">
             <div className={CARD}>
-              <h3 className="text-lg font-semibold mb-2">Standards that stick</h3>
+              <h3 className="text-lg font-semibold mb-2">Standards you can read</h3>
               <p className="text-muted text-[15px]">
-                Modules, naming, tagging, remote state, and review gates run
-                automatically on every change. Your infra stays clean after we
-                leave.
+                Module layout, naming, tagging, remote state and review gates
+                are written down, and the code we hand over follows them. The
+                ruleset is published in the dashboard so you can hold us to it.
               </p>
             </div>
             <div className={CARD}>
-              <h3 className="text-lg font-semibold mb-2">Drift visibility</h3>
+              <h3 className="text-lg font-semibold mb-2">Nothing to unpick later</h3>
               <p className="text-muted text-[15px]">
-                Someone clicks around in a console. The dashboard catches it and
-                shows you what changed between Terraform state and reality.
+                No console-clicked resources, no half-managed stack. Everything
+                we build exists as code from the first apply, so the repo is the
+                whole picture.
               </p>
             </div>
           </div>
@@ -431,17 +436,33 @@ export default function Home() {
           </div>
         </section>
 
-        <div className="bg-surface border border-border rounded-2xl px-8 py-14 text-center my-18">
-          <h2 className="text-3xl font-bold mb-3">
-            The assessment is free. The report is yours to keep.
-          </h2>
-          <p className="text-muted mb-7 max-w-[560px] mx-auto">
-            Connect a read-only token, get back a cost report with projections at
-            10x and a fixed-fee migration quote. Takes minutes. No obligation.
-          </p>
-          <a className={`${BTN} bg-accent text-bg`} href={DASHBOARD_URL}>
-            Start your free assessment
-          </a>
+        <div
+          id="assessment"
+          className="bg-surface border border-border rounded-2xl px-8 py-14 my-18"
+        >
+          <div className="mx-auto max-w-[620px]">
+            <h2 className="text-3xl font-bold mb-3 text-center">
+              The assessment is free. The report is yours to keep.
+            </h2>
+            <p className="text-muted mb-7 text-center">
+              Tell us where you run today. We reply with what your stack costs,
+              where it could run instead, and a fixed fee to move it. No
+              obligation, and no account to create first.
+            </p>
+            {LEAD_FORM_ENABLED ? (
+              <AssessmentForm />
+            ) : (
+              <div className="text-center">
+                <a className={`${BTN} bg-accent text-bg`} href={DASHBOARD_URL}>
+                  Start your free assessment
+                </a>
+              </div>
+            )}
+            <p className="mt-6 text-center text-[13px] text-faint">
+              Already a customer?{" "}
+              <a href={DASHBOARD_URL}>Sign in to the dashboard</a>.
+            </p>
+          </div>
         </div>
       </main>
 

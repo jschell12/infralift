@@ -3,9 +3,12 @@
 import { use, useEffect, useState } from "react";
 import {
   PROVIDER_LABELS,
+  type AssessmentCostProjectionRow,
+  type AssessmentRecommendation,
   type AssessmentReport,
   type FindingCategory,
   type FindingSeverity,
+  type PriceConfidence,
 } from "@infralift/shared";
 import { api, formatCents } from "../../../lib/api";
 import {
@@ -21,36 +24,18 @@ import {
   type Tone,
 } from "../../../components/ui";
 
-/* TODO(api): the three blocks below (cost projection, recommendation, quote)
- * are not in AssessmentReport yet — see tailwind_conversion/APPLY.md for the
- * suggested additions to packages/shared/src/index.ts. Until the API returns
- * them, each section is skipped rather than filled with placeholder numbers. */
-
-type PriceConfidence =
-  | "invoiced"
-  | "corroborated"
-  | "advisor"
-  | "anecdote"
-  | "unverified";
-
-interface CostProjectionRow {
-  stack: string;
-  note: string;
-  listCents: number | null;
-  year1Cents: number | null;
-  steadyStateCents: number | null;
-  confidence: PriceConfidence;
-  sourceDate?: string;
-  isCurrent?: boolean;
-}
+/* The cost projection and recommendation now come from the API, derived from
+ * the same options engine the migration options page uses, so the two pages
+ * cannot disagree.
+ *
+ * The quote does not. Nothing generates a fixed fee: it is set by a human and
+ * lives on the Migration record. This section stays skipped rather than
+ * inventing a number, which is the same reason the other two were skipped
+ * before they were wired up. */
 
 interface ReportExtras {
-  costProjection?: CostProjectionRow[];
-  recommendation?: {
-    target: string;
-    summary: string;
-    rows: { label: string; value: string }[];
-  };
+  costProjection?: AssessmentCostProjectionRow[];
+  recommendation?: AssessmentRecommendation;
   quote?: {
     fixedFeeCents: number;
     paybackMonths: number | null;

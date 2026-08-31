@@ -68,6 +68,6 @@ The exceptions are large object stores and Firestore exports. For those: **AWS, 
 
 - The repo, Terraform state, and runbook are yours. They were in your org the whole time.
 - 30 days of post-cutover support for anything that surfaces.
-- The dashboard keeps working if you want it ($99/mo, optional, cancel anytime): drift detection, IaC standards enforcement, workspace management, and cost tracking.
+- The dashboard keeps working if you want it ($99/mo, optional, cancel anytime): your inventory, cost tracking, and assessments you can re-run as the stack changes.
 
 Fire us anytime. The code, the state, and the docs stay with you. No lock-in by design.
