@@ -5,13 +5,20 @@ import { prisma } from "../lib/db.js";
 
 export const migrationsRouter = Router();
 
+// The real sequence, mirroring docs/migration-process.md. Edge fronting comes
+// before everything: once the domain fronts Cloudflare, cutover is an origin
+// swap in seconds and rollback is the same swap in reverse.
 const DEFAULT_PHASES = [
-  { key: "assessment", title: "Assessment & migration report" },
-  { key: "repo_setup", title: "Terraform repo + TF Cloud workspaces" },
+  { key: "assessment", title: "Assessment & fixed-fee quote" },
+  { key: "edge_fronting", title: "Front DNS with Cloudflare (rollback foundation)" },
+  { key: "repo_setup", title: "Terraform repo + TF Cloud workspaces in your org" },
   { key: "parallel_build", title: "Build target environment in parallel" },
-  { key: "data_migration", title: "Data & DNS migration" },
-  { key: "cutover", title: "Cutover & verification" },
-  { key: "handoff", title: "Handoff — repo ownership + platform onboarding" },
+  { key: "secrets_migration", title: "Secrets moved into stores you own" },
+  { key: "data_sync", title: "Bulk copy + continuous sync until lag zero" },
+  { key: "verification", title: "Checksums, traffic replay, cutover rehearsal" },
+  { key: "cutover", title: "Edge origin swap (seconds, reversible)" },
+  { key: "rollback_window", title: "Old stack warm as instant rollback (7-14 days)" },
+  { key: "handoff", title: "Teardown checklist, repo ownership, 30-day support" },
 ];
 
 const createSchema = z.object({

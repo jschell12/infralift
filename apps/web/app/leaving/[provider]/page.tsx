@@ -130,10 +130,17 @@ export default async function LeavingPage({
             <p className="text-muted text-[15px] max-w-[640px] mb-4">
               infralift builds the new environment in parallel with your live
               site, delivers everything as Terraform you own, then cuts over
-              DNS with instant rollback. No downtime. The assessment is free
-              and reads your account with a scoped token; the migration is a
-              fixed fee quoted up front, so the price in the report is the
-              price you pay.
+              at the edge with instant rollback. No downtime. The assessment
+              is free and reads your account with a scoped token; the
+              migration is a fixed fee quoted up front, so the price in the
+              report is the price you pay.
+            </p>
+            <p className="text-muted text-sm max-w-[640px] mb-5">
+              How we handle secrets, data sync, and the cutover itself:{" "}
+              <a href="/docs/migration-process" className="text-text underline">
+                the migration process
+              </a>
+              .
             </p>
             <a href={DASHBOARD_URL} className={BTN}>
               Run the free assessment
