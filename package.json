@@ -9,7 +9,7 @@
     "lint": "pnpm --filter './apps/*' lint",
     "db:generate": "pnpm --filter @infralift/api db:generate",
     "db:migrate": "pnpm --filter @infralift/api db:migrate",
-    "test": "pnpm --filter @infralift/api test"
+    "test": "pnpm --filter @infralift/api --filter @infralift/web test"
   },
   "engines": {
     "node": ">=20"
