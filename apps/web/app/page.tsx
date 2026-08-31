@@ -1,5 +1,4 @@
-const DASHBOARD_URL =
-  process.env.NEXT_PUBLIC_DASHBOARD_URL ?? "https://dashboard.infralift.dev";
+import { DASHBOARD_URL } from "../lib/links";
 
 const CONTAINER = "max-w-[1080px] mx-auto px-6";
 const CARD = "bg-surface border border-border rounded-xl p-6";
@@ -136,7 +135,7 @@ const SCENARIOS: {
 const STEPS = [
   {
     title: "Connect read-only",
-    body: "Create a read-only token for Vercel, Heroku, Netlify, Render, Railway, Fly.io, DigitalOcean, or Cloudflare. Or connect an AWS/GCP/Azure service account. Credentials are encrypted at rest and never used to change anything.",
+    body: "Create a read-only token for Vercel, Heroku, Netlify, Render, Railway, Fly.io, DigitalOcean, or Cloudflare. Or connect an AWS/GCP/Azure service account. Credentials are encrypted at rest, and the provider credential is never used to change anything.",
   },
   {
     title: "Assessment report",
@@ -357,8 +356,9 @@ export default function Home() {
         <section className={SECTION} id="how">
           <h2 className={H2}>How it works</h2>
           <p className={LEAD}>
-            You give us a read-only token. We never get write access to your
-            current provider.
+            Your current provider only ever hands us a read-only token. The
+            one credential that can write is a GitHub token, and all it writes
+            is the Terraform we deliver to you.
           </p>
           <div className="grid gap-5 grid-cols-1 md:grid-cols-4">
             {STEPS.map((s, i) => (

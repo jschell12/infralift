@@ -1,10 +1,13 @@
 # Cost scenarios: Vercel and Heroku migrations
 
-Source material for marketing site updates. Each scenario shows a realistic
-current-state bill, a migration target, and the money saved. Numbers use
-published 2026 pricing (Vercel Pro $20/seat, Fast Data Transfer $0.15/GB,
-edge requests $2/M; Heroku Standard-1X $25, Standard-2X $50, Performance-M
-$250, Postgres Standard-0 $50) and our own E2E reference deployments.
+Eight realistic stacks, what each one costs today, and what the same workload
+costs after migrating. Numbers use published 2026 pricing (Vercel Pro $20/seat,
+Fast Data Transfer $0.15/GB, edge requests $2/M; Heroku Standard-1X $25,
+Standard-2X $50, Performance-M $250, Postgres Standard-0 $50) and our own
+reference deployments.
+
+Two of these eight are not worth migrating on cost alone. They are here
+because the honest answer matters more than the pitch.
 
 Payback is computed against infralift's fixed migration fee (from $3,000).
 
@@ -23,9 +26,10 @@ Payback is computed against infralift's fixed migration fee (from $3,000).
 
 **Savings:** $15–34/mo ($180–408/yr, up to 87%).
 
-**Verdict:** Not an infralift customer — savings don't justify a fixed fee.
-Useful as the "before" anchor: this is where everyone starts, and where the
-platform pricing feels fine. The pain begins at the next tier.
+**Verdict:** Don't hire us for this. The savings are real in percentage
+terms and irrelevant in dollars — a fixed migration fee would take years to
+pay back. This is where platform pricing still feels fine. The pain starts at
+the next tier.
 
 ---
 
@@ -69,9 +73,9 @@ product, ISR + edge middleware.
 
 **Payback on $3,000 fee:** under 5 months.
 
-This is the core infralift customer: the bill crossed $500/mo, finance is
-asking questions, and the team knows egress pricing is the culprit but
-nobody has two free weeks to move it.
+This is the shape most of our customers arrive in: the bill crossed
+$500/mo, finance started asking about it, and the team already knows egress
+pricing is the culprit — but nobody has two free weeks to move it.
 
 ---
 
@@ -117,9 +121,9 @@ background jobs, Postgres.
 
 **Savings:** ~$123/mo (~$1,480/yr, 82%).
 
-**Payback on $3,000 fee:** ~24 months at this size — infralift's smaller
-fixed-scope tier or assessment-only offer fits better here. But this
-customer is one growth spurt away from Scenario 6.
+**Payback on $3,000 fee:** ~24 months at this size, which is a hard sell on
+cost alone. Worth doing if you are close to the next tier — this stack is one
+growth spurt away from Scenario 6.
 
 ---
 
@@ -143,8 +147,8 @@ response times forced the jump to Performance.
 
 Heroku's pricing is a step function: the jump from Standard-2X ($50) to
 Performance-M ($250) is 5x for roughly 2.5x the compute. Teams hit this
-wall and pay it because migrating feels riskier than the bill. That's the
-pitch: we take the migration risk off your plate for a fixed fee.
+wall and pay it because migrating feels riskier than the bill. Taking that
+risk off your plate for a fixed fee is the whole reason infralift exists.
 
 ---
 
@@ -163,9 +167,9 @@ moderate traffic, wants zero server management (not interested in a VPS).
 
 **Savings:** ~$106/mo (~$1,270/yr, 82%).
 
-**Payback on $3,000 fee:** ~28 months — or immediate under a smaller
-fixed-scope tier. The stronger sell: Heroku is in maintenance mode
-(Salesforce), while the target stack is actively developed.
+**Payback on $3,000 fee:** ~28 months, so cost alone does not justify it. The
+stronger reason here is platform risk: Heroku is in maintenance mode under
+Salesforce, while the target stack is actively developed.
 
 ---
 
@@ -188,7 +192,7 @@ Heroku, two bills, two dashboards, 6 engineers.
 
 ---
 
-## Summary table (for pricing page / calculator)
+## All eight, side by side
 
 | Scenario | Current | After | Monthly savings | Annual savings | Payback ($3k fee) |
 |---|---|---|---|---|---|
@@ -201,7 +205,7 @@ Heroku, two bills, two dashboards, 6 engineers.
 | 7. Heroku to Cloudflare | $130 | $24 | $106 | $1,270 | 28 mo |
 | 8. Split stack (both) | $325 | $39 | $286 | $3,430 | 10.5 mo |
 
-## Marketing angles to extract
+## What the numbers have in common
 
 - **Egress is the villain (Vercel):** $0.15/GB vs $0 on Cloudflare. Every
   image-heavy or content site overpays by construction.
@@ -211,9 +215,6 @@ Heroku, two bills, two dashboards, 6 engineers.
   teams pay it because migration feels risky.
 - **Maintenance-mode platform (Heroku):** paying premium prices for a
   product Salesforce stopped investing in.
-- **Sweat thresholds:** bootstrapped teams flinch at $100–200/mo; funded
-  teams at $500–1,000/mo. Scenarios 3, 4, 6, and 8 sit past those lines —
-  they are the target customers.
 - **Fixed fee vs open-ended DIY:** every scenario's alternative is "an
   engineer spends 2–4 weeks migrating" — at loaded cost that's $10k–30k of
   payroll plus risk. From-$3,000 fixed undercuts DIY even before savings.

@@ -1,12 +1,14 @@
 import Link from "next/link";
 
-const DASHBOARD_URL =
-  process.env.NEXT_PUBLIC_DASHBOARD_URL ?? "http://localhost:3001";
+import { DASHBOARD_URL } from "../../lib/links";
 
+// Every .md under docs/ is rendered and publicly reachable (see lib/docs.ts),
+// so anything not listed here is published but unlinked rather than private.
 const NAV = [
   { href: "/docs", label: "Overview" },
   { href: "/docs/connect-providers", label: "Granting access" },
   { href: "/docs/assessment-report", label: "Assessment report" },
+  { href: "/docs/cost-scenarios", label: "Cost scenarios" },
   { href: "/docs/migration-process", label: "Migration process" },
   { href: "/docs/security", label: "Security model" },
 ];

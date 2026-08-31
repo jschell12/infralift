@@ -59,6 +59,20 @@ AWS access works via a cross-account IAM role, not a pasted key:
 
 ---
 
+## GitHub (destination, not a source)
+
+This is the only connection that can write anything, and it writes only to the
+repository you nominate. It is how generated Terraform reaches you.
+
+1. Go to **github.com/settings/tokens** and create a fine-grained personal access token.
+2. Grant **Contents: Read and write**.
+3. Scope it to the repository that will hold your infrastructure code. If you want infralift to create that repository, the token needs permission to create repositories for the owner instead; otherwise create the repo yourself first and scope the token to it.
+4. Paste the token in the dashboard.
+
+**What we write:** generated `.tf` files, on the branch you choose. Nothing else. Your source provider credential remains read-only and the GitHub token has no access to it.
+
+---
+
 ## Verification
 
 When you click **Connect & verify**, we make a single read call to confirm the credential works and is scoped as expected. The connection shows as `valid`, `invalid`, or `unverified` in the dashboard. Assessments only run against `valid` connections.

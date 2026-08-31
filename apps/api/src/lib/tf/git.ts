@@ -153,8 +153,17 @@ export async function ensureRepo(opts: {
   }
   if (!created.ok) {
     const text = await created.text();
+    // A fine-grained PAT scoped to selected repositories can commit into a
+    // repo that exists but cannot bring a new one into being, which is the
+    // usual reason to land here. Say what to do about it, because the raw
+    // GitHub body ("Resource not accessible by personal access token") does
+    // not tell anyone which permission is missing.
+    const hint =
+      created.status === 403 || created.status === 404
+        ? ` — the token cannot create repositories. Either create ${opts.repo} on GitHub first and re-run, or use a token with permission to create repositories for ${owner}.`
+        : "";
     throw new GitCommitError(
-      `GitHub repo creation failed (${created.status}) for ${opts.repo}: ${text.slice(0, 200)}`
+      `GitHub repo creation failed (${created.status}) for ${opts.repo}${hint} [${text.slice(0, 160)}]`
     );
   }
 
