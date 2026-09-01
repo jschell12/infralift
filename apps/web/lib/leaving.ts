@@ -47,7 +47,7 @@ export const LEAVING_PAGES: LeavingPage[] = [
     billTotal: "$2,760/mo",
     billNote: "Modeled from account shape and published pricing.",
     bill: [
-      { label: "Bandwidth overage (~10TB beyond included 1TB)", perMonth: "$1,350" },
+      { label: "Bandwidth overage (9TB beyond the included 1TB, $0.15/GB)", perMonth: "$1,350" },
       { label: "Edge config reads + blob storage", perMonth: "$460" },
       { label: "Pro seats ×20", perMonth: "$400" },
       { label: "Function invocations (~50M/mo)", perMonth: "$300" },
