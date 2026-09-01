@@ -6,12 +6,14 @@ RUN corepack enable pnpm
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/collectors/package.json packages/collectors/
 COPY apps/api/package.json apps/api/
 COPY apps/api/prisma apps/api/prisma/
 
 RUN pnpm install --frozen-lockfile
 
 COPY packages/shared packages/shared/
+COPY packages/collectors packages/collectors/
 COPY apps/api/src apps/api/src/
 COPY apps/api/tsconfig.json apps/api/
 COPY tsconfig.base.json ./
