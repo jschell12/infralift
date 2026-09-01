@@ -11,6 +11,10 @@ datasource db {
 model Org {
   id          String   @id @default(cuid())
   name        String
+  // Cleared for delivery: full generated Terraform rather than a sample.
+  // Set by an admin today; a payment webhook can set it later without
+  // touching the call sites. See migration 0010.
+  codegenUnlocked Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

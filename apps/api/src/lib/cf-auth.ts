@@ -137,12 +137,19 @@ function errorCode(err: unknown): string {
   return "unknown";
 }
 
+/** Whether an email is an admin. Exported as a predicate as well as the
+ * middleware below, because some routes vary their response for admins rather
+ * than refusing them outright. */
+export function isAdmin(email: string | undefined | null): boolean {
+  return !!email && ADMIN_EMAILS.has(email.toLowerCase());
+}
+
 /**
  * Middleware: require the authenticated user to be an admin.
  * Must be used after cfAuth.
  */
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (!req.user || !ADMIN_EMAILS.has(req.user.email.toLowerCase())) {
+  if (!isAdmin(req.user?.email)) {
     return res.status(403).json({ error: "Admin access required" });
   }
   next();

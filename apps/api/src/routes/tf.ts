@@ -11,7 +11,8 @@ import {
 } from "../lib/tf/render.js";
 import { getTfcClient } from "../lib/tf/tfc-client.js";
 import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
-import { requireAdmin } from "../lib/cf-auth.js";
+import { requireAdmin, isAdmin } from "../lib/cf-auth.js";
+import { toCodegenSample } from "../lib/tf/sample.js";
 
 export const tfRouter = Router();
 
@@ -287,6 +288,87 @@ const codegenSchema = z.object({
   migrationTarget: z.enum(["cloudflare", "hetzner"]).nullable().default(null),
 });
 
+// ---------------------------------------------------------------------------
+// Codegen gate
+// ---------------------------------------------------------------------------
+//
+// The assessment, the cost comparison and the ranked targets are free and
+// should stay free. Applyable Terraform is the deliverable, and until the
+// unlock below it was returned to any signed-in user. Owner-only Access made
+// that harmless; self-serve signup did not.
+
+/** Full output for admins and for orgs an admin has cleared. */
+async function codegenUnlocked(req: {
+  user?: { orgId: string; email: string };
+}): Promise<boolean> {
+  if (isAdmin(req.user?.email)) return true;
+  const org = await prisma.org.findUnique({
+    where: { id: req.user!.orgId },
+    select: { codegenUnlocked: true },
+  });
+  return org?.codegenUnlocked ?? false;
+}
+
+// Locked callers are metered too. Codegen is the most expensive thing an
+// anonymous signup can make us do, and /codegen/preview will render HCL from
+// an inventory typed by hand, so without this it is a free codegen service
+// for anyone who can complete a Google login. In-process like the intake
+// limiter: a second replica means a second bucket, which is an acceptable
+// ceiling for a CPU-bound render.
+const CODEGEN_WINDOW_MS = 60 * 60 * 1000;
+const CODEGEN_MAX_PER_HOUR = 20;
+const codegenHits = new Map<string, number[]>();
+
+function codegenRateLimited(orgId: string, now = Date.now()): boolean {
+  const recent = (codegenHits.get(orgId) ?? []).filter(
+    (t) => now - t < CODEGEN_WINDOW_MS
+  );
+  if (recent.length >= CODEGEN_MAX_PER_HOUR) {
+    codegenHits.set(orgId, recent);
+    return true;
+  }
+  recent.push(now);
+  codegenHits.set(orgId, recent);
+  if (codegenHits.size > 5000) {
+    for (const [k, times] of codegenHits) {
+      const live = times.filter((t) => now - t < CODEGEN_WINDOW_MS);
+      if (live.length === 0) codegenHits.delete(k);
+      else codegenHits.set(k, live);
+    }
+  }
+  return false;
+}
+
+/** Exported for tests. */
+export function resetCodegenRateLimit(): void {
+  codegenHits.clear();
+}
+
+// Flip the unlock. Admin-only, and deliberately a route rather than a manual
+// UPDATE: unlocking is the moment a prospect becomes a customer, so it should
+// be something the admin app can do and something that leaves a log line,
+// not something typed into psql. A payment webhook can call the same path.
+const unlockSchema = z.object({
+  orgId: z.string().min(1),
+  unlocked: z.boolean(),
+});
+
+tfRouter.post("/unlock", requireAdmin, async (req, res) => {
+  const parsed = unlockSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const org = await prisma.org.update({
+    where: { id: parsed.data.orgId },
+    data: { codegenUnlocked: parsed.data.unlocked },
+    select: { id: true, name: true, codegenUnlocked: true },
+  });
+  console.log(
+    `codegen ${org.codegenUnlocked ? "unlocked" : "locked"} for org ${org.id} (${org.name}) by ${req.user!.email}`
+  );
+  res.json(org);
+});
+
 tfRouter.post("/codegen", async (req, res) => {
   const parsed = codegenSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -305,6 +387,11 @@ tfRouter.post("/codegen", async (req, res) => {
   if (assessment.status !== "completed") {
     return res.status(400).json({ error: "assessment not completed" });
   }
+  if (codegenRateLimited(orgId)) {
+    return res
+      .status(429)
+      .json({ error: "Too many codegen requests. Try again later." });
+  }
 
   const inventory: ResourceInventoryItem[] = assessment.inventory.map((i) => ({
     provider: i.provider as Provider,
@@ -322,13 +409,18 @@ tfRouter.post("/codegen", async (req, res) => {
     ...opts,
   } as CodegenOptions);
 
-  res.json({ files, resourceCount: inventory.length });
+  if (await codegenUnlocked(req)) {
+    return res.json({ locked: false, files, resourceCount: inventory.length });
+  }
+  res.json({ ...toCodegenSample(files), resourceCount: inventory.length });
 });
 
 // Preview: generate HCL without an assessment (from provided inventory)
 tfRouter.post("/codegen/preview", async (req, res) => {
   const schema = z.object({
     provider: z.string().min(1),
+    // Bounded: this array is caller-supplied and every entry is rendered,
+    // so an unbounded one is a CPU amplifier behind a free signup.
     inventory: z.array(z.object({
       provider: z.string(),
       type: z.string(),
@@ -337,13 +429,18 @@ tfRouter.post("/codegen/preview", async (req, res) => {
       region: z.string().optional(),
       monthlyCostCents: z.number().optional(),
       metadata: z.record(z.unknown()).optional(),
-    })),
+    })).max(1000),
     backend: z.enum(["tfc", "s3", "local"]).default("local"),
     migrationTarget: z.enum(["cloudflare", "hetzner"]).nullable().default(null),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  if (codegenRateLimited(req.user!.orgId)) {
+    return res
+      .status(429)
+      .json({ error: "Too many codegen requests. Try again later." });
   }
 
   const files = generateHcl({
@@ -353,7 +450,20 @@ tfRouter.post("/codegen/preview", async (req, res) => {
     migrationTarget: parsed.data.migrationTarget,
   });
 
-  res.json({ files, resourceCount: parsed.data.inventory.length });
+  // Gated identically to /codegen. This route takes an inventory rather than
+  // an assessment id, so leaving it open would have made the gate above
+  // decorative: paste your own inventory, get the same files.
+  if (await codegenUnlocked(req)) {
+    return res.json({
+      locked: false,
+      files,
+      resourceCount: parsed.data.inventory.length,
+    });
+  }
+  res.json({
+    ...toCodegenSample(files),
+    resourceCount: parsed.data.inventory.length,
+  });
 });
 
 // -- approval: assessment to a real repo and workspace ------------------------
