@@ -1,0 +1,271 @@
+{
+ "/apps": [
+  {
+   "acm": false,
+   "archived_at": null,
+   "buildpack_provided_description": null,
+   "build_stack": {
+    "id": "74cfe988-7527-4ca9-9667-77bb9f3029cf",
+    "name": "heroku-24"
+   },
+   "created_at": "2026-08-30T13:51:59Z",
+   "id": "2a8ffb04-9226-47a2-a939-a4fc6f3c16cc",
+   "generation": {
+    "id": "858b945f-f189-4b62-af5d-d8095ce90564",
+    "name": "cedar"
+   },
+   "git_url": "https://git.heroku.com/infralift-test-data.git",
+   "maintenance": false,
+   "name": "infralift-test-data",
+   "region": {
+    "id": "59accabd-516d-4f0e-83e6-6e3757701145",
+    "name": "us"
+   },
+   "organization": null,
+   "team": null,
+   "space": null,
+   "internal_routing": null,
+   "released_at": "2026-08-30T14:00:36Z",
+   "repo_size": null,
+   "slug_size": null,
+   "stack": {
+    "id": "74cfe988-7527-4ca9-9667-77bb9f3029cf",
+    "name": "heroku-24"
+   },
+   "updated_at": "2026-08-30T14:00:36Z",
+   "web_url": "https://infralift-test-data-f8f498b8d6c9.herokuapp.com/"
+  },
+  {
+   "acm": false,
+   "archived_at": null,
+   "buildpack_provided_description": "Node.js",
+   "build_stack": {
+    "id": "74cfe988-7527-4ca9-9667-77bb9f3029cf",
+    "name": "heroku-24"
+   },
+   "created_at": "2026-08-30T13:51:47Z",
+   "id": "0f9d5d16-edd7-40fb-967e-03e71123ff2e",
+   "generation": {
+    "id": "858b945f-f189-4b62-af5d-d8095ce90564",
+    "name": "cedar"
+   },
+   "git_url": "https://git.heroku.com/infralift-test-web.git",
+   "maintenance": false,
+   "name": "infralift-test-web",
+   "region": {
+    "id": "59accabd-516d-4f0e-83e6-6e3757701145",
+    "name": "us"
+   },
+   "organization": null,
+   "team": null,
+   "space": null,
+   "internal_routing": null,
+   "released_at": "2026-08-30T14:03:36Z",
+   "repo_size": null,
+   "slug_size": 57198184,
+   "stack": {
+    "id": "74cfe988-7527-4ca9-9667-77bb9f3029cf",
+    "name": "heroku-24"
+   },
+   "updated_at": "2026-08-30T14:03:36Z",
+   "web_url": "https://infralift-test-web-03d8885a98b7.herokuapp.com/"
+  },
+  {
+   "acm": false,
+   "archived_at": null,
+   "buildpack_provided_description": "Node.js",
+   "build_stack": {
+    "id": "74cfe988-7527-4ca9-9667-77bb9f3029cf",
+    "name": "heroku-24"
+   },
+   "created_at": "2026-08-30T13:57:55Z",
+   "id": "dd6c413b-acfd-4153-8203-0308f9608d25",
+   "generation": {
+    "id": "858b945f-f189-4b62-af5d-d8095ce90564",
+    "name": "cedar"
+   },
+   "git_url": "https://git.heroku.com/infralift-test-worker.git",
+   "maintenance": false,
+   "name": "infralift-test-worker",
+   "region": {
+    "id": "59accabd-516d-4f0e-83e6-6e3757701145",
+    "name": "us"
+   },
+   "organization": null,
+   "team": null,
+   "space": null,
+   "internal_routing": null,
+   "released_at": "2026-08-30T14:04:07Z",
+   "repo_size": null,
+   "slug_size": 57198183,
+   "stack": {
+    "id": "74cfe988-7527-4ca9-9667-77bb9f3029cf",
+    "name": "heroku-24"
+   },
+   "updated_at": "2026-08-30T14:04:07Z",
+   "web_url": "https://infralift-test-worker-8befae4a930f.herokuapp.com/"
+  }
+ ],
+ "/apps/2a8ffb04-9226-47a2-a939-a4fc6f3c16cc/formation": [],
+ "/apps/2a8ffb04-9226-47a2-a939-a4fc6f3c16cc/addons": [
+  {
+   "actions": [
+    {
+     "id": "15395f86-4856-4aba-a1f9-3260b4e1f7c3",
+     "label": "Create Dataclip",
+     "action": null,
+     "url": "http://dataclips.heroku.com/clips/new?heroku_resource_id=:resource_id&heroku_id=:resource_uuid",
+     "requires_owner": null
+    },
+    {
+     "id": "1d1b9b8a-6fe2-4902-8258-45285d8dabcd",
+     "label": "Upgrade instructions",
+     "action": null,
+     "url": "https://devcenter.heroku.com/articles/upgrading-heroku-postgres-databases",
+     "requires_owner": null
+    }
+   ],
+   "app": {
+    "id": "2a8ffb04-9226-47a2-a939-a4fc6f3c16cc",
+    "name": "infralift-test-data"
+   },
+   "config_vars": [
+    "DATABASE_URL"
+   ],
+   "created_at": "2026-08-30T14:00:04Z",
+   "id": "bb9884f2-555c-4cc2-bc32-1d603b7d8b2d",
+   "name": "postgresql-adjacent-35277",
+   "addon_service": {
+    "id": "6c67493d-8fc2-4cd4-9161-4f1ec11cbe69",
+    "name": "heroku-postgresql"
+   },
+   "plan": {
+    "id": "508e7843-3a7e-4423-9c46-e7e9de799824",
+    "name": "heroku-postgresql:essential-0"
+   },
+   "billing_entity": {
+    "id": "2a8ffb04-9226-47a2-a939-a4fc6f3c16cc",
+    "name": "infralift-test-data",
+    "type": "app"
+   },
+   "provider_id": "bb9884f2-555c-4cc2-bc32-1d603b7d8b2d",
+   "state": "provisioned",
+   "updated_at": "2026-08-30T14:00:08Z",
+   "web_url": "https://addons-sso.heroku.com/apps/2a8ffb04-9226-47a2-a939-a4fc6f3c16cc/addons/bb9884f2-555c-4cc2-bc32-1d603b7d8b2d",
+   "billed_price": {
+    "cents": 500,
+    "contract": false,
+    "unit": "month"
+   }
+  },
+  {
+   "actions": [],
+   "app": {
+    "id": "2a8ffb04-9226-47a2-a939-a4fc6f3c16cc",
+    "name": "infralift-test-data"
+   },
+   "config_vars": [
+    "HEROKU_REDIS_CYAN_URL"
+   ],
+   "created_at": "2026-08-30T13:55:18Z",
+   "id": "fa2dff36-3e65-4509-8537-0693e037f1f8",
+   "name": "redis-colorful-13167",
+   "addon_service": {
+    "id": "5bbf672c-07f6-49c2-9c16-f1dcb96784db",
+    "name": "heroku-redis"
+   },
+   "plan": {
+    "id": "26e7bd37-e7a2-4cab-8d67-767af864d1a1",
+    "name": "heroku-redis:mini"
+   },
+   "billing_entity": {
+    "id": "2a8ffb04-9226-47a2-a939-a4fc6f3c16cc",
+    "name": "infralift-test-data",
+    "type": "app"
+   },
+   "provider_id": "fa2dff36-3e65-4509-8537-0693e037f1f8",
+   "state": "provisioned",
+   "updated_at": "2026-08-30T13:57:44Z",
+   "web_url": "https://addons-sso.heroku.com/apps/2a8ffb04-9226-47a2-a939-a4fc6f3c16cc/addons/fa2dff36-3e65-4509-8537-0693e037f1f8",
+   "billed_price": {
+    "cents": 300,
+    "contract": false,
+    "unit": "month"
+   }
+  }
+ ],
+ "/apps/0f9d5d16-edd7-40fb-967e-03e71123ff2e/formation": [
+  {
+   "app": {
+    "id": "0f9d5d16-edd7-40fb-967e-03e71123ff2e",
+    "name": "infralift-test-web"
+   },
+   "command": "node index.js",
+   "created_at": "2026-08-30T13:57:11Z",
+   "dyno_size": {
+    "id": "5c93cdee-2bbd-4fc0-9f04-d369d1dbb962",
+    "name": "Basic"
+   },
+   "id": "8d7da2b6-4054-4a9f-b386-281c8aa48e38",
+   "type": "web",
+   "quantity": 1,
+   "size": "Basic",
+   "updated_at": "2026-08-30T13:57:11Z"
+  },
+  {
+   "app": {
+    "id": "0f9d5d16-edd7-40fb-967e-03e71123ff2e",
+    "name": "infralift-test-web"
+   },
+   "command": "node worker.js",
+   "created_at": "2026-08-30T13:57:11Z",
+   "dyno_size": {
+    "id": "5c93cdee-2bbd-4fc0-9f04-d369d1dbb962",
+    "name": "Basic"
+   },
+   "id": "3c70c827-a1c2-4303-bd1f-215b34fab9ea",
+   "type": "worker",
+   "quantity": 0,
+   "size": "Basic",
+   "updated_at": "2026-08-30T13:57:11Z"
+  }
+ ],
+ "/apps/0f9d5d16-edd7-40fb-967e-03e71123ff2e/addons": [],
+ "/apps/dd6c413b-acfd-4153-8203-0308f9608d25/formation": [
+  {
+   "app": {
+    "id": "dd6c413b-acfd-4153-8203-0308f9608d25",
+    "name": "infralift-test-worker"
+   },
+   "command": "node worker.js",
+   "created_at": "2026-08-30T13:58:40Z",
+   "dyno_size": {
+    "id": "5c93cdee-2bbd-4fc0-9f04-d369d1dbb962",
+    "name": "Basic"
+   },
+   "id": "559a3c79-2b44-4485-867a-252db96ab005",
+   "type": "worker",
+   "quantity": 1,
+   "size": "Basic",
+   "updated_at": "2026-08-30T14:00:12Z"
+  },
+  {
+   "app": {
+    "id": "dd6c413b-acfd-4153-8203-0308f9608d25",
+    "name": "infralift-test-worker"
+   },
+   "command": "node index.js",
+   "created_at": "2026-08-30T13:58:40Z",
+   "dyno_size": {
+    "id": "5c93cdee-2bbd-4fc0-9f04-d369d1dbb962",
+    "name": "Basic"
+   },
+   "id": "7f4471c2-c0b0-405f-9874-b3af467145a5",
+   "type": "web",
+   "quantity": 0,
+   "size": "Basic",
+   "updated_at": "2026-08-30T14:00:12Z"
+  }
+ ],
+ "/apps/dd6c413b-acfd-4153-8203-0308f9608d25/addons": []
+}

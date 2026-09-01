@@ -50,6 +50,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.120.0
         version: 0.120.0(zod@3.25.76)
+      '@infralift/collectors':
+        specifier: workspace:*
+        version: link:../../packages/collectors
       '@infralift/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -170,6 +173,8 @@ importers:
       wrangler:
         specifier: ^4.127.1
         version: 4.127.1
+
+  packages/collectors: {}
 
   packages/shared:
     devDependencies:

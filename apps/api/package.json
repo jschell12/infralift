@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
+    "@infralift/collectors": "workspace:*",
     "@infralift/shared": "workspace:*",
     "@prisma/client": "^6.2.0",
     "ajv": "^8.20.0",

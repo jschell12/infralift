@@ -1,0 +1,276 @@
+{
+ "/v9/projects": {
+  "projects": [
+   {
+    "accountId": "team_D5qRs1kL7UceOofmdxvUAay2",
+    "alias": [],
+    "autoExposeSystemEnvs": false,
+    "autoAssignCustomDomains": true,
+    "buildCommand": "npm run build",
+    "commandForIgnoringBuildStep": null,
+    "customerSupportCodeVisibility": false,
+    "createdAt": 1788098333461,
+    "deploymentExpiration": {
+     "expirationDays": 30,
+     "expirationDaysProduction": 30,
+     "expirationDaysCanceled": 30,
+     "expirationDaysErrored": 30,
+     "deploymentsToKeep": 10
+    },
+    "devCommand": null,
+    "directoryListing": false,
+    "env": [
+     {
+      "type": "encrypted",
+      "value": "SENTINEL_ENV_VALUE_MUST_NOT_APPEAR_IN_SNAPSHOT",
+      "target": [
+       "production"
+      ],
+      "configurationId": null,
+      "comment": "",
+      "id": "nWKEHBuqpZVGS4Gd",
+      "key": "CRON_SCHEDULES",
+      "createdAt": 1788098334488,
+      "updatedAt": 1788098334488,
+      "createdBy": "oBOoclzTeLZVL3yPdd8Svyef",
+      "updatedBy": null
+     },
+     {
+      "type": "encrypted",
+      "value": "SENTINEL_ENV_VALUE_MUST_NOT_APPEAR_IN_SNAPSHOT",
+      "target": [
+       "production"
+      ],
+      "configurationId": null,
+      "comment": "",
+      "id": "xnbJFzS1iTc2ZDzk",
+      "key": "CRON_ENABLED",
+      "createdAt": 1788098334510,
+      "updatedAt": 1788098334510,
+      "createdBy": "oBOoclzTeLZVL3yPdd8Svyef",
+      "updatedBy": null
+     },
+     {
+      "type": "encrypted",
+      "value": "SENTINEL_ENV_VALUE_MUST_NOT_APPEAR_IN_SNAPSHOT",
+      "target": [
+       "development",
+       "preview",
+       "production"
+      ],
+      "configurationId": null,
+      "comment": "",
+      "id": "5z9IOIbPLbuiN1TC",
+      "key": "INFRALIFT_TIER",
+      "createdAt": 1788098334540,
+      "updatedAt": 1788098334540,
+      "createdBy": "oBOoclzTeLZVL3yPdd8Svyef",
+      "updatedBy": null
+     }
+    ],
+    "framework": "nextjs",
+    "gitForkProtection": true,
+    "gitLFS": false,
+    "id": "prj_IE6W3rCmK82RLx4pObRJ5e9WSFSZ",
+    "installCommand": null,
+    "lastRollbackTarget": null,
+    "lastAliasRequest": null,
+    "name": "infralift-test-worker-cron",
+    "nodeVersion": "24.x",
+    "outputDirectory": ".next",
+    "passwordProtection": null,
+    "sandbox": {
+     "failoverRegions": [],
+     "region": "iad1"
+    },
+    "productionDeploymentsFastLane": false,
+    "previewDeploymentsDisabled": false,
+    "previewDeploymentSuffix": null,
+    "defaultResourceConfig": {
+     "fluid": true,
+     "functionDefaultRegions": [
+      "iad1"
+     ],
+     "functionDefaultTimeout": 300,
+     "functionDefaultMemoryType": "standard",
+     "functionZeroConfigFailover": false,
+     "elasticConcurrencyEnabled": false
+    },
+    "resourceConfig": {
+     "fluid": true,
+     "functionDefaultRegions": [
+      "iad1"
+     ],
+     "buildMachineType": "basic",
+     "buildMachineSelection": "fixed",
+     "functionZeroConfigFailover": false
+    },
+    "rootDirectory": "workers/cron",
+    "serverlessFunctionRegion": "iad1",
+    "serverlessFunctionZeroConfigFailover": false,
+    "skewProtectionMaxAge": 0,
+    "sourceFilesOutsideRootDirectory": true,
+    "enableAffectedProjectsDeployments": false,
+    "ssoProtection": {
+     "deploymentType": "all_except_custom_domains"
+    },
+    "trustedIps": null,
+    "updatedAt": 1788098660260,
+    "live": false,
+    "enableExternalRewriteCaching": true,
+    "enablePreviewFeedback": null,
+    "enableProductionFeedback": false,
+    "gitComments": null,
+    "gitProviderOptions": {
+     "createDeployments": "enabled"
+    },
+    "oidcTokenConfig": {
+     "enabled": true,
+     "issuerMode": "team"
+    },
+    "latestDeployments": [],
+    "targets": {},
+    "trustedSources": null,
+    "optionsAllowlist": null,
+    "features": {
+     "webAnalytics": false
+    },
+    "protectedSourcemaps": false
+   },
+   {
+    "accountId": "team_D5qRs1kL7UceOofmdxvUAay2",
+    "alias": [],
+    "autoExposeSystemEnvs": false,
+    "autoAssignCustomDomains": true,
+    "buildCommand": "npm run build",
+    "commandForIgnoringBuildStep": null,
+    "customerSupportCodeVisibility": false,
+    "createdAt": 1788098136330,
+    "deploymentExpiration": {
+     "expirationDays": 30,
+     "expirationDaysProduction": 30,
+     "expirationDaysCanceled": 30,
+     "expirationDaysErrored": 30,
+     "deploymentsToKeep": 10
+    },
+    "devCommand": null,
+    "directoryListing": false,
+    "env": [
+     {
+      "type": "encrypted",
+      "value": "SENTINEL_ENV_VALUE_MUST_NOT_APPEAR_IN_SNAPSHOT",
+      "target": [
+       "development",
+       "preview",
+       "production"
+      ],
+      "configurationId": null,
+      "comment": "",
+      "id": "oFjp49IotKMpnbYW",
+      "key": "INFRALIFT_TIER",
+      "createdAt": 1788098137403,
+      "updatedAt": 1788098137403,
+      "createdBy": "oBOoclzTeLZVL3yPdd8Svyef",
+      "updatedBy": null
+     },
+     {
+      "type": "encrypted",
+      "value": "SENTINEL_ENV_VALUE_MUST_NOT_APPEAR_IN_SNAPSHOT",
+      "target": [
+       "production"
+      ],
+      "configurationId": null,
+      "comment": "",
+      "id": "LX73e6vkatL3LCv0",
+      "key": "NODE_ENV",
+      "createdAt": 1788098137504,
+      "updatedAt": 1788098137504,
+      "createdBy": "oBOoclzTeLZVL3yPdd8Svyef",
+      "updatedBy": null
+     }
+    ],
+    "framework": "nextjs",
+    "gitForkProtection": true,
+    "gitLFS": false,
+    "id": "prj_1m9vYR3AmofR7MLmFvtgLi7MVRXN",
+    "installCommand": null,
+    "lastRollbackTarget": null,
+    "lastAliasRequest": null,
+    "name": "infralift-test-web",
+    "nodeVersion": "24.x",
+    "outputDirectory": ".next",
+    "passwordProtection": null,
+    "sandbox": {
+     "failoverRegions": [],
+     "region": "iad1"
+    },
+    "productionDeploymentsFastLane": false,
+    "previewDeploymentsDisabled": false,
+    "previewDeploymentSuffix": null,
+    "defaultResourceConfig": {
+     "fluid": true,
+     "functionDefaultRegions": [
+      "iad1"
+     ],
+     "functionDefaultTimeout": 300,
+     "functionDefaultMemoryType": "standard",
+     "functionZeroConfigFailover": false,
+     "elasticConcurrencyEnabled": false
+    },
+    "resourceConfig": {
+     "fluid": true,
+     "functionDefaultRegions": [
+      "iad1"
+     ],
+     "buildMachineType": "basic",
+     "buildMachineSelection": "fixed",
+     "functionZeroConfigFailover": false
+    },
+    "rootDirectory": null,
+    "serverlessFunctionRegion": "iad1",
+    "serverlessFunctionZeroConfigFailover": false,
+    "skewProtectionMaxAge": 0,
+    "sourceFilesOutsideRootDirectory": true,
+    "enableAffectedProjectsDeployments": false,
+    "ssoProtection": {
+     "deploymentType": "all_except_custom_domains"
+    },
+    "trustedIps": null,
+    "updatedAt": 1788098657048,
+    "live": false,
+    "enableExternalRewriteCaching": true,
+    "enablePreviewFeedback": null,
+    "enableProductionFeedback": false,
+    "gitComments": null,
+    "gitProviderOptions": {
+     "createDeployments": "enabled"
+    },
+    "oidcTokenConfig": {
+     "enabled": true,
+     "issuerMode": "team"
+    },
+    "latestDeployments": [],
+    "targets": {},
+    "trustedSources": null,
+    "optionsAllowlist": null,
+    "features": {
+     "webAnalytics": false
+    },
+    "protectedSourcemaps": false
+   }
+  ],
+  "pagination": {
+   "count": 2,
+   "next": null,
+   "prev": 1788098660260
+  }
+ },
+ "/v5/domains": {
+  "domains": [],
+  "pagination": {
+   "count": 0,
+   "next": null,
+   "prev": null
+  }
+ }
+}

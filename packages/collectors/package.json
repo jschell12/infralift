@@ -1,0 +1,28 @@
+{
+  "name": "@infralift/collectors",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Standalone, dependency-free inventory collectors a customer can read and run themselves.",
+  "exports": {
+    "./vercel": {
+      "types": "./vercel.d.mts",
+      "default": "./vercel.mjs"
+    },
+    "./heroku": {
+      "types": "./heroku.d.mts",
+      "default": "./heroku.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "*.mjs",
+    "*.d.mts",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node --check vercel.mjs && node --check heroku.mjs",
+    "lint": "node --check vercel.mjs && node --check heroku.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}

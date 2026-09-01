@@ -9,6 +9,13 @@ import type {
 import { prisma } from "../lib/db.js";
 import { decryptToken } from "../lib/crypto.js";
 import { getConnector } from "../connectors/index.js";
+import type { ConnectorAssessment } from "../connectors/types.js";
+import {
+  parseBundle,
+  analyzeBundle,
+  bundleAgeDays,
+  BundleError,
+} from "../connectors/bundle.js";
 import { buildMigrationOptions } from "../lib/options.js";
 import { buildReportExtras } from "../lib/report-extras.js";
 
@@ -45,6 +52,50 @@ async function summarize(assessmentId: string) {
     estimatedMonthlySavingsCents: a.estimatedMonthlySavingsCents,
     findingCounts,
   };
+}
+
+/** Write inventory, findings and the completed status in one transaction.
+ * Shared by the token path and the bundle path so the two cannot persist the
+ * same assessment differently. */
+async function persistAssessmentResult(
+  assessmentId: string,
+  result: ConnectorAssessment
+) {
+  await prisma.$transaction([
+    prisma.inventoryItem.createMany({
+      data: result.inventory.map((item) => ({
+        assessmentId,
+        provider: item.provider,
+        type: item.type,
+        externalId: item.externalId,
+        name: item.name,
+        region: item.region ?? null,
+        monthlyCostCents: item.monthlyCostCents ?? null,
+        metadata: item.metadata as object | undefined,
+      })),
+    }),
+    prisma.finding.createMany({
+      data: result.findings.map((f) => ({
+        assessmentId,
+        category: f.category,
+        severity: f.severity,
+        title: f.title,
+        detail: f.detail,
+        monthlySavingsCents: f.monthlySavingsCents ?? null,
+        resourceRef: f.resourceRef ?? null,
+      })),
+    }),
+    prisma.assessment.update({
+      where: { id: assessmentId },
+      data: {
+        status: "completed",
+        completedAt: new Date(),
+        resourceCount: result.inventory.length,
+        estimatedMonthlyCostCents: result.estimatedMonthlyCostCents,
+        estimatedMonthlySavingsCents: result.estimatedMonthlySavingsCents,
+      },
+    }),
+  ]);
 }
 
 // List assessments for the authenticated user's org.
@@ -90,41 +141,7 @@ assessmentsRouter.post("/run", async (req, res) => {
       decryptToken(connection.encryptedToken)
     );
 
-    await prisma.$transaction([
-      prisma.inventoryItem.createMany({
-        data: result.inventory.map((item) => ({
-          assessmentId: assessment.id,
-          provider: item.provider,
-          type: item.type,
-          externalId: item.externalId,
-          name: item.name,
-          region: item.region ?? null,
-          monthlyCostCents: item.monthlyCostCents ?? null,
-          metadata: item.metadata as object | undefined,
-        })),
-      }),
-      prisma.finding.createMany({
-        data: result.findings.map((f) => ({
-          assessmentId: assessment.id,
-          category: f.category,
-          severity: f.severity,
-          title: f.title,
-          detail: f.detail,
-          monthlySavingsCents: f.monthlySavingsCents ?? null,
-          resourceRef: f.resourceRef ?? null,
-        })),
-      }),
-      prisma.assessment.update({
-        where: { id: assessment.id },
-        data: {
-          status: "completed",
-          completedAt: new Date(),
-          resourceCount: result.inventory.length,
-          estimatedMonthlyCostCents: result.estimatedMonthlyCostCents,
-          estimatedMonthlySavingsCents: result.estimatedMonthlySavingsCents,
-        },
-      }),
-    ]);
+    await persistAssessmentResult(assessment.id, result);
   } catch (err) {
     await prisma.assessment.update({
       where: { id: assessment.id },
@@ -142,6 +159,70 @@ assessmentsRouter.post("/run", async (req, res) => {
   }
 
   res.status(201).json(await summarize(assessment.id));
+});
+
+/**
+ * Assess from a snapshot the customer collected themselves.
+ *
+ * The token path above needs a ProviderConnection, which needs a provider
+ * token, which is the thing a security review will not always approve. This
+ * path takes the JSON that packages/collectors writes instead. Same analyzers,
+ * same tables, no credential ever held.
+ */
+assessmentsRouter.post("/from-bundle", async (req, res) => {
+  const { orgId } = req.user!;
+
+  let parsedBundle;
+  try {
+    parsedBundle = parseBundle(req.body?.snapshot ?? req.body);
+  } catch (err) {
+    if (err instanceof BundleError) {
+      return res.status(400).json({ error: err.message, detail: err.detail });
+    }
+    throw err;
+  }
+
+  const assessment = await prisma.assessment.create({
+    data: {
+      orgId,
+      // No connection: that is the point of this path.
+      connectionId: null,
+      provider: parsedBundle.provider,
+      source: "bundle",
+      collectorVersion: parsedBundle.collectorVersion,
+      collectedAt: parsedBundle.collectedAt,
+      status: "running",
+      startedAt: new Date(),
+    },
+  });
+
+  try {
+    // Analysis is pure, so the only way this throws is a bug in our own
+    // analyzer — the bundle was already validated above.
+    const result = analyzeBundle(parsedBundle);
+    await persistAssessmentResult(assessment.id, result);
+  } catch (err) {
+    await prisma.assessment.update({
+      where: { id: assessment.id },
+      data: {
+        status: "failed",
+        completedAt: new Date(),
+        error: err instanceof Error ? err.message : String(err),
+      },
+    });
+    return res.status(500).json({
+      error: "Could not read that snapshot",
+      detail: err instanceof Error ? err.message : String(err),
+      assessmentId: assessment.id,
+    });
+  }
+
+  res.status(201).json({
+    ...(await summarize(assessment.id)),
+    source: "bundle",
+    collectedAt: parsedBundle.collectedAt.toISOString(),
+    ageDays: bundleAgeDays(parsedBundle),
+  });
 });
 
 // Migration options: rank target providers against the assessed workload.
