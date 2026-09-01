@@ -3,6 +3,7 @@ import { z } from "zod";
 import type {
   AssessmentCostProjectionRow,
   AssessmentRecommendation,
+  MigrationPlan,
   FindingSeverity,
   Provider,
 } from "@infralift/shared";
@@ -18,6 +19,7 @@ import {
 } from "../connectors/bundle.js";
 import { buildMigrationOptions } from "../lib/options.js";
 import { buildReportExtras } from "../lib/report-extras.js";
+import { buildMigrationPlan } from "../lib/migration-plan.js";
 
 export const assessmentsRouter = Router();
 
@@ -285,6 +287,7 @@ assessmentsRouter.get("/:id", async (req, res) => {
   let extras: {
     costProjection?: AssessmentCostProjectionRow[];
     recommendation?: AssessmentRecommendation;
+    migrationPlan?: MigrationPlan;
   } = {};
   if (summary.status === "completed") {
     try {
@@ -303,9 +306,32 @@ assessmentsRouter.get("/:id", async (req, res) => {
         })),
       });
       const built = buildReportExtras(options);
+
+      // The plan for the work the codegen does not do: data sync, DNS,
+      // secrets, CI/CD, rollback, verification. Built against the recommended
+      // target so its steps are concrete, and shipped with the free report
+      // rather than gated — a buyer deciding whether a migration is worth
+      // doing needs to see what it involves, and that is also the honest
+      // answer to "you only automated the easy part".
+      const planTargetName =
+        built.recommendation?.target ?? options.options[0]?.name ?? "the target";
+
       extras = {
         costProjection: built.costProjection,
         ...(built.recommendation ? { recommendation: built.recommendation } : {}),
+        migrationPlan: buildMigrationPlan({
+          provider: summary.provider,
+          target: planTargetName,
+          inventory: inventory.map((i) => ({
+            provider: i.provider as Provider,
+            type: i.type,
+            externalId: i.externalId,
+            name: i.name,
+            region: i.region ?? undefined,
+            monthlyCostCents: i.monthlyCostCents ?? undefined,
+            metadata: (i.metadata as Record<string, unknown> | null) ?? undefined,
+          })),
+        }),
       };
     } catch (err) {
       console.error(`report extras failed for assessment ${summary.id}:`, err);

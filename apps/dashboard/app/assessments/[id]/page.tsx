@@ -9,6 +9,7 @@ import {
   type FindingCategory,
   type FindingSeverity,
   type PriceConfidence,
+  MigrationPlan,
 } from "@infralift/shared";
 import { api, formatCents } from "../../../lib/api";
 import {
@@ -48,7 +49,20 @@ interface CodegenResponse {
   message?: string;
 }
 
+
+const OWNER_STYLE: Record<string, string> = {
+  infralift: "bg-accent-dim text-accent",
+  customer: "bg-warn-dim text-warn",
+  shared: "bg-bg text-muted",
+};
+const OWNER_LABEL: Record<string, string> = {
+  infralift: "we do this",
+  customer: "you do this",
+  shared: "together",
+};
+
 interface ReportExtras {
+  migrationPlan?: MigrationPlan;
   costProjection?: AssessmentCostProjectionRow[];
   recommendation?: AssessmentRecommendation;
   quote?: {
@@ -421,6 +435,95 @@ export default function AssessmentReportPage({
           </div>
         )}
       </Card>
+
+      {report.migrationPlan && (
+        <Card className="mb-5">
+          <CardTitle>
+            Migration plan &mdash; {report.migrationPlan.target}
+          </CardTitle>
+          <p className="mb-4 text-sm text-muted">
+            The work the generated Terraform does not do. Every step below was
+            derived from your inventory, and every step says who does it.
+          </p>
+
+          <div className="mb-5 rounded-lg border border-danger/20 bg-danger/5 p-3.5">
+            <div className="mb-1 text-[13px] font-semibold text-text">
+              Point of no return
+            </div>
+            <div className="text-[13px] text-muted">
+              {report.migrationPlan.pointOfNoReturn}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {report.migrationPlan.sections.map((sec) => (
+              <div
+                key={sec.area}
+                className="rounded-lg border border-border bg-bg p-4"
+              >
+                <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="text-[15px] font-semibold">{sec.title}</span>
+                  {sec.downtime && (
+                    <span className="rounded-full bg-warn-dim px-2.5 py-0.5 text-xs text-warn">
+                      {sec.downtime}
+                    </span>
+                  )}
+                </div>
+                <p className="mb-3 text-[13px] text-muted">{sec.summary}</p>
+
+                <div className="space-y-2.5">
+                  {sec.steps.map((step) => (
+                    <div key={step.id} className="text-[13px]">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-text">
+                          {step.title}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] ${OWNER_STYLE[step.owner]}`}
+                        >
+                          {OWNER_LABEL[step.owner]}
+                        </span>
+                        <span className="rounded-full bg-bg px-2 py-0.5 text-[11px] text-faint">
+                          {step.phase}
+                        </span>
+                        {step.automatable && (
+                          <span className="rounded-full bg-accent-dim px-2 py-0.5 text-[11px] text-accent">
+                            we can verify this
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-muted">{step.detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {sec.risks.length > 0 && (
+                  <ul className="mt-3 space-y-1 border-t border-border pt-2.5">
+                    {sec.risks.map((r) => (
+                      <li key={r} className="text-[12px] text-faint">
+                        &middot; {r}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 rounded-lg border border-border p-3.5">
+            <div className="mb-1.5 text-[13px] font-semibold text-text">
+              What this plan does not cover
+            </div>
+            <ul className="space-y-1">
+              {report.migrationPlan.notCovered.map((n) => (
+                <li key={n} className="text-[12px] text-muted">
+                  &middot; {n}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Card>
+      )}
 
       {(report.recommendation || report.quote) && (
         <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-2">
