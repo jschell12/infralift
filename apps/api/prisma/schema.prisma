@@ -65,8 +65,14 @@ model ProviderConnection {
 model Assessment {
   id                          String    @id @default(cuid())
   orgId                       String
-  connectionId                String
+  // Null for bundle-sourced assessments: there is no token, so there is no
+  // ProviderConnection. See migration 0009.
+  connectionId                String?
   provider                    String
+  // "api" (we called the provider) | "bundle" (customer ran the collector).
+  source                      String    @default("api")
+  collectorVersion            String?
+  collectedAt                 DateTime?
   status                      String    @default("pending") // pending | running | completed | failed
   startedAt                   DateTime?
   completedAt                 DateTime?
@@ -77,7 +83,7 @@ model Assessment {
   createdAt                   DateTime  @default(now())
 
   org        Org                @relation(fields: [orgId], references: [id])
-  connection ProviderConnection @relation(fields: [connectionId], references: [id])
+  connection ProviderConnection? @relation(fields: [connectionId], references: [id])
   inventory  InventoryItem[]
   findings   Finding[]
   tfProjects TfProject[]
