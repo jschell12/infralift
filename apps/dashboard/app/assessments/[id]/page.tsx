@@ -33,6 +33,21 @@ import {
  * inventing a number, which is the same reason the other two were skipped
  * before they were wired up. */
 
+/** /tf/codegen returns the whole configuration to an org cleared for
+ * delivery, and a readable sample plus a manifest of what is withheld to
+ * everyone else. */
+interface CodegenLock {
+  withheld: { fileName: string; lineCount: number }[];
+  message: string;
+}
+
+interface CodegenResponse {
+  locked?: boolean;
+  files: { fileName: string; content: string }[];
+  withheld?: { fileName: string; lineCount: number }[];
+  message?: string;
+}
+
 interface ReportExtras {
   costProjection?: AssessmentCostProjectionRow[];
   recommendation?: AssessmentRecommendation;
@@ -85,6 +100,10 @@ export default function AssessmentReportPage({
   const [codegenTarget, setCodegenTarget] = useState<"cloudflare" | "hetzner">("cloudflare");
   const [codegenBackend, setCodegenBackend] = useState<"local" | "tfc" | "s3">("local");
   const [codegenFiles, setCodegenFiles] = useState<{ fileName: string; content: string }[] | null>(null);
+  // Set when the org has not been cleared for delivery: `files` then holds a
+  // sample rather than the configuration, and saying so is better than
+  // rendering three files and letting someone think that is all there is.
+  const [codegenLocked, setCodegenLocked] = useState<CodegenLock | null>(null);
   const [codegenBusy, setCodegenBusy] = useState(false);
 
   useEffect(() => {
@@ -119,8 +138,9 @@ export default function AssessmentReportPage({
     if (!report) return;
     setCodegenBusy(true);
     setCodegenFiles(null);
+    setCodegenLocked(null);
     try {
-      const result = await api<{ files: { fileName: string; content: string }[] }>(
+      const result = await api<CodegenResponse>(
         "/tf/codegen",
         {
           method: "POST",
@@ -132,6 +152,11 @@ export default function AssessmentReportPage({
         }
       );
       setCodegenFiles(result.files);
+      setCodegenLocked(
+        result.locked
+          ? { withheld: result.withheld ?? [], message: result.message ?? "" }
+          : null
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -358,7 +383,10 @@ export default function AssessmentReportPage({
         {codegenFiles && (
           <div className="space-y-3">
             <div className="text-[13px] text-muted">
-              {codegenFiles.length} files generated. Works with both{" "}
+              {codegenLocked
+                ? codegenLocked.message
+                : `${codegenFiles.length} files generated.`}{" "}
+              Works with both{" "}
               <code className="rounded bg-bg px-1.5 py-0.5 text-xs">terraform</code> and{" "}
               <code className="rounded bg-bg px-1.5 py-0.5 text-xs">tofu</code>.
             </div>
@@ -372,6 +400,24 @@ export default function AssessmentReportPage({
                 </pre>
               </details>
             ))}
+            {codegenLocked && codegenLocked.withheld.length > 0 && (
+              <div className="rounded-lg border border-border bg-bg p-3">
+                <div className="mb-2 text-[13px] font-semibold text-text">
+                  Included in the migration
+                </div>
+                <div className="space-y-1">
+                  {codegenLocked.withheld.map((w) => (
+                    <div
+                      key={w.fileName}
+                      className="flex items-center justify-between text-xs text-faint"
+                    >
+                      <code>{w.fileName}</code>
+                      <span>{w.lineCount} lines</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Card>

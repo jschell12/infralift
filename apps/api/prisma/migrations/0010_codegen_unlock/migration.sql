@@ -1,0 +1,14 @@
+-- Gate the generated Terraform behind an explicit unlock.
+--
+-- The free assessment is a lead magnet and should stay free: it runs in
+-- seconds, costs an API call, and telling someone what their stack costs is
+-- what creates the urgency to move. Applyable Terraform for the target is not
+-- a lead magnet, it is the deliverable, and until now POST /tf/codegen handed
+-- it to any signed-in user. That was survivable while the only account was the
+-- owner's; self-serve signup made it reachable by strangers.
+--
+-- A boolean rather than a payments integration on purpose. There is no billing
+-- in this codebase yet, and the thing actually needed is "has this org been
+-- cleared for delivery", which an admin can answer today and a payment webhook
+-- can set later without changing any of the call sites.
+ALTER TABLE "Org" ADD COLUMN "codegenUnlocked" BOOLEAN NOT NULL DEFAULT false;
