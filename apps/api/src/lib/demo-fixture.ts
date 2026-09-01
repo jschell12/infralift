@@ -189,15 +189,31 @@ const VC_USAGE: {
   },
   {
     id: "usage_demo_bandwidth",
-    name: "Bandwidth overage (~10TB beyond included 1TB @ $0.15/GB)",
+    name: "Bandwidth overage (9TB beyond the included 1TB @ $0.15/GB)",
     cents: 135000,
     metadata: { kind: "bandwidth", gbMonth: 10000 },
   },
+  // Split because a single "invocations" line at $300 did not reconcile: at
+  // Vercel's published $0.60 per million, 50M invocations is $30, not $300.
+  // The $300 was right for the workload and wrong for the label — function
+  // cost at this volume is dominated by execution time, not by the count of
+  // invocations. Two items, each checkable against a published rate, summing
+  // to what the single item claimed.
   {
     id: "usage_demo_invocations",
-    name: "Function invocations (~50M/mo)",
-    cents: 30000,
-    metadata: { kind: "invocations", millions: 50 },
+    name: "Function invocations (~50M/mo at $0.60/M)",
+    cents: 3000,
+    metadata: { kind: "invocations", millions: 50, ratePerMillionCents: 60 },
+  },
+  {
+    id: "usage_demo_function_duration",
+    name: "Function duration (~1,500 GB-Hrs at $0.18/GB-Hr)",
+    cents: 27000,
+    metadata: {
+      kind: "function_duration",
+      gbHours: 1500,
+      ratePerGbHourCents: 18,
+    },
   },
   {
     id: "usage_demo_images",
@@ -313,7 +329,7 @@ export function buildDemoVercelAssessment(): DemoAssessment {
     severity: "high",
     title: `Modeled ~$${(VC_MODELED_MONTHLY_CENTS / 100).toFixed(0)}/mo Vercel run-rate`,
     detail:
-      "Estimated from account shape, not billing (Vercel exposes no billing read API): 20 Pro seats at $20 ($400), ~10TB/mo bandwidth beyond the included 1TB at $0.15/GB (~$1,350), plus worker/cron invocations, edge config reads, and blob storage (~$1,010). Actual invoices vary with usage.",
+      "Estimated from account shape, not billing (Vercel exposes no billing read API): 20 Pro seats at $20 ($400), 10TB/mo bandwidth of which 9TB bills beyond the included 1TB at $0.15/GB (~$1,350), plus function invocations and duration, edge config reads, and blob storage (~$1,010). Actual invoices vary with usage.",
     monthlySavingsCents: savings,
   });
 
