@@ -74,6 +74,16 @@ function readPublished(): Map<string, PublishedPage> {
   return out;
 }
 
+/** The raw source block for one page, split the same way readPublished does,
+ * for assertions that need the line items rather than the headline fields. */
+function pageBlock(slug: string): string {
+  const source = readFileSync(LEAVING_TS, "utf8");
+  const blocks = source.split(/\n\s*\{\s*\n\s*slug:\s*"/).slice(1);
+  const block = blocks.find((b) => b.slice(0, b.indexOf('"')) === slug);
+  if (!block) throw new Error(`no marketing block for ${slug}`);
+  return block;
+}
+
 describe("marketing /leaving pages match the pricing pipeline", () => {
   const published = readPublished();
 
@@ -113,6 +123,39 @@ describe("marketing /leaving pages match the pricing pipeline", () => {
           `Update it to match, or the public page quotes a number the ` +
           `product no longer produces.`
       ).toEqual(expected);
+    });
+  }
+
+  // The test above checks the headline totals against the engine. This checks
+  // one level down: the itemised breakdown a reader actually scans has to add
+  // up to the headline it sits under. All six pages already satisfy this, so
+  // it is a real invariant rather than an aspiration — and a line item edited
+  // without touching the total is exactly the drift that produced the "10TB
+  // beyond the included 1TB" label sitting above a 9TB figure.
+  for (const page of PAGES) {
+    it(`${page.slug}: line items add up to the totals above them`, () => {
+      const block = pageBlock(page.slug);
+
+      const sum = (field: "bill" | "exit") => {
+        const list = new RegExp(`\\n    ${field}: \\[(.*?)\\n    \\],`, "s").exec(
+          block
+        );
+        expect(list, `${page.slug} has no ${field} array`).not.toBeNull();
+        return [...list![1].matchAll(/perMonth: "\$([\d,]+)"/g)].reduce(
+          (n, m) => n + Number(m[1].replace(/,/g, "")),
+          0
+        );
+      };
+
+      const dollars = (s: string) => Number(s.replace(/[^0-9]/g, ""));
+      const live = published.get(page.slug)!;
+
+      expect(sum("bill"), `${page.slug}: bill line items do not sum to billTotal`).toBe(
+        dollars(live.billTotal)
+      );
+      expect(sum("exit"), `${page.slug}: exit line items do not sum to exitTotal`).toBe(
+        dollars(live.exitTotal)
+      );
     });
   }
 
