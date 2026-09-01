@@ -193,6 +193,64 @@ export interface AssessmentRecommendation {
   rows: { label: string; value: string }[];
 }
 
+/** Who does a step. A flat fee only survives if this is explicit, and half of
+ * these steps genuinely cannot be done by us: nobody hands a vendor their
+ * registrar login or their secret values. */
+export type MigrationStepOwner = "infralift" | "customer" | "shared";
+
+/** Where a step sits in the sequence. The UI gates on this: nothing in
+ * "cutover" is actionable until every "prepare" step is done, which is the
+ * whole point of writing the plan down. */
+export type MigrationPlanPhase = "prepare" | "cutover" | "verify" | "decommission";
+
+export interface MigrationPlanStep {
+  /** Stable across regenerations of the same assessment, so progress through
+   * the plan can be recorded against it. */
+  id: string;
+  title: string;
+  detail: string;
+  owner: MigrationStepOwner;
+  phase: MigrationPlanPhase;
+  /** True where we could confirm this ourselves rather than asking the
+   * customer to tick a box — DNS propagation, TTL, a response diff against
+   * production, certificate validity. Marks the steps worth automating first,
+   * and keeps honest the difference between "verified" and "asserted". */
+  automatable: boolean;
+  /** Which inventory item implied this step, so the plan is auditable rather
+   * than a template with the customer's name pasted in. */
+  evidence?: string;
+}
+
+export type MigrationPlanArea =
+  | "data"
+  | "dns"
+  | "secrets"
+  | "cicd"
+  | "rollback"
+  | "verification";
+
+export interface MigrationPlanSection {
+  area: MigrationPlanArea;
+  title: string;
+  summary: string;
+  steps: MigrationPlanStep[];
+  /** Expected write freeze or unavailability, where it is derivable from the
+   * inventory. Null when nothing in the assessment implies one. Never an
+   * estimate of how long the engagement takes. */
+  downtime: string | null;
+  risks: string[];
+}
+
+export interface MigrationPlan {
+  target: string;
+  /** The moment rollback stops being free, stated once and prominently. */
+  pointOfNoReturn: string;
+  sections: MigrationPlanSection[];
+  /** What this plan does not cover. Present so the plan cannot be read as a
+   * complete statement of work. */
+  notCovered: string[];
+}
+
 export interface ExitTollComponent {
   label: string;
   gb: number;
