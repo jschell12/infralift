@@ -144,7 +144,7 @@ const STEPS = [
   },
   {
     title: "Fixed-fee migration",
-    body: "We build the target environment in parallel, with zero downtime on your current stack, as Terraform in a new GitHub repo, with state in Terraform Cloud.",
+    body: "We build the target environment in parallel. Your current stack keeps serving and we never write to it. You get Terraform in a new GitHub repo, with state in Terraform Cloud.",
   },
   {
     title: "Keep the platform",
@@ -174,7 +174,7 @@ const PLANS = [
     lines: [
       "Terraform repo you own",
       "Terraform Cloud workspaces",
-      "Parallel build, zero downtime",
+      "Parallel build, cutover window quoted up front",
       "DNS + data cutover",
       "30-day post-cutover support",
     ],

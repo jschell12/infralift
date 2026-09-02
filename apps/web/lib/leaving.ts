@@ -40,7 +40,7 @@ export const LEAVING_PAGES: LeavingPage[] = [
     provider: "Vercel",
     metaTitle: "Leaving Vercel | infralift",
     metaDescription:
-      "What a scaled Vercel account actually costs, and what the same workload runs on Cloudflare Workers. Free assessment, fixed-fee migration, no downtime.",
+      "What a scaled Vercel account actually costs, and what the same workload runs on Cloudflare Workers. Free assessment, fixed-fee migration, cutover window quoted up front.",
     headline: "The Vercel bill grows faster than the product does",
     intro:
       "Vercel is a great way to launch. At scale, the pricing model works against you: every seat is $20/mo before any traffic, and bandwidth past the included 1TB bills at $0.15/GB. Here is a typical 11-project account at 10TB/mo.",
