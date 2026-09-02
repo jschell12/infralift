@@ -7,11 +7,11 @@ Fixed fee, quoted in your assessment report. No hourly billing, no scope creep. 
 - **infralift orchestrates, never holds.** Your secrets and your data move directly from your old provider to infrastructure you own. Nothing sensitive transits or rests on our systems.
 - **Read-only on your current provider, always.** We build the new environment; we never touch the old one. Cutover actions that require write access are executed by you, or by short-lived credentials you control and revoke.
 - **Everything is Terraform.** No console clicking, no snowflake servers. Every resource in the target environment is code in a repo you own, planned and applied through Terraform Cloud.
-- **Zero downtime by design.** The target environment is built and verified in parallel while your current stack keeps serving traffic, and the cutover is reversible in seconds.
+- **No downtime while we build, and a cutover window you know in advance.** The target is built and verified in parallel while your current stack keeps serving. Swapping traffic at the edge is reversible in seconds, for as long as the old stack stays warm. Moving the database is not free: it needs a write pause, minutes long and sized from your data, and reversibility ends at the first write the new database accepts. Your assessment names both numbers before you approve anything.
 
 ## Phase 0: DNS moves behind Cloudflare first
 
-Before anything else, your domain fronts through Cloudflare's edge. This is what makes "instant rollback" a real claim instead of a slogan:
+Before anything else, your domain fronts through Cloudflare's edge. This is what makes rolling *traffic* back a matter of seconds rather than a DNS propagation wait:
 
 - Cutover becomes an **origin swap at the edge**. No TTL propagation, no waiting for resolvers. Seconds.
 - Rollback is the same swap in reverse, for as long as the old stack stays warm.

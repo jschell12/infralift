@@ -244,7 +244,15 @@ function dnsSection(inv: ResourceInventoryItem[]): DraftSection {
   }
 
   steps.push({
-    title: "Verify the target serves correctly before any DNS changes",
+    title: "Front the domain through the edge before anything moves",
+    detail:
+      "Once your domain resolves to the edge, cutover is an origin swap rather than a DNS change: no waiting on resolvers, and rolling traffic back is the same swap in reverse. The TTL work above applies to this move; after it, the records stop changing. If you already front through Cloudflare, this step is done.",
+    owner: "shared",
+    evidence: "docs/migration-process.md phase 0",
+  });
+
+  steps.push({
+    title: "Verify the target serves correctly before any traffic moves",
     detail:
       "The new stack is exercised on a temporary hostname and compared against production. Nothing points at it until that passes.",
     owner: "infralift",
@@ -253,7 +261,7 @@ function dnsSection(inv: ResourceInventoryItem[]): DraftSection {
   });
 
   risks.push(
-    "Resolvers that ignore TTL, and clients holding connections, mean a flip is never instantaneous. Both stacks stay up during the overlap."
+    "Rolling traffic back is fast, but it only returns traffic. Anything the new stack already wrote is not undone by it — see the point of no return."
   );
   if (domains.some((d) => d.name.split(".").filter(Boolean).length <= 2)) {
     risks.push(
