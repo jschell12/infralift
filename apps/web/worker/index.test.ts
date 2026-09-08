@@ -27,10 +27,16 @@ function env(over: Partial<Env> = {}): Env {
 
 function leadRequest(
   body: unknown,
-  init: { ua?: string; ip?: string; country?: string; method?: string } = {}
+  init: {
+    ua?: string;
+    ip?: string;
+    country?: string;
+    method?: string;
+    path?: string;
+  } = {}
 ): Request {
   const method = init.method ?? "POST";
-  const req = new Request("https://infralift.dev/a/lead", {
+  const req = new Request(`https://infralift.dev${init.path ?? "/a/lead"}`, {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -228,5 +234,127 @@ describe("analytics beacon still behaves", () => {
     // Unlike the lead path, dropping this quietly is the correct behaviour.
     expect(res.status).toBe(204);
     expect(e.ANALYTICS.writeDataPoint).not.toHaveBeenCalled();
+  });
+});
+
+describe("cost estimator", () => {
+  const INPUT = {
+    webInstances: 2,
+    workerInstances: 0,
+    ramPerInstanceMb: 1024,
+    postgres: "small",
+    redis: "none",
+    runtime: "js",
+    bandwidthGbMonth: 500,
+    requestsMillionsMonth: 10,
+    objectStorageGb: 50,
+  };
+  const estimateRequest = (
+    body: unknown = INPUT,
+    init: Parameters<typeof leadRequest>[1] = {}
+  ) => leadRequest(body, { ...init, path: "/a/estimate" });
+
+  const RESULT = { targets: [{ slug: "cloudflare" }], bestSlug: "cloudflare" };
+
+  it("passes the upstream result through, because the body is the product", async () => {
+    // The lead proxy collapses everything to {ok:true}. Doing that here would
+    // return a success with no estimate in it.
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(RESULT), { status: 200 })
+    );
+    const res = await worker.fetch(estimateRequest(), env() as never);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(RESULT);
+  });
+
+  it("calls the estimate path, not the lead path", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(RESULT), { status: 200 })
+    );
+    await worker.fetch(estimateRequest(), env() as never);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://api.infralift.dev/intake/estimate"
+    );
+  });
+
+  it("passes the visitor's IP through so the API rate-limits the right party", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(RESULT), { status: 200 })
+    );
+    await worker.fetch(
+      estimateRequest(INPUT, { ip: "198.51.100.9" }),
+      env() as never
+    );
+    const init = fetchMock.mock.calls[0][1] as { headers: Record<string, string> };
+    expect(init.headers["CF-Connecting-IP"]).toBe("198.51.100.9");
+  });
+
+  it("sends Access service-token headers when both halves are set", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(RESULT), { status: 200 })
+    );
+    await worker.fetch(
+      estimateRequest(),
+      env({
+        LEAD_INTAKE_CF_CLIENT_ID: "id.access",
+        LEAD_INTAKE_CF_CLIENT_SECRET: "shh",
+      }) as never
+    );
+    const init = fetchMock.mock.calls[0][1] as { headers: Record<string, string> };
+    expect(init.headers["CF-Access-Client-Id"]).toBe("id.access");
+  });
+
+  it("answers 503 when the API base is not configured", async () => {
+    const res = await worker.fetch(
+      estimateRequest(),
+      env({ LEAD_INTAKE_URL: undefined }) as never
+    );
+    expect(res.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("absorbs bots without computing anything for them", async () => {
+    const res = await worker.fetch(
+      estimateRequest(INPUT, { ua: "python-requests/2.32" }),
+      env() as never
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      targets: [],
+      bestSlug: null,
+      assumptions: [],
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an oversized body before parsing it", async () => {
+    const res = await worker.fetch(
+      estimateRequest("x".repeat(9000)),
+      env() as never
+    );
+    expect(res.status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("maps an Access login redirect to a clear failure", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 302 }));
+    const res = await worker.fetch(estimateRequest(), env() as never);
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toContain("not reachable");
+  });
+
+  it("surfaces a validation failure as something the visitor can act on", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 400 }));
+    const res = await worker.fetch(estimateRequest({}), env() as never);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("numbers");
+  });
+
+  it("rejects non-POST", async () => {
+    const res = await worker.fetch(
+      estimateRequest(undefined, { method: "GET" }),
+      env() as never
+    );
+    expect(res.status).toBe(405);
   });
 });

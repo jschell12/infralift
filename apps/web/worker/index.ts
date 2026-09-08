@@ -41,11 +41,17 @@ interface Env {
   ANALYTICS: AnalyticsEngineDataset;
   /** Optional Worker secret mixed into the daily visitor hash. */
   ANALYTICS_SALT?: string;
-  /** Base URL of the API that records leads, e.g. https://api.infralift.dev.
-   * Unset means the form is not wired up yet and /a/lead answers 503. */
+  /** Base URL of the API behind the public intake paths, e.g.
+   * https://api.infralift.dev. Unset means they are not wired up yet and
+   * /a/lead and /a/estimate answer 503.
+   *
+   * Named for the lead form because that came first. It is the same API base
+   * for both, and renaming it would mean re-putting a live Worker secret. */
   LEAD_INTAKE_URL?: string;
   /** Cloudflare Access service token, when the intake URL sits behind Access.
-   * Both halves are required or neither header is sent. */
+   * Both halves are required or neither header is sent. The same token covers
+   * both intake paths; each path needs its own Access application in
+   * schellout, because those are scoped to an exact path. */
   LEAD_INTAKE_CF_CLIENT_ID?: string;
   LEAD_INTAKE_CF_CLIENT_SECRET?: string;
 }
@@ -67,6 +73,10 @@ export default {
     if (url.pathname === "/a/lead") {
       if (request.method !== "POST") return new Response(null, { status: 405 });
       return submitLead(request, env);
+    }
+    if (url.pathname === "/a/estimate") {
+      if (request.method !== "POST") return new Response(null, { status: 405 });
+      return runEstimate(request, env);
     }
     return env.ASSETS.fetch(request);
   },
@@ -156,13 +166,31 @@ async function collect(
  * missing costs a row in a chart; a lead that goes missing costs a customer,
  * so the browser is told the truth and the visitor can try again.
  */
-async function submitLead(request: Request, env: Env): Promise<Response> {
-  const json = (body: unknown, status: number) =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+function json(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
+/** Headers every proxied intake call needs. The visitor IP matters: the API
+ * rate-limits on it, so sending the Worker's egress address would put every
+ * visitor in the world into one bucket. */
+function upstreamHeaders(request: Request, env: Env): Record<string, string> {
+  const cf = (request as { cf?: IncomingRequestCf }).cf;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "CF-Connecting-IP": request.headers.get("cf-connecting-ip") ?? "0.0.0.0",
+    "CF-IPCountry": cf?.country ?? "",
+  };
+  if (env.LEAD_INTAKE_CF_CLIENT_ID && env.LEAD_INTAKE_CF_CLIENT_SECRET) {
+    headers["CF-Access-Client-Id"] = env.LEAD_INTAKE_CF_CLIENT_ID;
+    headers["CF-Access-Client-Secret"] = env.LEAD_INTAKE_CF_CLIENT_SECRET;
+  }
+  return headers;
+}
+
+async function submitLead(request: Request, env: Env): Promise<Response> {
   if (!env.LEAD_INTAKE_URL) {
     return json(
       { error: "Lead intake is not configured on this environment." },
@@ -185,19 +213,7 @@ async function submitLead(request: Request, env: Env): Promise<Response> {
     return json({ ok: true }, 202);
   }
 
-  const cf = (request as { cf?: IncomingRequestCf }).cf;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    // The API rate-limits on this, so it has to be the visitor rather than
-    // the Worker's egress address.
-    "CF-Connecting-IP":
-      request.headers.get("cf-connecting-ip") ?? "0.0.0.0",
-    "CF-IPCountry": cf?.country ?? "",
-  };
-  if (env.LEAD_INTAKE_CF_CLIENT_ID && env.LEAD_INTAKE_CF_CLIENT_SECRET) {
-    headers["CF-Access-Client-Id"] = env.LEAD_INTAKE_CF_CLIENT_ID;
-    headers["CF-Access-Client-Secret"] = env.LEAD_INTAKE_CF_CLIENT_SECRET;
-  }
+  const headers = upstreamHeaders(request, env);
 
   try {
     const upstream = await fetch(`${env.LEAD_INTAKE_URL}/intake/lead`, {
@@ -224,6 +240,75 @@ async function submitLead(request: Request, env: Env): Promise<Response> {
       return json({ error: "Please check the details and try again." }, 400);
     }
     return json({ error: "Could not record that. Please try again." }, 502);
+  } catch {
+    return json({ error: "Could not reach us. Please try again." }, 502);
+  }
+}
+
+
+/**
+ * Cost estimator, proxied to the API for the same reasons as the lead form.
+ *
+ * It differs in one way that matters: the upstream body is the product, so it
+ * is passed through rather than collapsed to {ok:true}. The API route is a
+ * pure function, so there is nothing here to make idempotent and no row a
+ * retry could duplicate.
+ */
+async function runEstimate(request: Request, env: Env): Promise<Response> {
+  if (!env.LEAD_INTAKE_URL) {
+    return json(
+      { error: "The estimator is not configured on this environment." },
+      503
+    );
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    const text = await request.text();
+    if (text.length > 8192) return json({ error: "Too large." }, 413);
+    payload = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return json({ error: "Malformed submission." }, 400);
+  }
+
+  const ua = request.headers.get("user-agent") ?? "";
+  if (BOT_UA.test(ua)) {
+    // An empty result rather than a refusal, matching the API's honeypot
+    // response: nothing to learn from, and nothing computed for free.
+    return json({ targets: [], bestSlug: null, assumptions: [] }, 200);
+  }
+
+  try {
+    const upstream = await fetch(`${env.LEAD_INTAKE_URL}/intake/estimate`, {
+      method: "POST",
+      headers: upstreamHeaders(request, env),
+      body: JSON.stringify(payload),
+    });
+
+    if (upstream.ok) {
+      const body = await upstream.text();
+      return new Response(body, {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // An Access login redirect means the service token is missing, or that the
+    // /intake/estimate Access application was never created. Those look
+    // identical from here and have the same fix.
+    if (upstream.status === 302 || upstream.status === 401) {
+      return json(
+        { error: "The estimator is not reachable. We have been notified." },
+        502
+      );
+    }
+    if (upstream.status === 429) {
+      return json({ error: "Too many estimates. Try again later." }, 429);
+    }
+    if (upstream.status === 400) {
+      return json({ error: "Please check the numbers and try again." }, 400);
+    }
+    return json({ error: "Could not work that out. Please try again." }, 502);
   } catch {
     return json({ error: "Could not reach us. Please try again." }, 502);
   }

@@ -10,6 +10,7 @@ import { tfRouter } from "./routes/tf.js";
 import { communitiesRouter } from "./routes/communities.js";
 import { leadsRouter } from "./routes/leads.js";
 import { intakeRouter } from "./routes/intake.js";
+import { estimateRouter } from "./routes/estimate.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { startAnalyticsRollup } from "./analytics/rollup.js";
 
@@ -35,6 +36,12 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 // Express sees it. Reaching this route from the public internet needs an
 // Access bypass policy for the path, configured outside this repo.
 app.use("/intake/lead", intakeRouter);
+
+// Public cost estimator, same reasoning and the same Access caveat: this path
+// needs its own Access application in schellout, because the lead-intake one is
+// scoped to /intake/lead exactly. It is a pure function over the request body:
+// no reads, no writes, no tenant.
+app.use("/intake/estimate", estimateRouter);
 
 // All routes below require Cloudflare Access authentication.
 // In dev mode (no CF_ACCESS_TEAM_DOMAIN), a dev user is auto-created.
