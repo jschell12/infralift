@@ -1,5 +1,35 @@
 # infralift status
 
+## 2026-09-08 (session 11)
+
+### Completed
+- **Public cost estimator, live at https://infralift.dev/estimate (PR #88).** Eleven form fields, no account, no provider token, no email, nothing stored. It closes the gap that every other entry point asked for something before it said anything: the signup wants a Google account, the assessment wants a snapshot bundle. Both are fair asks after someone believes there is money on the table and walls before it.
+- **schellout PR #295 applied**: a second Cloudflare Access application for `/intake/estimate`, plus an unrelated fix described under Decisions.
+- **Three Worker secrets set on `infralift-web`** (`LEAD_INTAKE_URL`, `LEAD_INTAKE_CF_CLIENT_ID`, `LEAD_INTAKE_CF_CLIENT_SECRET`) from the schellout TFC workspace outputs. This also lit up the lead form, which had been built and dark since 31 Aug, though `NEXT_PUBLIC_LEAD_FORM_ENABLED` is still unset so it does not render.
+- Hero CTA on the homepage now leads with the estimator, ahead of the signup.
+
+### Decisions
+- **The estimator owns no pricing.** It builds a `WorkloadFootprint` and calls the same `planTarget`/`sizeTarget` that drive the options page and the generated HCL, with a test asserting all three agree. A copy of the price list in `apps/web` would have drifted inside a release, and the assessment someone runs afterwards would then contradict the first number they ever saw. Same reasoning as PR #72.
+- **It subtracts the operations work, and it can say "stay where you are".** `opsBurden` prices only net-new hours (patching, backup verification, host monitoring), not deploys or on-call, which happen on both sides of a move. $150/hr default, overridable in the form. A 12-dyno shop at $260/mo comes back at -$5,292/yr with `bestSlug: null`. That negative answer is the point: it is what makes the positive rows believable, and it disqualifies a prospect before either side spends a call.
+- **Workers is gated on fit, not just price.** `sizeCloudflare` prices it for anything because it counts requests and bandwidth and knows nothing about what serves them. It was recommending Workers at $11,156/yr to an eight-dyno Rails shop. Ineligible targets are still priced and shown with the reason, never ranked first.
+- **Two Access applications rather than one widened to `/intake`.** An Access app's `domain` is an exact path prefix. Widening would have pre-authorised every future route under `/intake` before anyone looked at it.
+- **Caught a tunnel-drift landmine.** The plan for #295 came back `1 to add, 1 to change`, and the change was not ours: Terraform wanted to drop a live `dashboard.permitguv.com` ingress rule that had been added to the tunnel by hand and never written down. schellout applies on merge, so any terraform PR would have taken that hostname offline. Adopted it into the ingress list first, the same way `admin.permitguv.com` was on 31 Aug. It was still answering 307 after the apply.
+
+### Verification
+- 205 API tests (from 187), 29 web tests (from 18). `tsc --noEmit` clean in both apps.
+- Exercised against the live public path with no authentication, not just a local 200: three workload shapes return the expected figures, a malformed body gives a readable 400, a bot user-agent is absorbed.
+- Useful diagnostic for next time: with the Access app live but the API not yet deployed, `/intake/estimate` answered 401 rather than 404, because an unregistered Express route falls through to `cfAuth`. Access admitting the service token shows as a `CF_Authorization` cookie on the response whose `common_name` is the token; a 403 means it never reached the origin.
+
+### Blockers
+- None for the estimator; it is live and verified.
+- **STATUS.md has diverged between the remote and the main checkout, and neither side is complete.** The committed file jumps from this entry straight to session 5: sessions 6 through 9 were never pushed. They exist in the main checkout's working copy, which in turn has no session 10 entry, because that one was committed from a worktree built on an older base. On top of that the main checkout sits 20 commits behind `origin/main` with STATUS.md both staged and further modified, so `git pull --ff-only` there fails silently. Reconciling the two by hand is a five-minute job that has been deferred repeatedly; each session avoids it because committing another session's uncommitted work is against the commit-scope rule, so it never lands. Worth doing deliberately.
+
+### Next steps
+- **One execution on a friendly, free or at cost.** Twelve fixture and target combinations pass `tofu init`/`validate`, which proves the HCL parses and not that an application boots on Hetzner. Selling a plan whose whole value is being right, having never once been right in production, is thin and the sharper buyers will ask.
+- **Rewrite `docs/migration-process.md`.** It still promises a cutover rehearsal, a 7 to 14 day rollback window, and 30 days of post-cutover support. Under a plan-first model those are promises nobody intends to keep.
+- Go after the 42 Vercel billing-pain leads. The estimator is the outbound asset for them, and the gate is still payer conversations per week.
+- Decide on `NEXT_PUBLIC_LEAD_FORM_ENABLED`. The estimator arguably makes the lead form redundant, since it answers the same objection without asking for an email.
+
 > **Note on the gap below.** Entries for sessions 6 through 9 exist only in the
 > local working copy of this file (~268 uncommitted lines) and were never
 > committed. They cover PRs #54-#72. Commit them and this history is whole
