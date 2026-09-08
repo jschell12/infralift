@@ -9,6 +9,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
+import { clientKey, createRateLimiter } from "../lib/rate-limit.js";
 
 export const intakeRouter = Router();
 
@@ -35,50 +36,14 @@ const leadSchema = z.object({
 // Rate limiting
 // ---------------------------------------------------------------------------
 
-const WINDOW_MS = 60 * 60 * 1000;
-const MAX_PER_IP_PER_HOUR = 5;
-
-const hits = new Map<string, number[]>();
-
-/** In-process and therefore per-instance: a second API replica would allow a
- * second bucket. That is an acceptable ceiling for a form that writes one
- * small row, and it avoids adding Redis to the request path for it. */
-function rateLimited(key: string, now: number): boolean {
-  const recent = (hits.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
-  if (recent.length >= MAX_PER_IP_PER_HOUR) {
-    hits.set(key, recent);
-    return true;
-  }
-  recent.push(now);
-  hits.set(key, recent);
-
-  // Opportunistic sweep so the map cannot grow without bound.
-  if (hits.size > 5000) {
-    for (const [k, times] of hits) {
-      const live = times.filter((t) => now - t < WINDOW_MS);
-      if (live.length === 0) hits.delete(k);
-      else hits.set(k, live);
-    }
-  }
-  return false;
-}
+const limiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+});
 
 /** Exported for tests. */
 export function resetRateLimit(): void {
-  hits.clear();
-}
-
-function clientKey(req: {
-  headers: Record<string, unknown>;
-  ip?: string;
-}): string {
-  // Behind the Cloudflare tunnel, CF-Connecting-IP is the real client. Fall
-  // back to the socket address so this still limits something in dev.
-  const cf = req.headers["cf-connecting-ip"];
-  if (typeof cf === "string" && cf.length > 0) return cf;
-  const fwd = req.headers["x-forwarded-for"];
-  if (typeof fwd === "string" && fwd.length > 0) return fwd.split(",")[0].trim();
-  return req.ip ?? "unknown";
+  limiter.reset();
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +65,7 @@ intakeRouter.post("/", async (req, res) => {
     return res.status(202).json({ ok: true });
   }
 
-  if (rateLimited(clientKey(req), Date.now())) {
+  if (limiter.limited(clientKey(req), Date.now())) {
     return res
       .status(429)
       .json({ error: "Too many submissions. Try again later, or email us." });

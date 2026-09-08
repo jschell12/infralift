@@ -10,6 +10,7 @@ const BTN =
   "inline-block px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent";
 
 const NAV_LINKS = [
+  { href: "/estimate", label: "Estimator" },
   { href: "#why", label: "Why now" },
   { href: "#scenarios", label: "Scenarios" },
   { href: "#how", label: "How it works" },
@@ -232,20 +233,28 @@ export default function Home() {
             infrastructure you own for a fixed fee.
           </p>
           <div className="flex gap-3 justify-center">
-            {/* Scrolls rather than linking straight to the sign-in. The click
-                target below is an OAuth redirect off this domain, which is a
+            {/* The calculator leads because it asks for nothing: no account, no
+                token, no email. Everything else on this page needs one of the
+                three, which is a lot to want from someone who does not yet
+                believe there is money on the table. */}
+            <a className={`${BTN} bg-accent text-bg`} href="/estimate">
+              Estimate your savings
+            </a>
+            {/* Scrolls rather than linking straight to the sign-in. That click
+                target is an OAuth redirect off this domain, which is a
                 surprising thing for a hero button to do before the page has
                 said what signing in gets you. */}
-            <a className={`${BTN} bg-accent text-bg`} href="#assessment">
-              Get your free assessment
-            </a>
             <a
               className={`${BTN} bg-transparent text-text border-border`}
-              href="#why"
+              href="#assessment"
             >
-              See why teams are moving
+              Get your free assessment
             </a>
           </div>
+          <p className="mt-4 text-[14px] text-faint">
+            Eleven questions, no signup. The operations work is priced in and
+            subtracted.
+          </p>
         </section>
 
         <section className={SECTION} id="why">

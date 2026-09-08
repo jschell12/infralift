@@ -37,9 +37,13 @@ pnpm run deploy:cf  # wrangler deploy — note `pnpm deploy` is a pnpm builtin
 `NEXT_PUBLIC_DASHBOARD_URL` overrides the dashboard link target. It defaults to
 production, and CI fails the build if any `localhost:` URL reaches the export.
 
-## The two ways in
+## The three ways in
 
-The primary CTA is a signup. "Start your free assessment" links to
+The hero CTA is the estimator, because it asks for nothing. Under it sits the
+signup, and under that the lead form. They are ordered by how much a visitor
+has to give up before they see a number.
+
+The primary conversion CTA is a signup. "Start your free assessment" links to
 `dashboard.infralift.dev`, which sits behind a Cloudflare Access application
 that allows any Google or GitHub sign-in. The API's `cfAuth` middleware reads
 the email claim off the Access JWT and provisions a `User` and a fresh `Org` on
@@ -56,6 +60,43 @@ a terraform change over there, not a change here.
 This is why the sign-in CTA is unconditional now. It used to be the `else`
 branch of `LEAD_FORM_ENABLED`, back when the Access policy allowed exactly one
 email address and the button was a login wall.
+
+## The estimator
+
+`/estimate` is the only page a stranger can get a costed answer out of without
+an account, a provider token, or an email address. `app/estimate/calculator.tsx`
+posts eleven form fields to `/a/estimate` on the Worker, which forwards to the
+API's public `/intake/estimate` route, and renders what comes back. Nothing is
+written down: the route is a pure function, so there is no row and no lead.
+
+Two things about it are load-bearing and should survive edits.
+
+**It owns no pricing.** The route builds a `WorkloadFootprint` and calls
+`planTarget`/`sizeTarget` in `apps/api/src/lib/sizing.ts`, the same functions
+behind the options page and the generated Terraform. A copy of the price list
+in this app would drift inside a release, and the assessment a visitor runs
+afterwards would then contradict the first number they ever saw. There is a
+test asserting the estimator reports exactly what `sizeTarget` reports.
+
+**It subtracts the operations work, and it can tell someone not to move.** A
+managed platform's bill includes somebody patching the kernel and a VPS bill
+does not, so `opsBurden` prices the net-new hours and takes them off the
+saving. When nothing clears that bar the response carries `bestSlug: null` and
+the page says so. Workers is also gated on whether the stack could run on it at
+all: it is still priced, so the reader can see what they are giving up, but a
+Rails app is never recommended onto it.
+
+### Turning it on
+
+Same Worker secrets as the lead form below (`LEAD_INTAKE_URL` and the two
+`LEAD_INTAKE_CF_*` halves), and there is no build flag: the page ships either
+way and answers 503 until the secrets exist.
+
+It does need **its own Cloudflare Access application** in `schellout`. The
+lead-intake app is scoped to `api.infralift.dev/intake/lead` exactly, so it does
+not cover `/intake/estimate`; without a second app the path gets an Access login
+redirect and the Worker reports "not reachable". The same service token can be
+named in both policies.
 
 ## The lead form
 
