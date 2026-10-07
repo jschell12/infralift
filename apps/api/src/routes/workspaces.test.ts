@@ -7,9 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // stubbed; nothing here reaches TFC.
 
 const db = vi.hoisted(() => ({
-  providerConnection: { findFirst: vi.fn(), findUnique: vi.fn() },
+  providerConnection: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
   tfProject: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
-  workspace: { findMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+  workspace: { findMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), upsert: vi.fn() },
   workspaceDependency: { create: vi.fn() },
   $transaction: vi.fn(),
   tfTemplate: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), upsert: vi.fn() },
@@ -292,5 +292,75 @@ describe("refreshing outputs is scoped to the caller's org", () => {
     });
     expect(res.status).toBe(404);
     expect(db.workspace.findFirst).toHaveBeenCalledWith({ where: { id: "ws_someone_elses", orgId: "org_mine" } });
+  });
+});
+
+describe("re-adopting", () => {
+  const remoteWs = { id: "ws-1", attributes: { name: "core" } };
+  beforeEach(() => {
+    db.providerConnection.findFirst.mockResolvedValue(conn());
+    vi.stubGlobal("fetch", async (url: string) => {
+      const body = url.includes("/organizations/acme/workspaces/core") ? { data: remoteWs } : { data: [] };
+      return { ok: true, status: 200, json: async () => body, text: async () => "" };
+    });
+  });
+  const adopt = (projectName: string) =>
+    call(workspacesRouter, "post", "/adopt", {
+      user,
+      body: { connectionId: "conn_mine", workspaceName: "core", projectName },
+    });
+
+  it("refuses to move an adopted workspace to another project, before creating anything", async () => {
+    db.workspace.findUnique.mockResolvedValue({
+      kind: "adopted", connectionId: "conn_mine", tfcWorkspaceId: "ws-1", projectId: "proj_a",
+    });
+    db.tfProject.findUnique.mockResolvedValue(null);
+    const res = await adopt("other");
+    expect(res.status).toBe(409);
+    expect(db.tfProject.create).not.toHaveBeenCalled();
+  });
+
+  it("recovers a workspace whose connection was deleted and recreated", async () => {
+    db.workspace.findUnique.mockResolvedValue({
+      kind: "adopted", connectionId: null, tfcWorkspaceId: "ws-1", projectId: "proj_a",
+    });
+    db.tfProject.findUnique.mockResolvedValue({ id: "proj_a" });
+    db.workspace.upsert.mockResolvedValue({ id: "w", name: "core", kind: "adopted", tfcWorkspaceUrl: "u" });
+    const res = await adopt("p");
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses a different TFC workspace with the same name", async () => {
+    db.workspace.findUnique.mockResolvedValue({
+      kind: "adopted", connectionId: null, tfcWorkspaceId: "ws-OTHER", projectId: "proj_a",
+    });
+    db.tfProject.findUnique.mockResolvedValue({ id: "proj_a" });
+    expect((await adopt("p")).status).toBe(409);
+  });
+});
+
+describe("TFE hosts are re-checked when a stored connection is used", () => {
+  it("refuses a connection whose host now resolves privately", async () => {
+    const dns = await import("node:dns/promises");
+    const spy = vi.spyOn(dns, "lookup").mockResolvedValueOnce([{ address: "10.0.0.2", family: 4 }] as never);
+    db.providerConnection.findFirst.mockResolvedValue(conn());
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const res = await call(workspacesRouter, "get", "/remote", { user, query: { connectionId: "conn_mine" } });
+    expect(res.status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("refuses to store one at POST /connections", async () => {
+    const dns = await import("node:dns/promises");
+    const spy = vi.spyOn(dns, "lookup").mockResolvedValueOnce([{ address: "192.168.1.5", family: 4 }] as never);
+    const res = await call(workspacesRouter, "post", "/connections", {
+      user,
+      body: { label: "x", hostname: "tfe.example.com", organization: "acme", token: "t" },
+    });
+    expect(res.status).toBe(400);
+    expect(db.providerConnection.create).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

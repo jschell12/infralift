@@ -21,8 +21,9 @@
 - **The TFC token is not read-only**, unlike assessment connections: creating workspaces, run triggers and state sharing all write. It is kept out of the shared `PROVIDERS` list, and `/connections/:id/verify` and `/assessments/run` now refuse non-assessment connections instead of failing on a missing connector.
 
 ### Verification
-- 270 API tests (from 205), `tsc --noEmit` clean. New tests fail when the org filter on the connection lookup, the template-visibility filter, or the sensitive-value drop is removed, checked by removing each.
+- 275 API tests (from 205), `tsc --noEmit` clean. New tests fail when the org filter on the connection lookup, the template-visibility filter, or the sensitive-value drop is removed, checked by removing each.
 - Generated adopted-template and wiring HCL pass `validate` and `fmt -check` under both `terraform` and `tofu` (module source swapped for a local stub, since `init` would fetch the git source).
+- **Known gaps, accepted for now:** non-sensitive Terraform variable values are stored in plain JSON because they become template defaults, so a secret someone forgot to mark sensitive lands in the database. The private-address check misses NAT64, `198.18.0.0/15` and the LAN's own global IPv6 addresses; TLS keeps those to a reachability probe on 443. TFE on a non-443 port is refused.
 - **Not exercised against a live TFC org.** The endpoint shapes were checked against HashiCorp's API docs, not a real response.
 
 ### Next steps

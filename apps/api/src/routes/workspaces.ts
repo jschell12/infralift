@@ -246,8 +246,11 @@ workspacesRouter.post("/adopt", async (req, res) => {
           where: { orgId_name: { orgId, name: d.projectName! } },
           select: { id: true },
         }))?.id ?? null);
+    // A null connection means the old one was deleted (SET NULL); reconnecting
+    // and re-adopting is the recovery, and tfcWorkspaceId still pins it to
+    // the same TFC workspace.
     const moved =
-      existing.connectionId !== tfc.conn.id ||
+      (existing.connectionId !== null && existing.connectionId !== tfc.conn.id) ||
       existing.tfcWorkspaceId !== remote.id ||
       (existing.projectId !== null && existing.projectId !== targetProjectId);
     if (moved) {
@@ -421,6 +424,20 @@ workspacesRouter.get("/projects/:projectId", async (req, res) => {
   });
 });
 
+/** Apply order by name, or null when the stored graph is inconsistent. */
+function safeOrder(
+  ids: string[],
+  edges: { workspaceId: string; dependsOnId: string }[],
+  name: Map<string, string>
+): string[] | null {
+  try {
+    return applyOrder(ids, edges).map((id) => name.get(id)!);
+  } catch (err) {
+    if (err instanceof DependencyGraphError) return null;
+    throw err;
+  }
+}
+
 // -- add an extension workspace ---------------------------------------------------------
 
 const extensionSchema = z.object({
@@ -553,7 +570,7 @@ workspacesRouter.post("/projects/:projectId/extensions", async (req, res) => {
     },
     // Not committed anywhere yet: the extension's own code goes beside it.
     files: [{ path: "deps.tf", body: wiring }],
-    applyOrder: applyOrder(ids, edges).map((id) => name.get(id)!),
+    applyOrder: safeOrder(ids, edges, name),
   });
 });
 
