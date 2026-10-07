@@ -45,8 +45,16 @@ tfRouter.get("/tfc-status", requireAdmin, async (_req, res) => {
 
 // -- templates ---------------------------------------------------------------
 
-tfRouter.get("/templates", async (_req, res) => {
+// The shared catalog (orgId null) plus the caller's own private templates.
+// An adopted workspace's template points at that customer's repository, so
+// every lookup by slug goes through this filter, not just the listing.
+export function visibleTemplates(orgId: string) {
+  return { OR: [{ orgId: null }, { orgId }] };
+}
+
+tfRouter.get("/templates", async (req, res) => {
   const templates = await prisma.tfTemplate.findMany({
+    where: visibleTemplates(req.user!.orgId),
     include: {
       versions: {
         select: { id: true, releaseTag: true, inputSchema: true, createdAt: true },
@@ -81,6 +89,10 @@ tfRouter.post("/templates", requireAdmin, async (req, res) => {
   }
   const { slug, name, description, releaseTag, templateBody, inputSchema } =
     parsed.data;
+  const existing = await prisma.tfTemplate.findUnique({ where: { slug } });
+  if (existing?.orgId) {
+    return res.status(409).json({ error: "slug belongs to an org-private template" });
+  }
   const template = await prisma.tfTemplate.upsert({
     where: { slug },
     create: { slug, name, description },
@@ -111,8 +123,8 @@ tfRouter.post("/templates/:slug/versions/:tag/preview", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const template = await prisma.tfTemplate.findUnique({
-    where: { slug: req.params.slug },
+  const template = await prisma.tfTemplate.findFirst({
+    where: { slug: req.params.slug, ...visibleTemplates(req.user!.orgId) },
   });
   if (!template) return res.status(404).json({ error: "template not found" });
   const version = await prisma.tfTemplateVersion.findUnique({
@@ -182,8 +194,8 @@ tfRouter.post("/projects", async (req, res) => {
   }
   const { orgId } = req.user!;
   const d = parsed.data;
-  const template = await prisma.tfTemplate.findUnique({
-    where: { slug: d.templateSlug },
+  const template = await prisma.tfTemplate.findFirst({
+    where: { slug: d.templateSlug, ...visibleTemplates(orgId) },
   });
   if (!template) return res.status(404).json({ error: "template not found" });
   const version = await prisma.tfTemplateVersion.findUnique({

@@ -102,9 +102,10 @@ describe("migration plans are scoped to the caller's org", () => {
 });
 
 describe("shared-catalog and internal /tf routes stay admin-only", () => {
-  // TfTemplate has no orgId. One catalog, keyed on slug, and templateBody is
-  // Terraform the pipeline commits and applies, so a write is not a per-tenant
-  // action however scoped the caller feels.
+  // Templates with a null orgId are one shared catalog, keyed on slug, and
+  // templateBody is Terraform the pipeline commits and applies, so a write is
+  // not a per-tenant action however scoped the caller feels. Org-private
+  // templates (adopted workspaces) are covered in workspaces.test.ts.
   it("guards POST /templates with requireAdmin", () => {
     const handlers = route(tfRouter, "post", "/templates").stack.map(
       (l) => l.handle

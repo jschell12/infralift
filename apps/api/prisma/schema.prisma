@@ -23,6 +23,7 @@ model Org {
   assessments Assessment[]
   migrations  Migration[]
   workspaces  Workspace[]
+  templates   TfTemplate[]
 }
 
 model User {
@@ -62,6 +63,7 @@ model ProviderConnection {
 
   org         Org          @relation(fields: [orgId], references: [id])
   assessments Assessment[]
+  workspaces  Workspace[]
 
   @@unique([orgId, provider, label])
 }
@@ -161,9 +163,59 @@ model Workspace {
   lastRunAt       DateTime?
   createdAt       DateTime  @default(now())
 
-  org Org @relation(fields: [orgId], references: [id])
+  // A project is backed by one or more workspaces. Null for workspaces
+  // recorded before projects owned them.
+  projectId         String?
+  // adopted   - imported from the customer's HCP Terraform / TFE org. Their
+  //             code, their state, frozen: infralift never pushes upgrades.
+  // managed   - created by infralift from a catalog template.
+  // extension - added to a project to hold new infrastructure, reading
+  //             outputs from the workspaces it depends on.
+  kind              String  @default("managed")
+  // The customer's TFC/TFE connection (ProviderConnection provider "tfc").
+  // Adopted and extension workspaces live in their org. Projects rendered
+  // through the /tf/jobs pipeline still use infralift's own TFC_ORG.
+  connectionId      String?
+  tfcWorkspaceId    String?
+  vcsRepo           String?
+  workingDirectory  String?
+  // Commit of the configuration version current when the workspace was
+  // adopted. Pins the adopted template's module source.
+  configCommitSha   String?
+  // Variable snapshot: [{key, category, hcl, sensitive, description, value?}].
+  // Sensitive values are never stored, only that the key exists.
+  inputs            Json    @default("[]")
+  // [{name, sensitive}] from the current state version. What extensions can
+  // wire to.
+  outputs           Json    @default("[]")
+  templateVersionId String?
+
+  org             Org                   @relation(fields: [orgId], references: [id])
+  project         TfProject?            @relation(fields: [projectId], references: [id])
+  connection      ProviderConnection?   @relation(fields: [connectionId], references: [id])
+  templateVersion TfTemplateVersion?    @relation(fields: [templateVersionId], references: [id])
+  dependsOn       WorkspaceDependency[] @relation("dependent")
+  dependents      WorkspaceDependency[] @relation("base")
 
   @@unique([orgId, name])
+  @@index([projectId])
+}
+
+// An extension workspace reading outputs from a base workspace. One row per
+// (extension, base) pair; `outputs` maps the extension's local name to the
+// base's output name.
+model WorkspaceDependency {
+  id          String   @id @default(cuid())
+  workspaceId String
+  dependsOnId String
+  outputs     Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation("dependent", fields: [workspaceId], references: [id], onDelete: Cascade)
+  dependsOn Workspace @relation("base", fields: [dependsOnId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, dependsOnId])
+  @@index([dependsOnId])
 }
 
 // ---------------------------------------------------------------------------
@@ -307,13 +359,20 @@ model AppProfile {
 
 model TfTemplate {
   id          String   @id @default(cuid())
+  // Null = the shared catalog every org builds from. Set = private to that
+  // org, which is what an adopted workspace's template is: it points at the
+  // customer's own repo and must never show up in another org's catalog.
+  orgId       String?
   slug        String   @unique
   name        String
   description String
   language    String   @default("hcl")
   createdAt   DateTime @default(now())
 
+  org      Org?                @relation(fields: [orgId], references: [id], onDelete: Restrict)
   versions TfTemplateVersion[]
+
+  @@index([orgId])
 }
 
 model TfTemplateVersion {
@@ -329,6 +388,7 @@ model TfTemplateVersion {
   template   TfTemplate  @relation(fields: [templateId], references: [id])
   projects   TfProject[]
   renderings TfRendering[]
+  workspaces Workspace[]
 
   @@unique([templateId, releaseTag])
 }
@@ -337,8 +397,11 @@ model TfProject {
   id     String @id @default(cuid())
   orgId  String
   name   String
-  // template | codegen. A codegen project is generated from an assessment and
-  // has no template version; a template project has no assessment.
+  // template | codegen | adopted. A codegen project is generated from an
+  // assessment and has no template version; a template project has no
+  // assessment. An adopted project was built around workspaces imported from
+  // the customer's TFC org; destRepo is the first adopted workspace's VCS repo,
+  // or "" when it was CLI-driven and has none.
   source String @default("template")
   // Null for codegen projects.
   templateVersionId String?
@@ -357,6 +420,7 @@ model TfProject {
   assessment      Assessment?        @relation(fields: [assessmentId], references: [id])
   renderings      TfRendering[]
   jobs            TfJob[]
+  workspaces      Workspace[]
 
   @@unique([orgId, name])
   @@index([assessmentId])

@@ -7,6 +7,7 @@ import type {
   FindingSeverity,
   Provider,
 } from "@infralift/shared";
+import { PROVIDERS } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
 import { decryptToken } from "../lib/crypto.js";
 import { getConnector } from "../connectors/index.js";
@@ -125,6 +126,11 @@ assessmentsRouter.post("/run", async (req, res) => {
   });
   if (!connection || connection.orgId !== req.user!.orgId) {
     return res.status(404).json({ error: "Connection not found" });
+  }
+  // Connections also hold destinations that are not assessment sources, such
+  // as a customer's Terraform Cloud org ("tfc"), which has no connector.
+  if (!(PROVIDERS as readonly string[]).includes(connection.provider)) {
+    return res.status(400).json({ error: `${connection.provider} connections cannot be assessed` });
   }
 
   const assessment = await prisma.assessment.create({

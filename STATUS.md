@@ -1,5 +1,36 @@
 # infralift status
 
+## 2026-10-07 (session 12)
+
+### Completed
+- **Workspace adoption and workspace extensions, API only.** A project can now be backed by several workspaces in the customer's own HCP Terraform or Terraform Enterprise org:
+  - `POST /workspaces/connections` stores a per-org TFC/TFE connection (hostname, organization, token; provider `tfc`). Until now the only TFC client was infralift's own org from env.
+  - `GET /workspaces/remote` lists the customer's workspaces and which are already known.
+  - `POST /workspaces/adopt` records an existing workspace (variables, output names, VCS repo, current commit) and templatizes it as an org-private template: a `module` block whose source is their repo pinned to that commit, with their Terraform variables as inputs.
+  - `POST /workspaces/projects/:id/extensions` creates a new workspace in their org, adds it as a remote-state consumer of each base, adds a run trigger from each base, and returns the `deps.tf` that reads the wired outputs.
+  - `GET /workspaces/projects/:id` returns the graph with apply and destroy order.
+
+### Decisions
+- **Adopted means frozen.** Their code and state stay where they are. The template pins `?ref=<sha>`, so a new version only exists when someone adopts again. Nothing upgrades a handcrafted workspace.
+- **Sensitive variables never become template inputs.** They render as `variable` declarations passed through, so a secret is never written into a committed file, and their values are dropped before the database whatever the API returns. Env-category variables are left out as workspace settings, and listed in `skipped`.
+- **Wiring uses `terraform_remote_state` with the remote backend, not `tfe_outputs`.** Inside an HCP run the remote backend authenticates with the run's own token, gated by the base's remote-state-consumers list, which infralift sets. `tfe_outputs` would need a `TFE_TOKEN` planted in the extension workspace, which would mean copying the customer's API token into their workspaces. It also works unchanged under OpenTofu.
+- **Templates gained an `orgId`.** Null is the shared catalog; set is private. Every slug lookup in `tf.ts` now filters on it, and the admin catalog write refuses a private slug. The FK is RESTRICT, because SET NULL on an org delete would publish that org's template to everyone.
+- **An extension never takes over an existing workspace.** Found in review: creating an extension reused any same-named workspace in the customer's org, which would have wired state sharing and run triggers into something they built by hand. Infralift now marks workspaces it creates in their description, reuses only one carrying this project's marker (a retry), and otherwise returns 409 and points at adopt.
+- **TFE hostnames must be public DNS names**, re-checked against their resolved addresses whenever the connection is used, and the client no longer follows redirects. The API runs on the home network, and a self-serve user choosing the host could otherwise aim it at `10.x`. DNS rebinding is not covered.
+- **Re-adopting refreshes a workspace; it cannot move it** to another project, connection or TFC workspace, which would strand the extensions that depend on it. Env variable values are no longer stored at all.
+- **The TFC token is not read-only**, unlike assessment connections: creating workspaces, run triggers and state sharing all write. It is kept out of the shared `PROVIDERS` list, and `/connections/:id/verify` and `/assessments/run` now refuse non-assessment connections instead of failing on a missing connector.
+
+### Verification
+- 275 API tests (from 205), `tsc --noEmit` clean. New tests fail when the org filter on the connection lookup, the template-visibility filter, or the sensitive-value drop is removed, checked by removing each.
+- Generated adopted-template and wiring HCL pass `validate` and `fmt -check` under both `terraform` and `tofu` (module source swapped for a local stub, since `init` would fetch the git source).
+- **Known gaps, accepted for now:** non-sensitive Terraform variable values are stored in plain JSON because they become template defaults, so a secret someone forgot to mark sensitive lands in the database. The private-address check misses NAT64, `198.18.0.0/15` and the LAN's own global IPv6 addresses; TLS keeps those to a reachability probe on 443. TFE on a non-443 port is refused.
+- **Not exercised against a live TFC org.** The endpoint shapes were checked against HashiCorp's API docs, not a real response.
+
+### Next steps
+- Run it once against a real TFC org: adopt a VCS-backed workspace, add an extension, confirm the extension's plan can read the base's outputs.
+- Migration `0011_workspace_extensions` has to be applied before deploying.
+- Dashboard UI for adopt and extensions. Committing `deps.tf` into the extension's repo through the existing pipeline. Managed (catalog) workspaces and automatic upgrades for them are not built.
+
 ## 2026-09-08 (session 11)
 
 ### Completed
