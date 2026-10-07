@@ -4,6 +4,10 @@ import {
   NotTemplatizableError,
   WiringError,
   adoptedTemplateSlug,
+  assertPublicHost,
+  isPrivateAddress,
+  tfcCredentialSchema,
+  UnsafeHostError,
   applyOrder,
   destroyOrder,
   missingOutputs,
@@ -115,8 +119,62 @@ describe("templatizeAdopted", () => {
 
 describe("adoptedTemplateSlug", () => {
   it("embeds the org so two orgs adopting the same name do not collide", () => {
-    expect(adoptedTemplateSlug("orgA1", "Core_Network")).toBe("adopted-orga1-core-network");
+    expect(adoptedTemplateSlug("orgA1", "Core_Network")).toMatch(/^adopted-orga1-core-network-[0-9a-f]{8}$/);
     expect(adoptedTemplateSlug("orgA1", "x")).not.toBe(adoptedTemplateSlug("orgB2", "x"));
+  });
+
+  it("keeps names apart that normalize to the same slug", () => {
+    expect(adoptedTemplateSlug("o", "foo_bar")).not.toBe(adoptedTemplateSlug("o", "foo-bar"));
+  });
+
+  it("stays within the catalog's slug alphabet", () => {
+    expect(adoptedTemplateSlug("o", "Weird Name!!".repeat(20))).toMatch(/^[a-z0-9-]+$/);
+  });
+});
+
+describe("snapshotInputs on env variables", () => {
+  it("drops env values even when not marked sensitive", () => {
+    const out = snapshotInputs([
+      { key: "AWS_SECRET_ACCESS_KEY", value: "oops", category: "env", hcl: false, sensitive: false, description: "" },
+    ]);
+    expect(out[0]).not.toHaveProperty("value");
+  });
+});
+
+describe("module label", () => {
+  it("is a valid HCL label when the workspace name starts with a digit", () => {
+    const t = adopt({ workspaceName: "2024-network" });
+    expect(t.templateBody).toContain('module "ws_2024-network" {');
+  });
+});
+
+describe("TFE hostname safety", () => {
+  it.each(["localhost", "10.0.0.2", "127.0.0.1", "tfe.internal:8443", "intranet"])(
+    "rejects %s at the schema",
+    (hostname) => {
+      expect(tfcCredentialSchema.safeParse({ hostname, organization: "a", token: "t" }).success).toBe(false);
+    }
+  );
+
+  it("accepts a public DNS name and defaults to HCP Terraform", () => {
+    expect(tfcCredentialSchema.parse({ organization: "a", token: "t" }).hostname).toBe("app.terraform.io");
+    expect(tfcCredentialSchema.safeParse({ hostname: "tfe.acme.com", organization: "a", token: "t" }).success).toBe(true);
+  });
+
+  it.each(["10.1.2.3", "172.16.0.1", "192.168.1.1", "127.0.0.1", "169.254.169.254", "100.64.0.1", "::1", "fd00::1", "fe80::1", "::ffff:10.0.0.2"])(
+    "treats %s as private",
+    (ip) => expect(isPrivateAddress(ip)).toBe(true)
+  );
+
+  it.each(["1.1.1.1", "52.1.2.3", "2606:4700::1111"])("treats %s as public", (ip) =>
+    expect(isPrivateAddress(ip)).toBe(false)
+  );
+
+  it("refuses a public-looking name that resolves privately", async () => {
+    await expect(
+      assertPublicHost("tfe.evil.example", async () => [{ address: "52.1.2.3" }, { address: "10.0.0.2" }])
+    ).rejects.toBeInstanceOf(UnsafeHostError);
+    await expect(assertPublicHost("tfe.acme.com", async () => [{ address: "52.1.2.3" }])).resolves.toBeUndefined();
   });
 });
 
@@ -152,7 +210,7 @@ describe("applyOrder / destroyOrder", () => {
   });
 
   it("rejects an edge to a workspace outside the graph", () => {
-    expect(() => applyOrder(["a"], [{ workspaceId: "a", dependsOnId: "zz" }])).toThrow(/unknown/);
+    expect(() => applyOrder(["a"], [{ workspaceId: "a", dependsOnId: "zz" }])).toThrow(/outside the graph/);
   });
 });
 

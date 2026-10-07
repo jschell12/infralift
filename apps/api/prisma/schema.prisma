@@ -173,7 +173,8 @@ model Workspace {
   //             outputs from the workspaces it depends on.
   kind              String  @default("managed")
   // The customer's TFC/TFE connection (ProviderConnection provider "tfc").
-  // Runs happen in their org, never in infralift's.
+  // Adopted and extension workspaces live in their org. Projects rendered
+  // through the /tf/jobs pipeline still use infralift's own TFC_ORG.
   connectionId      String?
   tfcWorkspaceId    String?
   vcsRepo           String?

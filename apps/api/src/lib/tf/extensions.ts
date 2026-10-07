@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { z } from "zod";
 import type { TfcOutput, TfcVariable } from "./tfc-client.js";
 
@@ -21,14 +24,61 @@ import type { TfcOutput, TfcVariable } from "./tfc-client.js";
 // creating extension workspaces, run triggers and remote-state sharing all
 // need write access to the customer's org.
 export const tfcCredentialSchema = z.object({
+  // A DNS name with at least one dot and no port. IP literals and
+  // single-label names are refused here; private addresses behind a public
+  // name are refused by assertPublicHost at connect and use time.
   hostname: z
     .string()
-    .regex(/^[a-z0-9.-]+(:\d+)?$/i)
+    .regex(/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i)
     .default("app.terraform.io"),
   organization: z.string().regex(/^[A-Za-z0-9_-]+$/),
   token: z.string().min(1),
 });
 export type TfcCredential = z.infer<typeof tfcCredentialSchema>;
+
+export class UnsafeHostError extends Error {}
+
+/** True for addresses an outbound request from the API host must not reach. */
+export function isPrivateAddress(ip: string): boolean {
+  if (isIP(ip) === 4) {
+    const [a, b] = ip.split(".").map(Number);
+    return (
+      a === 0 || a === 10 || a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      a >= 224
+    );
+  }
+  const v6 = ip.toLowerCase();
+  if (v6.startsWith("::ffff:")) return isPrivateAddress(v6.slice(7));
+  return (
+    v6 === "::" || v6 === "::1" ||
+    v6.startsWith("fc") || v6.startsWith("fd") ||
+    v6.startsWith("fe8") || v6.startsWith("fe9") || v6.startsWith("fea") || v6.startsWith("feb") ||
+    v6.startsWith("ff")
+  );
+}
+
+/**
+ * Refuse a TFE hostname that resolves to a private, loopback or link-local
+ * address. The API runs on the home network, and a self-serve user choosing
+ * the host would otherwise get it to make requests there. Resolution can
+ * change between this check and the request; this closes the direct case,
+ * not DNS rebinding.
+ */
+export async function assertPublicHost(
+  hostname: string,
+  resolve: (h: string) => Promise<{ address: string }[]> = (h) => lookup(h, { all: true })
+): Promise<void> {
+  const addrs = await resolve(hostname).catch(() => {
+    throw new UnsafeHostError(`${hostname} does not resolve`);
+  });
+  if (!addrs.length || addrs.some((a) => isPrivateAddress(a.address))) {
+    throw new UnsafeHostError(`${hostname} resolves to a private address`);
+  }
+}
 
 // -- variable snapshot ---------------------------------------------------------
 
@@ -55,7 +105,9 @@ export function snapshotInputs(vars: TfcVariable[]): StoredInput[] {
       hcl: v.hcl,
       sensitive: v.sensitive,
       description: v.description,
-      ...(v.sensitive || v.value === null ? {} : { value: v.value }),
+      // Env values are workspace settings, often credentials marked
+      // non-sensitive by accident, and nothing reads them back.
+      ...(v.sensitive || v.category === "env" || v.value === null ? {} : { value: v.value }),
     }))
     .sort((a, b) => a.key.localeCompare(b.key));
 }
@@ -123,7 +175,8 @@ export function templatizeAdopted(opts: {
     throw new NotTemplatizableError(`unsupported working directory: ${dir}`);
   }
   const source = `git::${url}.git${dir ? `//${dir}` : ""}?ref=${opts.commitSha}`;
-  const moduleLabel = opts.workspaceName.replace(/[^A-Za-z0-9_-]/g, "_");
+  const label = opts.workspaceName.replace(/[^A-Za-z0-9_-]/g, "_");
+  const moduleLabel = /^[A-Za-z_]/.test(label) ? label : `ws_${label}`;
 
   const skipped: { key: string; reason: string }[] = [];
   const properties: Record<string, unknown> = {};
@@ -197,7 +250,15 @@ export function templatizeAdopted(opts: {
 /** Slug for an org-private adopted template. TfTemplate.slug is globally unique. */
 export function adoptedTemplateSlug(orgId: string, workspaceName: string): string {
   const ws = workspaceName.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-  return `adopted-${orgId.toLowerCase()}-${ws}`.slice(0, 120);
+  // Normalizing collapses foo_bar and foo-bar; the hash of the exact name
+  // keeps them apart.
+  const h = createHash("sha256").update(workspaceName).digest("hex").slice(0, 8);
+  return `adopted-${orgId.toLowerCase()}-${ws.slice(0, 80)}-${h}`;
+}
+
+/** Description infralift writes on workspaces it creates. Reuse is keyed on it. */
+export function extensionMarker(projectId: string): string {
+  return `Managed by infralift: extension workspace for project ${projectId}.`;
 }
 
 // -- dependency graph -----------------------------------------------------------
@@ -208,7 +269,9 @@ export interface DependencyEdge {
   dependsOnId: string;
 }
 
-export class DependencyCycleError extends Error {
+export class DependencyGraphError extends Error {}
+
+export class DependencyCycleError extends DependencyGraphError {
   constructor(public cycle: string[]) {
     super(`dependency cycle: ${cycle.join(" -> ")}`);
   }
@@ -225,7 +288,9 @@ export function applyOrder(ids: string[], edges: DependencyEdge[]): string[] {
   const deps = new Map<string, string[]>(nodes.map((n) => [n, []]));
   for (const e of edges) {
     if (!known.has(e.workspaceId) || !known.has(e.dependsOnId)) {
-      throw new Error(`edge references an unknown workspace: ${e.workspaceId} -> ${e.dependsOnId}`);
+      throw new DependencyGraphError(
+        `edge references a workspace outside the graph: ${e.workspaceId} -> ${e.dependsOnId}`
+      );
     }
     deps.get(e.workspaceId)!.push(e.dependsOnId);
   }

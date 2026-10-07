@@ -9,12 +9,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   providerConnection: { findFirst: vi.fn(), findUnique: vi.fn() },
   tfProject: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
-  workspace: { findMany: vi.fn(), findUnique: vi.fn() },
+  workspace: { findMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+  workspaceDependency: { create: vi.fn() },
+  $transaction: vi.fn(),
   tfTemplate: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), upsert: vi.fn() },
   tfTemplateVersion: { findUnique: vi.fn(), create: vi.fn() },
   assessment: { create: vi.fn() },
 }));
 vi.mock("../lib/db.js", () => ({ prisma: db }));
+vi.mock("node:dns/promises", () => ({ lookup: async () => [{ address: "52.1.2.3" }] }));
 
 const { workspacesRouter } = await import("./workspaces.js");
 const { tfRouter } = await import("./tf.js");
@@ -50,9 +53,40 @@ const user = { orgId: "org_mine", userId: "u1", email: "a@b.c", name: null };
 
 beforeEach(() => {
   for (const model of Object.values(db)) {
+    if (typeof model === "function") continue;
     for (const fn of Object.values(model)) (fn as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue(null);
   }
+  db.$transaction.mockReset().mockImplementation(async (fn: (tx: typeof db) => unknown) => fn(db));
+  vi.unstubAllGlobals();
 });
+
+process.env.TOKEN_ENCRYPTION_KEY ??= "0".repeat(64);
+const { encryptToken } = await import("../lib/crypto.js");
+const conn = () => ({
+  id: "conn_mine",
+  encryptedToken: encryptToken(JSON.stringify({ organization: "acme", token: "t" })),
+});
+
+/** Fake TFC: GET of a workspace by name returns `existing`; records every call. */
+function fakeTfc(existing: { id: string; description: string } | null) {
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", async (url: string, init: { method: string }) => {
+    calls.push(`${init.method} ${url.replace("https://app.terraform.io/api/v2", "")}`);
+    const ok = (status: number, body: unknown) => ({
+      ok: status < 300, status, json: async () => body, text: async () => JSON.stringify(body),
+    });
+    if (init.method === "GET" && url.includes("/organizations/acme/workspaces/")) {
+      return existing
+        ? ok(200, { data: { id: existing.id, attributes: { name: "app", description: existing.description } } })
+        : ok(404, {});
+    }
+    if (init.method === "POST" && url.endsWith("/organizations/acme/workspaces")) {
+      return ok(201, { data: { id: "ws-new", attributes: { name: "app" } } });
+    }
+    return ok(200, { data: [] });
+  });
+  return calls;
+}
 
 describe("a Terraform Cloud connection is only usable by its own org", () => {
   it("POST /adopt looks the connection up by org and provider, not by id alone", async () => {
@@ -103,12 +137,7 @@ describe("project workspace graphs are scoped to the caller's org", () => {
   it("POST extensions only accepts bases from this project's workspace list", async () => {
     db.tfProject.findFirst.mockResolvedValue({ id: "proj_mine", name: "p" });
     db.workspace.findMany.mockResolvedValue([]);
-    const enc = (await import("../lib/crypto.js")).encryptToken;
-    process.env.TOKEN_ENCRYPTION_KEY ??= "0".repeat(64);
-    db.providerConnection.findFirst.mockResolvedValue({
-      id: "conn_mine",
-      encryptedToken: enc(JSON.stringify({ organization: "acme", token: "t" })),
-    });
+    db.providerConnection.findFirst.mockResolvedValue(conn());
     const res = await call(workspacesRouter, "post", "/projects/:projectId/extensions", {
       user,
       params: { projectId: "proj_mine" },
@@ -190,5 +219,78 @@ describe("a TFC connection is not an assessment source", () => {
     });
     expect(res.status).toBe(400);
     expect(db.assessment.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("an extension never takes over the customer's own workspace", () => {
+  const base = { projectId: "proj_mine" };
+  beforeEach(() => {
+    db.tfProject.findFirst.mockResolvedValue({ id: base.projectId, name: "p" });
+    db.workspace.findMany.mockResolvedValue([]);
+    db.providerConnection.findFirst.mockResolvedValue(conn());
+    db.workspace.create.mockResolvedValue({ id: "w1", name: "app", kind: "extension", tfcWorkspaceUrl: "u" });
+  });
+  const create = () =>
+    call(workspacesRouter, "post", "/projects/:projectId/extensions", {
+      user,
+      params: { projectId: base.projectId },
+      body: { name: "app", connectionId: "conn_mine" },
+    });
+
+  it("refuses when a same-named workspace already exists and infralift did not make it", async () => {
+    const calls = fakeTfc({ id: "ws-theirs", description: "hand built by ops" });
+    const res = await create();
+    expect(res.status).toBe(409);
+    expect(calls.filter((c) => c.startsWith("POST"))).toEqual([]);
+    expect(db.workspace.create).not.toHaveBeenCalled();
+  });
+
+  it("reuses one it made for this project on an earlier attempt", async () => {
+    const { extensionMarker } = await import("../lib/tf/extensions.js");
+    fakeTfc({ id: "ws-ours", description: extensionMarker(base.projectId) });
+    const res = await create();
+    expect(res.status).toBe(201);
+    expect(db.workspace.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ tfcWorkspaceId: "ws-ours" }) })
+    );
+  });
+
+  it("does not reuse one made for a different project", async () => {
+    const { extensionMarker } = await import("../lib/tf/extensions.js");
+    fakeTfc({ id: "ws-other", description: extensionMarker("proj_other") });
+    expect((await create()).status).toBe(409);
+  });
+
+  it("creates with the marker when the name is free", async () => {
+    const calls = fakeTfc(null);
+    const res = await create();
+    expect(res.status).toBe(201);
+    expect(calls).toContain("POST /organizations/acme/workspaces");
+  });
+});
+
+describe("a broken graph is reported, not a 500", () => {
+  it("GET /projects/:projectId names an edge that leaves the project", async () => {
+    db.tfProject.findFirst.mockResolvedValue({ id: "proj_mine", name: "p" });
+    db.workspace.findMany.mockResolvedValue([
+      { id: "a", name: "a", kind: "extension", outputs: [], dependsOn: [{ dependsOnId: "elsewhere", outputs: {} }] },
+    ]);
+    const res = await call(workspacesRouter, "get", "/projects/:projectId", {
+      user,
+      params: { projectId: "proj_mine" },
+    });
+    expect(res.status).toBe(200);
+    expect((res.body as { order: object }).order).toHaveProperty("inconsistent");
+  });
+});
+
+describe("refreshing outputs is scoped to the caller's org", () => {
+  it("POST /:id/outputs/refresh filters by orgId", async () => {
+    const res = await call(workspacesRouter, "post", "/:id/outputs/refresh", {
+      user,
+      params: { id: "ws_someone_elses" },
+    });
+    expect(res.status).toBe(404);
+    expect(db.workspace.findFirst).toHaveBeenCalledWith({ where: { id: "ws_someone_elses", orgId: "org_mine" } });
   });
 });

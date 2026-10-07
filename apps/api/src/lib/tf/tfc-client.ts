@@ -24,6 +24,7 @@ export interface TfcWorkspace {
   vcsBranch: string | null;
   currentConfigVersionId: string | null;
   globalRemoteState: boolean;
+  description: string;
   createdAt: string;
   updatedAt: string;
   resourceCount: number;
@@ -102,6 +103,9 @@ export class TfcClient {
         "Content-Type": "application/vnd.api+json",
       },
       body: body ? JSON.stringify(body) : undefined,
+      // The host can be customer-supplied (TFE). Never follow a redirect to
+      // somewhere it was not checked against.
+      redirect: "manual",
     });
     if (!res.ok) {
       const text = await res.text();
@@ -126,6 +130,7 @@ export class TfcClient {
       currentConfigVersionId:
         data.relationships?.["current-configuration-version"]?.data?.id ?? null,
       globalRemoteState: a["global-remote-state"] ?? false,
+      description: a.description ?? "",
       createdAt: a["created-at"],
       updatedAt: a["updated-at"],
       resourceCount: a["resource-count"] ?? 0,
@@ -229,6 +234,38 @@ export class TfcClient {
       if (err instanceof TfcClientError && err.statusCode === 422) {
         const existing = await this.getWorkspace(name);
         if (existing) return existing;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Create a workspace, refusing to reuse one that already exists. The
+   * caller decides what an existing one means; createWorkspace's 422 reuse
+   * cannot tell "made on an earlier attempt" from "already the customer's".
+   */
+  async createWorkspaceExclusive(
+    name: string,
+    opts: { autoApply: boolean; description: string },
+  ): Promise<{ workspace: TfcWorkspace; created: boolean }> {
+    const existing = await this.getWorkspace(name);
+    if (existing) return { workspace: existing, created: false };
+    try {
+      const json = await this.request<any>(
+        "POST",
+        `/organizations/${encodeURIComponent(this.org)}/workspaces`,
+        {
+          data: {
+            type: "workspaces",
+            attributes: { name, "auto-apply": opts.autoApply, description: opts.description },
+          },
+        },
+      );
+      return { workspace: TfcClient.mapWorkspace(json.data), created: true };
+    } catch (err) {
+      if (err instanceof TfcClientError && err.statusCode === 422) {
+        const raced = await this.getWorkspace(name);
+        if (raced) return { workspace: raced, created: false };
       }
       throw err;
     }
