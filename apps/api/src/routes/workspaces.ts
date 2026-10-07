@@ -1,7 +1,56 @@
 import { Router } from "express";
+import { z } from "zod";
 import { prisma } from "../lib/db.js";
+import { encryptToken, decryptToken } from "../lib/crypto.js";
+import { TfcClient, TfcClientError, tfcBaseUrl } from "../lib/tf/tfc-client.js";
+import {
+  DependencyCycleError,
+  NotTemplatizableError,
+  WiringError,
+  adoptedTemplateSlug,
+  applyOrder,
+  destroyOrder,
+  missingOutputs,
+  renderWiring,
+  snapshotInputs,
+  templatizeAdopted,
+  tfcCredentialSchema,
+  type StoredInput,
+  type TfcCredential,
+} from "../lib/tf/extensions.js";
 
 export const workspacesRouter = Router();
+
+// ProviderConnection.provider for a customer's HCP Terraform / TFE org. Not in
+// the shared PROVIDERS list: that list is assessment sources, and this is
+// where runs happen, not something to assess.
+export const TFC_PROVIDER = "tfc";
+
+function workspaceUrl(cred: TfcCredential, name: string): string {
+  return `https://${cred.hostname}/app/${cred.organization}/workspaces/${name}`;
+}
+
+/** The org's TFC connection, decrypted, or null. Always scoped by orgId. */
+async function loadTfc(orgId: string, connectionId: string) {
+  const conn = await prisma.providerConnection.findFirst({
+    where: { id: connectionId, orgId, provider: TFC_PROVIDER },
+  });
+  if (!conn) return null;
+  const cred = tfcCredentialSchema.parse(JSON.parse(decryptToken(conn.encryptedToken)));
+  const client = new TfcClient(cred.token, cred.organization, tfcBaseUrl(cred.hostname));
+  return { conn, cred, client };
+}
+
+function tfcFailure(res: any, err: unknown) {
+  if (err instanceof TfcClientError) {
+    // The customer's own org answered; pass the status class through without
+    // the body, which can echo request detail.
+    return res.status(502).json({ error: `Terraform Cloud returned ${err.statusCode} for ${err.method} ${err.path}` });
+  }
+  throw err;
+}
+
+// -- list ----------------------------------------------------------------------
 
 workspacesRouter.get("/", async (req, res) => {
   const { orgId } = req.user!;
@@ -13,10 +62,424 @@ workspacesRouter.get("/", async (req, res) => {
     workspaces.map((w) => ({
       id: w.id,
       name: w.name,
+      kind: w.kind,
+      projectId: w.projectId,
       tfcWorkspaceUrl: w.tfcWorkspaceUrl,
       driftDetected: w.driftDetected,
       lastRunStatus: w.lastRunStatus,
       lastRunAt: w.lastRunAt?.toISOString() ?? null,
     }))
   );
+});
+
+// -- connect an HCP Terraform / TFE org ---------------------------------------------
+
+const connectionSchema = z.object({
+  label: z.string().min(1).max(120),
+  hostname: z.string().optional(),
+  organization: z.string().min(1),
+  token: z.string().min(1),
+});
+
+workspacesRouter.post("/connections", async (req, res) => {
+  const parsed = connectionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const credParsed = tfcCredentialSchema.safeParse({
+    hostname: parsed.data.hostname || undefined,
+    organization: parsed.data.organization,
+    token: parsed.data.token,
+  });
+  if (!credParsed.success) {
+    return res.status(400).json({ error: credParsed.error.flatten() });
+  }
+  const cred = credParsed.data;
+  const client = new TfcClient(cred.token, cred.organization, tfcBaseUrl(cred.hostname));
+  let valid = false;
+  try {
+    valid = await client.canReadOrganization();
+  } catch {
+    valid = false;
+  }
+  const conn = await prisma.providerConnection.create({
+    data: {
+      orgId: req.user!.orgId,
+      provider: TFC_PROVIDER,
+      label: parsed.data.label,
+      encryptedToken: encryptToken(JSON.stringify(cred)),
+      status: valid ? "valid" : "invalid",
+      lastVerifiedAt: valid ? new Date() : null,
+    },
+  });
+  res.status(201).json({
+    id: conn.id,
+    provider: conn.provider,
+    label: conn.label,
+    hostname: cred.hostname,
+    organization: cred.organization,
+    status: conn.status,
+  });
+});
+
+// -- browse the customer's workspaces -------------------------------------------------
+
+workspacesRouter.get("/remote", async (req, res) => {
+  const { orgId } = req.user!;
+  const tfc = await loadTfc(orgId, String(req.query.connectionId ?? ""));
+  if (!tfc) return res.status(404).json({ error: "connection not found" });
+  try {
+    const [remote, local] = await Promise.all([
+      tfc.client.listWorkspaces(),
+      prisma.workspace.findMany({
+        where: { orgId, connectionId: tfc.conn.id },
+        select: { id: true, tfcWorkspaceId: true, kind: true },
+      }),
+    ]);
+    const byTfcId = new Map(local.map((w) => [w.tfcWorkspaceId, w]));
+    res.json(
+      remote.map((w) => ({
+        tfcWorkspaceId: w.id,
+        name: w.name,
+        vcsRepo: w.vcsRepo,
+        workingDirectory: w.workingDirectory,
+        resourceCount: w.resourceCount,
+        latestRunStatus: w.latestRunStatus,
+        infralift: byTfcId.get(w.id) ?? null,
+      }))
+    );
+  } catch (err) {
+    return tfcFailure(res, err);
+  }
+});
+
+// -- adopt an existing workspace ------------------------------------------------------
+
+const projectName = z.string().min(1).max(32).regex(/^[a-z0-9-]+$/);
+
+const adoptSchema = z
+  .object({
+    connectionId: z.string().min(1),
+    workspaceName: z.string().min(1).max(90),
+    projectId: z.string().min(1).optional(),
+    projectName: projectName.optional(),
+  })
+  .refine((d) => Boolean(d.projectId) !== Boolean(d.projectName), {
+    message: "give exactly one of projectId or projectName",
+  });
+
+workspacesRouter.post("/adopt", async (req, res) => {
+  const parsed = adoptSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const { orgId } = req.user!;
+  const d = parsed.data;
+  const tfc = await loadTfc(orgId, d.connectionId);
+  if (!tfc) return res.status(404).json({ error: "connection not found" });
+
+  let remote, vars, outputs, ingress;
+  try {
+    remote = await tfc.client.getWorkspace(d.workspaceName);
+    if (!remote) return res.status(404).json({ error: "workspace not found in Terraform Cloud" });
+    [vars, outputs, ingress] = await Promise.all([
+      tfc.client.listVariables(remote.id),
+      tfc.client.listCurrentOutputs(remote.id),
+      remote.currentConfigVersionId
+        ? tfc.client.getIngress(remote.currentConfigVersionId)
+        : Promise.resolve(null),
+    ]);
+  } catch (err) {
+    return tfcFailure(res, err);
+  }
+
+  const existing = await prisma.workspace.findUnique({
+    where: { orgId_name: { orgId, name: remote.name } },
+  });
+  if (existing && existing.kind !== "adopted") {
+    return res.status(409).json({
+      error: `"${remote.name}" is already an infralift ${existing.kind} workspace`,
+    });
+  }
+
+  let project;
+  if (d.projectId) {
+    project = await prisma.tfProject.findFirst({ where: { id: d.projectId, orgId } });
+    if (!project) return res.status(404).json({ error: "project not found" });
+  } else {
+    project =
+      (await prisma.tfProject.findUnique({
+        where: { orgId_name: { orgId, name: d.projectName! } },
+      })) ??
+      (await prisma.tfProject.create({
+        data: {
+          orgId,
+          name: d.projectName!,
+          source: "adopted",
+          destRepo: remote.vcsRepo ?? "",
+          destBranch: remote.vcsBranch ?? "main",
+          destPath: remote.workingDirectory ?? "",
+          providerConfig: {},
+        },
+      }));
+  }
+
+  const inputs: StoredInput[] = snapshotInputs(vars);
+  const commitSha = ingress?.commitSha ?? null;
+
+  // Templatize when there is a pinned source. A CLI-driven workspace is still
+  // adopted; it just cannot be reused as a template.
+  let template:
+    | { status: "created"; slug: string; releaseTag: string; skipped: { key: string; reason: string }[] }
+    | { status: "unavailable"; reason: string };
+  let templateVersionId: string | null = null;
+  try {
+    const t = templatizeAdopted({
+      workspaceName: remote.name,
+      repoUrl: remote.vcsRepoUrl,
+      workingDirectory: remote.workingDirectory,
+      commitSha,
+      inputs,
+    });
+    const slug = adoptedTemplateSlug(orgId, remote.name);
+    const releaseTag = commitSha!.slice(0, 12);
+    const tpl = await prisma.tfTemplate.upsert({
+      where: { slug },
+      create: {
+        slug,
+        orgId,
+        name: `${remote.name} (adopted)`,
+        description: `Adopted from ${remote.vcsRepo ?? "TFC"} at ${releaseTag}. Frozen.`,
+      },
+      update: {},
+    });
+    if (tpl.orgId !== orgId) {
+      // The slug embeds the org id, so this means a bug, not a race. Refuse
+      // rather than attach a version to another org's template.
+      throw new Error(`adopted template slug ${slug} belongs to another org`);
+    }
+    const version = await prisma.tfTemplateVersion.upsert({
+      where: { templateId_releaseTag: { templateId: tpl.id, releaseTag } },
+      create: {
+        templateId: tpl.id,
+        releaseTag,
+        templateBody: t.templateBody,
+        inputSchema: t.inputSchema as object,
+      },
+      update: {},
+    });
+    templateVersionId = version.id;
+    template = { status: "created", slug, releaseTag, skipped: t.skipped };
+  } catch (err) {
+    if (!(err instanceof NotTemplatizableError)) throw err;
+    template = { status: "unavailable", reason: err.message };
+  }
+
+  const data = {
+    projectId: project.id,
+    kind: "adopted",
+    connectionId: tfc.conn.id,
+    tfcWorkspaceId: remote.id,
+    tfcWorkspaceUrl: workspaceUrl(tfc.cred, remote.name),
+    vcsRepo: remote.vcsRepo,
+    workingDirectory: remote.workingDirectory,
+    configCommitSha: commitSha,
+    inputs: inputs as object[],
+    outputs: outputs as object[],
+    lastRunStatus: remote.latestRunStatus,
+    templateVersionId,
+  };
+  const workspace = await prisma.workspace.upsert({
+    where: { orgId_name: { orgId, name: remote.name } },
+    create: { orgId, name: remote.name, ...data },
+    update: data,
+  });
+
+  res.status(existing ? 200 : 201).json({
+    workspace: {
+      id: workspace.id,
+      name: workspace.name,
+      kind: workspace.kind,
+      projectId: project.id,
+      tfcWorkspaceUrl: workspace.tfcWorkspaceUrl,
+      inputs: inputs.length,
+      outputs: outputs.map((o) => o.name),
+    },
+    template,
+  });
+});
+
+// -- a project's workspace graph ------------------------------------------------------
+
+async function projectGraph(orgId: string, projectId: string) {
+  const project = await prisma.tfProject.findFirst({
+    where: { id: projectId, orgId },
+    select: { id: true, name: true },
+  });
+  if (!project) return null;
+  const workspaces = await prisma.workspace.findMany({
+    where: { orgId, projectId },
+    include: { dependsOn: true },
+    orderBy: { name: "asc" },
+  });
+  const edges = workspaces.flatMap((w) =>
+    w.dependsOn.map((dep) => ({ workspaceId: w.id, dependsOnId: dep.dependsOnId }))
+  );
+  return { project, workspaces, edges };
+}
+
+workspacesRouter.get("/projects/:projectId", async (req, res) => {
+  const g = await projectGraph(req.user!.orgId, req.params.projectId);
+  if (!g) return res.status(404).json({ error: "project not found" });
+  const ids = g.workspaces.map((w) => w.id);
+  const name = new Map(g.workspaces.map((w) => [w.id, w.name]));
+  let order: { apply: string[]; destroy: string[] } | { cycle: string[] };
+  try {
+    order = {
+      apply: applyOrder(ids, g.edges).map((id) => name.get(id)!),
+      destroy: destroyOrder(ids, g.edges).map((id) => name.get(id)!),
+    };
+  } catch (err) {
+    if (!(err instanceof DependencyCycleError)) throw err;
+    order = { cycle: err.cycle.map((id) => name.get(id)!) };
+  }
+  res.json({
+    project: g.project,
+    workspaces: g.workspaces.map((w) => ({
+      id: w.id,
+      name: w.name,
+      kind: w.kind,
+      tfcWorkspaceUrl: w.tfcWorkspaceUrl,
+      configCommitSha: w.configCommitSha,
+      outputs: w.outputs,
+      dependsOn: w.dependsOn.map((dep) => ({
+        workspaceId: dep.dependsOnId,
+        outputs: dep.outputs,
+      })),
+    })),
+    order,
+  });
+});
+
+// -- add an extension workspace ---------------------------------------------------------
+
+const extensionSchema = z.object({
+  name: z.string().regex(/^[A-Za-z0-9_-]{1,90}$/),
+  connectionId: z.string().min(1),
+  dependsOn: z
+    .array(
+      z.object({
+        workspaceId: z.string().min(1),
+        outputs: z.record(z.string(), z.string()).default({}),
+      })
+    )
+    .default([]),
+});
+
+workspacesRouter.post("/projects/:projectId/extensions", async (req, res) => {
+  const parsed = extensionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const { orgId } = req.user!;
+  const d = parsed.data;
+  const g = await projectGraph(orgId, req.params.projectId);
+  if (!g) return res.status(404).json({ error: "project not found" });
+  const tfc = await loadTfc(orgId, d.connectionId);
+  if (!tfc) return res.status(404).json({ error: "connection not found" });
+
+  if (await prisma.workspace.findUnique({ where: { orgId_name: { orgId, name: d.name } } })) {
+    return res.status(409).json({ error: `workspace "${d.name}" already exists` });
+  }
+
+  // Bases must be in this project, and in the same TFC org as the extension:
+  // remote state sharing does not cross organizations.
+  const byId = new Map(g.workspaces.map((w) => [w.id, w]));
+  const problems: string[] = [];
+  for (const dep of d.dependsOn) {
+    const base = byId.get(dep.workspaceId);
+    if (!base) {
+      problems.push(`${dep.workspaceId}: not a workspace in this project`);
+      continue;
+    }
+    if (!base.tfcWorkspaceId || base.connectionId !== tfc.conn.id) {
+      problems.push(`${base.name}: not in the same Terraform Cloud organization`);
+      continue;
+    }
+    const missing = missingOutputs(dep.outputs, base.outputs as { name: string }[]);
+    if (missing.length) problems.push(`${base.name}: no output named ${missing.join(", ")}`);
+  }
+  if (new Set(d.dependsOn.map((x) => x.workspaceId)).size !== d.dependsOn.length) {
+    problems.push("a base workspace is listed more than once");
+  }
+  if (problems.length) return res.status(422).json({ error: problems });
+
+  // Render before touching the customer's org, so a bad name fails here.
+  let wiring: string;
+  try {
+    wiring = renderWiring({
+      hostname: tfc.cred.hostname,
+      organization: tfc.cred.organization,
+      bases: d.dependsOn.map((dep) => ({
+        workspaceName: byId.get(dep.workspaceId)!.name,
+        outputs: dep.outputs,
+      })),
+    });
+  } catch (err) {
+    if (err instanceof WiringError) return res.status(422).json({ error: [err.message] });
+    throw err;
+  }
+
+  // Create in TFC, then share state and add run triggers from each base. Each
+  // call is idempotent, so a retry after a partial failure converges.
+  let remote;
+  try {
+    remote = await tfc.client.createWorkspace(d.name, { autoApply: false });
+    for (const dep of d.dependsOn) {
+      const baseTfcId = byId.get(dep.workspaceId)!.tfcWorkspaceId!;
+      await tfc.client.addRemoteStateConsumers(baseTfcId, [remote.id]);
+      await tfc.client.ensureRunTrigger(remote.id, baseTfcId);
+    }
+  } catch (err) {
+    return tfcFailure(res, err);
+  }
+
+  const workspace = await prisma.$transaction(async (tx) => {
+    const ws = await tx.workspace.create({
+      data: {
+        orgId,
+        name: d.name,
+        projectId: g.project.id,
+        kind: "extension",
+        connectionId: tfc.conn.id,
+        tfcWorkspaceId: remote.id,
+        tfcWorkspaceUrl: workspaceUrl(tfc.cred, d.name),
+      },
+    });
+    for (const dep of d.dependsOn) {
+      await tx.workspaceDependency.create({
+        data: { workspaceId: ws.id, dependsOnId: dep.workspaceId, outputs: dep.outputs },
+      });
+    }
+    return ws;
+  });
+
+  const ids = [...g.workspaces.map((w) => w.id), workspace.id];
+  const edges = [
+    ...g.edges,
+    ...d.dependsOn.map((dep) => ({ workspaceId: workspace.id, dependsOnId: dep.workspaceId })),
+  ];
+  const name = new Map([...g.workspaces.map((w) => [w.id, w.name] as const), [workspace.id, d.name]]);
+
+  res.status(201).json({
+    workspace: {
+      id: workspace.id,
+      name: workspace.name,
+      kind: workspace.kind,
+      tfcWorkspaceUrl: workspace.tfcWorkspaceUrl,
+    },
+    // Not committed anywhere yet: the extension's own code goes beside it.
+    files: [{ path: "deps.tf", body: wiring }],
+    applyOrder: applyOrder(ids, edges).map((id) => name.get(id)!),
+  });
 });

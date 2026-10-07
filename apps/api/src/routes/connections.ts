@@ -80,6 +80,11 @@ connectionsRouter.post("/:id/verify", async (req, res) => {
   if (!connection || connection.orgId !== req.user!.orgId) {
     return res.status(404).json({ error: "Not found" });
   }
+  // A Terraform Cloud connection ("tfc") stores JSON credentials and has no
+  // connector; without this it would be marked invalid by a TypeError.
+  if (!(PROVIDERS as readonly string[]).includes(connection.provider)) {
+    return res.status(400).json({ error: `${connection.provider} connections are verified where they were created` });
+  }
 
   const connector = getConnector(connection.provider as Provider);
   let valid = false;

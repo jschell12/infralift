@@ -3,6 +3,12 @@
 
 const TFC_BASE = process.env.TFC_API_URL ?? "https://app.terraform.io/api/v2";
 
+/** API base for a TFC/TFE hostname. Terraform Enterprise serves the same v2 API. */
+export function tfcBaseUrl(hostname?: string | null): string {
+  if (!hostname || hostname === "app.terraform.io") return TFC_BASE;
+  return `https://${hostname}/api/v2`;
+}
+
 // ---------------------------------------------------------------------------
 // Response types (mapped from JSON:API attributes to flat objects)
 // ---------------------------------------------------------------------------
@@ -13,6 +19,11 @@ export interface TfcWorkspace {
   autoApply: boolean;
   workingDirectory: string | null;
   vcsRepo: string | null;
+  /** Clone URL of the VCS repo, which is not always GitHub. */
+  vcsRepoUrl: string | null;
+  vcsBranch: string | null;
+  currentConfigVersionId: string | null;
+  globalRemoteState: boolean;
   createdAt: string;
   updatedAt: string;
   resourceCount: number;
@@ -24,6 +35,26 @@ export interface TfcStateVersion {
   serial: number;
   resourceCount: number;
   createdAt: string;
+}
+
+export interface TfcVariable {
+  key: string;
+  /** Null when sensitive: callers must not rely on the API to withhold it. */
+  value: string | null;
+  category: "terraform" | "env";
+  hcl: boolean;
+  sensitive: boolean;
+  description: string;
+}
+
+export interface TfcOutput {
+  name: string;
+  sensitive: boolean;
+}
+
+export interface TfcIngress {
+  commitSha: string | null;
+  cloneUrl: string | null;
 }
 
 export interface TfcRun {
@@ -58,12 +89,13 @@ export class TfcClient {
   constructor(
     private token: string,
     private org: string,
+    private base: string = TFC_BASE,
   ) {}
 
   // -- internal helpers -----------------------------------------------------
 
   private async request<T = unknown>(method: string, path: string, body?: object): Promise<T> {
-    const res = await fetch(`${TFC_BASE}${path}`, {
+    const res = await fetch(`${this.base}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${this.token}`,
@@ -89,6 +121,11 @@ export class TfcClient {
       autoApply: a["auto-apply"] ?? false,
       workingDirectory: a["working-directory"] || null,
       vcsRepo: vcs?.identifier ?? null,
+      vcsRepoUrl: vcs?.["repository-http-url"] ?? null,
+      vcsBranch: vcs?.branch || null,
+      currentConfigVersionId:
+        data.relationships?.["current-configuration-version"]?.data?.id ?? null,
+      globalRemoteState: a["global-remote-state"] ?? false,
       createdAt: a["created-at"],
       updatedAt: a["updated-at"],
       resourceCount: a["resource-count"] ?? 0,
@@ -133,7 +170,7 @@ export class TfcClient {
       // JSON:API pagination: next page URL is absolute; strip the base.
       const nextUrl: string | null = json.links?.next ?? null;
       if (nextUrl) {
-        path = nextUrl.startsWith("http") ? nextUrl.replace(TFC_BASE, "") : nextUrl;
+        path = nextUrl.startsWith("http") ? nextUrl.replace(this.base, "") : nextUrl;
       } else {
         path = null;
       }
@@ -195,6 +232,111 @@ export class TfcClient {
       }
       throw err;
     }
+  }
+
+  // -- organization ---------------------------------------------------------
+
+  /** True when the token can read the organization. Used to verify a connection. */
+  async canReadOrganization(): Promise<boolean> {
+    try {
+      await this.request("GET", `/organizations/${encodeURIComponent(this.org)}`);
+      return true;
+    } catch (err) {
+      if (err instanceof TfcClientError && (err.statusCode === 401 || err.statusCode === 404)) {
+        return false;
+      }
+      throw err;
+    }
+  }
+
+  // -- variables, outputs, configuration ------------------------------------
+
+  /** Workspace variables. Sensitive values are nulled here, whatever the API returned. */
+  async listVariables(workspaceId: string): Promise<TfcVariable[]> {
+    const json = await this.request<any>(
+      "GET",
+      `/workspaces/${encodeURIComponent(workspaceId)}/vars`,
+    );
+    return (json.data ?? []).map((d: any) => {
+      const a = d.attributes;
+      const sensitive = Boolean(a.sensitive);
+      return {
+        key: a.key,
+        value: sensitive ? null : (a.value ?? null),
+        category: a.category === "env" ? "env" : "terraform",
+        hcl: Boolean(a.hcl),
+        sensitive,
+        description: a.description ?? "",
+      };
+    });
+  }
+
+  /** Output names of the current state version. Empty when there is no state yet. */
+  async listCurrentOutputs(workspaceId: string): Promise<TfcOutput[]> {
+    try {
+      const json = await this.request<any>(
+        "GET",
+        `/workspaces/${encodeURIComponent(workspaceId)}/current-state-version-outputs`,
+      );
+      return (json.data ?? []).map((d: any) => ({
+        name: d.attributes.name,
+        sensitive: Boolean(d.attributes.sensitive),
+      }));
+    } catch (err) {
+      if (err instanceof TfcClientError && err.statusCode === 404) return [];
+      throw err;
+    }
+  }
+
+  /** Commit and clone URL a configuration version was ingressed from. Null for CLI uploads. */
+  async getIngress(configVersionId: string): Promise<TfcIngress | null> {
+    try {
+      const json = await this.request<any>(
+        "GET",
+        `/configuration-versions/${encodeURIComponent(configVersionId)}/ingress-attributes`,
+      );
+      const a = json.data?.attributes ?? {};
+      return { commitSha: a["commit-sha"] ?? null, cloneUrl: a["clone-url"] ?? null };
+    } catch (err) {
+      if (err instanceof TfcClientError && err.statusCode === 404) return null;
+      throw err;
+    }
+  }
+
+  // -- cross-workspace wiring -----------------------------------------------
+
+  /** Let `consumerIds` read `workspaceId`'s outputs (tfe_outputs / remote state). */
+  async addRemoteStateConsumers(workspaceId: string, consumerIds: string[]): Promise<void> {
+    await this.request(
+      "POST",
+      `/workspaces/${encodeURIComponent(workspaceId)}/relationships/remote-state-consumers`,
+      { data: consumerIds.map((id) => ({ type: "workspaces", id })) },
+    );
+  }
+
+  /** Workspace ids whose applies already trigger runs in `workspaceId`. */
+  async listInboundRunTriggerSources(workspaceId: string): Promise<string[]> {
+    const json = await this.request<any>(
+      "GET",
+      `/workspaces/${encodeURIComponent(workspaceId)}/run-triggers?filter%5Brun-trigger%5D%5Btype%5D=inbound`,
+    );
+    return (json.data ?? [])
+      .map((d: any) => d.relationships?.sourceable?.data?.id)
+      .filter(Boolean);
+  }
+
+  /**
+   * Queue a run in `workspaceId` whenever `sourceId` applies. Idempotent: the
+   * API documents no duplicate status, so existing triggers are checked first.
+   */
+  async ensureRunTrigger(workspaceId: string, sourceId: string): Promise<void> {
+    const existing = await this.listInboundRunTriggerSources(workspaceId);
+    if (existing.includes(sourceId)) return;
+    await this.request("POST", `/workspaces/${encodeURIComponent(workspaceId)}/run-triggers`, {
+      data: {
+        relationships: { sourceable: { data: { id: sourceId, type: "workspaces" } } },
+      },
+    });
   }
 
   // -- state versions -------------------------------------------------------
