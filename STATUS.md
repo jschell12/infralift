@@ -1,5 +1,21 @@
 # infralift status
 
+## 2026-10-08 (session 13)
+
+### Completed
+- **First live run of workspace adoption and extensions** against HCP Terraform (org `jschell12-sandbox`), API run locally from `d1f30ed` against a throwaway Postgres. Base fixture: a CLI-driven workspace applying only `terraform_data`, with one plain, one sensitive and one env variable.
+  - Connect: valid; the token is never echoed. A duplicate label answers 409.
+  - Adopt: three outputs recorded with their sensitivity; the sensitive and env values were not stored; reported "no VCS repository" for the template, which is correct for a CLI workspace.
+  - Extension takeover refusal against the real, hand-built `hashicat-aws`: 409, and that workspace's `updated-at` did not move.
+  - Extension `e2e-ext`: created with the infralift marker and auto-apply off; the base listed it as its only remote-state consumer; an inbound run trigger from `e2e-base`.
+  - **The generated `deps.tf` works inside a real TFC run**: `app = "app-in-vpc-e2e-us-west-2"`, the plain output, and the sensitive one (redacted, correct length), all read with the run's own token.
+  - Changing the base and applying it queued a run in the extension with source `tfe-run-trigger`.
+  - Control: with the remote-state grant removed, the extension's plan fails with `Error retrieving state: forbidden`. The grant infralift sets is what makes the wiring work. Re-adding an existing consumer answers 204, so retries are safe.
+- **Fixed a process-killing bug found by that run.** For a CLI-uploaded configuration version, `GET /configuration-versions/:id/ingress-attributes` answers `200` with a body of literally `null`, not the 404 the client expected. The resulting TypeError escaped the async handler, and Express 4 does not catch those, so the whole API exited. In production that is every tenant's API, on any unexpected TFC response. `tfcFailure` now answers 502 for any error and never rethrows, and the client tolerates null bodies.
+
+### Not verified
+- **Templatizing from a VCS commit.** The sandbox org's GitHub OAuth connection dates from 2021 and can no longer see any repo, public or private. Reconnecting it needs the OAuth flow in a browser. Until then the `?ref=<sha>` module source has only been checked with `terraform validate` on a local stub.
+
 ## 2026-10-07 (session 12)
 
 ### Completed

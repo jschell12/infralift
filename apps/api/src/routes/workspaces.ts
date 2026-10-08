@@ -60,13 +60,20 @@ async function loadTfc(res: Response, orgId: string, connectionId: string) {
   return { conn, cred, client };
 }
 
+/**
+ * Answer 502 for anything that went wrong talking to the customer's TFC.
+ * Never rethrows: Express 4 does not catch a rejected async handler, so a
+ * throw here takes the whole API process down for every tenant. Measured on
+ * 2026-10-08, when an unexpected `null` body from TFC did exactly that.
+ */
 function tfcFailure(res: Response, err: unknown) {
   if (err instanceof TfcClientError) {
     // The customer's own org answered; pass the status class through without
     // the body, which can echo request detail.
     return res.status(502).json({ error: `Terraform Cloud returned ${err.statusCode} for ${err.method} ${err.path}` });
   }
-  throw err;
+  console.error("terraform cloud call failed:", err);
+  return res.status(502).json({ error: "could not complete the request to Terraform Cloud" });
 }
 
 // -- list ----------------------------------------------------------------------

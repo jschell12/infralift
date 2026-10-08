@@ -364,3 +364,39 @@ describe("TFE hosts are re-checked when a stored connection is used", () => {
     spy.mockRestore();
   });
 });
+
+describe("a TFC failure never escapes the handler", () => {
+  // Express 4 does not catch a rejected async handler: an escaped throw kills
+  // the API process for every tenant. Seen live on 2026-10-08.
+  it("POST /adopt answers 502 when the request itself fails", async () => {
+    db.providerConnection.findFirst.mockResolvedValue(conn());
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("fetch failed");
+    });
+    const res = await call(workspacesRouter, "post", "/adopt", {
+      user,
+      body: { connectionId: "conn_mine", workspaceName: "core", projectName: "p" },
+    });
+    expect(res.status).toBe(502);
+  });
+
+  it("POST /adopt answers 502 on a malformed body instead of throwing", async () => {
+    db.providerConnection.findFirst.mockResolvedValue(conn());
+    vi.stubGlobal("fetch", async (url: string) => {
+      const body = url.endsWith("/workspaces/core")
+        ? { data: { id: "ws-1", attributes: { name: "core" }, relationships: {} } }
+        : null;
+      return { ok: true, status: 200, json: async () => body, text: async () => "" };
+    });
+    db.workspace.findUnique.mockResolvedValue(null);
+    db.tfProject.findUnique.mockResolvedValue({ id: "proj" });
+    db.workspace.upsert.mockResolvedValue({ id: "w", name: "core", kind: "adopted", tfcWorkspaceUrl: "u" });
+    const res = await call(workspacesRouter, "post", "/adopt", {
+      user,
+      body: { connectionId: "conn_mine", workspaceName: "core", projectName: "p" },
+    });
+    // null bodies are tolerated: adopted with no variables, outputs or template
+    expect(res.status).toBe(201);
+    expect((res.body as { template: { status: string } }).template.status).toBe("unavailable");
+  });
+});

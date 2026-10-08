@@ -294,7 +294,7 @@ export class TfcClient {
       "GET",
       `/workspaces/${encodeURIComponent(workspaceId)}/vars`,
     );
-    return (json.data ?? []).map((d: any) => {
+    return (json?.data ?? []).map((d: any) => {
       const a = d.attributes;
       const sensitive = Boolean(a.sensitive);
       return {
@@ -315,7 +315,7 @@ export class TfcClient {
         "GET",
         `/workspaces/${encodeURIComponent(workspaceId)}/current-state-version-outputs`,
       );
-      return (json.data ?? []).map((d: any) => ({
+      return (json?.data ?? []).map((d: any) => ({
         name: d.attributes.name,
         sensitive: Boolean(d.attributes.sensitive),
       }));
@@ -332,7 +332,10 @@ export class TfcClient {
         "GET",
         `/configuration-versions/${encodeURIComponent(configVersionId)}/ingress-attributes`,
       );
-      const a = json.data?.attributes ?? {};
+      // A CLI- or API-uploaded configuration version answers 200 with a body
+      // of literally `null` (measured 2026-10-08), not a 404.
+      const a = json?.data?.attributes;
+      if (!a) return null;
       return { commitSha: a["commit-sha"] ?? null, cloneUrl: a["clone-url"] ?? null };
     } catch (err) {
       if (err instanceof TfcClientError && err.statusCode === 404) return null;
@@ -357,7 +360,7 @@ export class TfcClient {
       "GET",
       `/workspaces/${encodeURIComponent(workspaceId)}/run-triggers?filter%5Brun-trigger%5D%5Btype%5D=inbound`,
     );
-    return (json.data ?? [])
+    return (json?.data ?? [])
       .map((d: any) => d.relationships?.sourceable?.data?.id)
       .filter(Boolean);
   }
