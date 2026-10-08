@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import express, { Router } from "express";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
+import { format } from "node:util";
 import { catchAsyncErrors, errorHandler } from "./async-errors.js";
 
 // Real Express, real sockets. Without the wrapper each of these rejections is
@@ -19,7 +20,9 @@ async function serve(app: express.Express): Promise<{ url: string; server: Serve
 
 function build() {
   const app = express();
+  app.use(express.json({ limit: "1kb" }));
   const router = Router();
+  router.post("/echo", (req, res) => res.json(req.body));
   router.get("/async-throw", async () => {
     throw new Error("boom");
   });
@@ -29,6 +32,14 @@ function build() {
   router.get("/ok", async (_req, res) => {
     res.json({ ok: true });
   });
+  router.get("/empty-reject", async () => Promise.reject(undefined), (_req, res) => {
+    res.json({ fellThrough: true });
+  });
+  const sub = express();
+  sub.get("/deep", async () => {
+    throw new Error("sub-app");
+  });
+  router.use("/sub", sub);
   router.get("/route-level", async (_req, _res, next) => next(), async () => {
     throw new Error("second handler");
   });
@@ -59,7 +70,7 @@ beforeAll(async () => {
 afterAll(() => server.close());
 
 describe("catchAsyncErrors", () => {
-  it.each(["/r/async-throw", "/r/sync-throw", "/r/route-level", "/r/nested/deep", "/middleware-throw"])(
+  it.each(["/r/async-throw", "/r/sync-throw", "/r/route-level", "/r/nested/deep", "/r/sub/deep", "/r/empty-reject", "/middleware-throw"])(
     "%s answers 500 and the server keeps serving",
     async (path) => {
       const res = await fetch(url + path);
@@ -76,8 +87,9 @@ describe("catchAsyncErrors", () => {
   });
 
   it("wraps every handler once, however often it is called, and skips error handlers", () => {
-    // 7 of ours plus Express 4's own query and expressInit middleware.
-    expect(wrapped).toBe(9);
+    // Completeness is asserted on the real app in app.test.ts; here, that the
+    // walk found handlers and a second pass changes nothing.
+    expect(wrapped).toBeGreaterThan(0);
     const { app } = build();
     const handles = () =>
       ((app as unknown as { _router: { stack: { handle: unknown }[] } })._router.stack).map((l) => l.handle);
@@ -85,5 +97,51 @@ describe("catchAsyncErrors", () => {
     catchAsyncErrors(app as never);
     expect(handles()).toEqual(before);
     expect(before.at(-1)).toBe(errorHandler);
+  });
+});
+
+describe("errorHandler", () => {
+  it("keeps a client error's status instead of answering 500", async () => {
+    const bad = await fetch(url + "/r/echo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: '{"token":"SECRET-abc123",',
+    });
+    expect(bad.status).toBe(400);
+    const big = await fetch(url + "/r/echo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pad: "x".repeat(4096) }),
+    });
+    expect(big.status).toBe(413);
+  });
+
+  it("never logs a request body, which can carry a token", async () => {
+    const logged: string[] = [];
+    const orig = console.error;
+    // util.format renders arguments the way console.error does, including an
+    // Error's own properties such as body-parser's `body`. String() would not.
+    console.error = (...args: unknown[]) => void logged.push(format(...args));
+    try {
+      // A 5xx whose error object carries a body, the way body-parser's do.
+      const app = express();
+      app.get("/x", async () => {
+        throw Object.assign(new Error("wrapped"), { body: '{"token":"SECRET-abc123"}', status: 500 });
+      });
+      catchAsyncErrors(app as never);
+      app.use(errorHandler);
+      const { url: u, server: s } = await serve(app);
+      expect((await fetch(u + "/x")).status).toBe(500);
+      s.close();
+      await fetch(url + "/r/echo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: '{"token":"SECRET-abc123",',
+      });
+    } finally {
+      console.error = orig;
+    }
+    expect(logged.join("\n")).not.toContain("SECRET");
+    expect(logged.length).toBe(1);
   });
 });

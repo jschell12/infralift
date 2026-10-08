@@ -29,3 +29,25 @@ describe("the API survives a database outage", () => {
     expect(await health.json()).toEqual({ ok: true });
   }, 20000);
 });
+
+describe("every handler on the real app is wrapped", () => {
+  // A router mounted after catchAsyncErrors(app) in app.ts would be skipped
+  // silently. This walks the same tree and fails on any unwrapped handler.
+  it("finds no unwrapped handler", async () => {
+    const { app } = await import("./app.js");
+    const { errorHandler } = await import("./lib/async-errors.js");
+    type L = { handle: any; route?: { stack: L[] } };
+    const unwrapped: string[] = [];
+    const visit = (stack: L[], at: string) => {
+      for (const l of stack) {
+        if (l.route) visit(l.route.stack, at);
+        else if (Array.isArray(l.handle.stack)) visit(l.handle.stack, at + "/");
+        else if (l.handle._router) visit(l.handle._router.stack, at + "/");
+        else if (l.handle === errorHandler) continue;
+        else if (!Object.getOwnPropertySymbols(l.handle).length) unwrapped.push(`${at} ${l.handle.name}`);
+      }
+    };
+    visit((app as any)._router.stack, "");
+    expect(unwrapped).toEqual([]);
+  });
+});
