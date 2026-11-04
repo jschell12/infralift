@@ -15,6 +15,8 @@ RUN pnpm install --frozen-lockfile
 COPY packages/shared packages/shared/
 COPY packages/collectors packages/collectors/
 COPY apps/api/src apps/api/src/
+# Stacks are read from disk at runtime (lib/stacks), not compiled.
+COPY apps/api/stacks apps/api/stacks/
 COPY apps/api/tsconfig.json apps/api/
 COPY tsconfig.base.json ./
 

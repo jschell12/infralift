@@ -1,0 +1,64 @@
+# One copy of the app per environment. bin/deploy.sh runs this as compose
+# project af-<env> with ENV, TAG, REGISTRY, ENV_DIR and PG_DATA exported.
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    env_file: ${ENV_DIR}/db.env
+    volumes:
+      - ${PG_DATA}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [internal]
+
+  api:
+    image: ${REGISTRY}/app-foundry-api:${TAG}
+    restart: unless-stopped
+    env_file: ${ENV_DIR}/api.env
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      internal: {}
+      edge:
+        aliases: ["${ENV}-api"]
+
+  marketing:
+    image: ${REGISTRY}/app-foundry-marketing:${TAG}
+    restart: unless-stopped
+    networks:
+      edge:
+        aliases: ["${ENV}-marketing"]
+
+  dashboard:
+    image: ${REGISTRY}/app-foundry-dashboard:${TAG}
+    restart: unless-stopped
+    networks:
+      edge:
+        aliases: ["${ENV}-dashboard"]
+
+  admin:
+    image: ${REGISTRY}/app-foundry-admin:${TAG}
+    restart: unless-stopped
+    networks:
+      edge:
+        aliases: ["${ENV}-admin"]
+
+volumes:
+  # Previews keep Postgres in this named volume; production binds PG_DATA
+  # to the Hetzner volume instead and leaves this unused.
+  pgdata: {}
+
+networks:
+  internal: {}
+  edge:
+    external: true
+    name: edge

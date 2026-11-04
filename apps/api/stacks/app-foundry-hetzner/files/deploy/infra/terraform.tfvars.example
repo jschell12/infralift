@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars (git-ignored).
+cloudflare_account_id = "<cloudflare-account-id>"
+admin_emails          = ["you@example.com"]

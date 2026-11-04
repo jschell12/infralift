@@ -43,9 +43,43 @@ jobs:
       - name: Build apps
         run: pnpm --filter './apps/*' build
 
+  stacks:
+    name: Validate stacks
+    # Every stack is rendered with its example inputs for each state backend
+    # and the output run through tofu, terraform and shellcheck, because a
+    # stack that renders but does not validate is broken customer output.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_wrapper: false
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build shared packages
+        run: pnpm --filter './packages/*' build
+
+      - run: pnpm --filter @infralift/api validate:stacks
+
   deploy-web:
     name: Deploy marketing site
-    needs: check
+    needs: [check, stacks]
     # Gated on its own variable so the job stays dormant until
     # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are set. Without the
     # gate a missing secret turns main red on every merge.
@@ -99,7 +133,7 @@ jobs:
 
   deploy:
     name: Deploy to Framework
-    needs: check
+    needs: [check, stacks]
     if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     # Runner is on the Mac Mini (always-on, LAN access to Framework).
     # It rsyncs the checkout to Framework, builds Docker images there,

@@ -1,0 +1,39 @@
+name: box-ssh
+description: >
+  Makes `ssh box` reach the deploy server through the Cloudflare tunnel,
+  authenticated to Access with the deploy service token. The host key is
+  pinned from SSH_KNOWN_HOSTS, which tofu wrote.
+inputs:
+  ssh-host: { required: true }
+  known-hosts: { required: true }
+  ssh-key: { required: true }
+  access-client-id: { required: true }
+  access-client-secret: { required: true }
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        # Pinned with its published SHA-256; bump both together.
+        curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-amd64.deb
+        echo '70b1a1e0f46033ffc8d90b406e554044ba6cbf2e4360295ef1163aed31e09393  /tmp/cloudflared.deb' | sha256sum -c -
+        sudo dpkg -i /tmp/cloudflared.deb >/dev/null
+        install -d -m 700 ~/.ssh
+        printf '%s\n' "$SSH_KEY" > ~/.ssh/box && chmod 600 ~/.ssh/box
+        printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+        cat > ~/.ssh/config <<CFG
+        Host box
+          HostName $SSH_HOST
+          User deploy
+          IdentityFile ~/.ssh/box
+          StrictHostKeyChecking yes
+          ProxyCommand cloudflared access ssh --hostname %h --id $ACCESS_ID --secret $ACCESS_SECRET
+        CFG
+        chmod 600 ~/.ssh/config
+        ssh box true
+      env:
+        SSH_HOST: ${{ inputs.ssh-host }}
+        KNOWN_HOSTS: ${{ inputs.known-hosts }}
+        SSH_KEY: ${{ inputs.ssh-key }}
+        ACCESS_ID: ${{ inputs.access-client-id }}
+        ACCESS_SECRET: ${{ inputs.access-client-secret }}

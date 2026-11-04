@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
@@ -13,6 +14,7 @@ import { getTfcClient } from "../lib/tf/tfc-client.js";
 import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
 import { requireAdmin, isAdmin } from "../lib/cf-auth.js";
 import { toCodegenSample } from "../lib/tf/sample.js";
+import { getStack, listStacks, renderStack, resolveStackInputs } from "../lib/stacks/index.js";
 
 export const tfRouter = Router();
 
@@ -255,10 +257,16 @@ tfRouter.post("/jobs", async (req, res) => {
     where: { id: parsed.data.projectId, orgId: req.user!.orgId },
   });
   if (!project) return res.status(404).json({ error: "project not found" });
+  // A stack project re-renders from its stored settings; ad-hoc arguments
+  // would let a job disagree with what the project says it is.
+  const isStack = project.source === "stack";
   const job = await prisma.tfJob.create({
     data: {
       projectId: project.id,
-      argumentsJson: parsed.data.arguments,
+      kind: isStack ? "stack" : "template",
+      argumentsJson: isStack
+        ? (project.providerConfig as Prisma.InputJsonObject)
+        : parsed.data.arguments,
     },
   });
   // Fire-and-forget: the staged pipeline updates stage/status as it goes.
@@ -582,5 +590,109 @@ tfRouter.post("/approve", async (req, res) => {
     console.error(`tf codegen job ${job.id} failed:`, err);
   });
 
+  res.status(202).json({ project, job });
+});
+
+// -- stacks ------------------------------------------------------------------
+//
+// The org's GitHub connection needs, on the destination repo: Contents,
+// Pull requests and Workflows read/write. Workflows because a stack writes
+// .github/workflows, and GitHub refuses that push without it.
+//
+// A stack renders a whole deploy setup into the customer's app repository and
+// lands it as a pull request (lib/stacks, runStackJob). Its settings live on
+// the project, in providerConfig, so every later job re-renders from the same
+// place the UI edits.
+
+tfRouter.get("/stacks", (_req, res) => {
+  res.json(
+    listStacks().map((s) => ({
+      slug: s.slug,
+      name: s.name,
+      description: s.description,
+      inputSchema: s.inputSchema,
+      example: s.example,
+    }))
+  );
+});
+
+const stackArgs = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
+
+tfRouter.post("/stacks/:slug/preview", (req, res) => {
+  const stack = getStack(req.params.slug);
+  if (!stack) return res.status(404).json({ error: "stack not found" });
+  const parsed = z.object({ arguments: stackArgs }).safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  try {
+    const files = renderStack(stack, parsed.data.arguments);
+    res.json({ files });
+  } catch (err) {
+    if (err instanceof TfInputValidationError) {
+      return res.status(400).json({ error: err.message, details: err.details });
+    }
+    throw err;
+  }
+});
+
+const stackProjectSchema = z.object({
+  name: z
+    .string()
+    .min(1)
+    .max(32)
+    .regex(/^[a-z0-9-]+$/),
+  destRepo: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
+  destBranch: z.string().min(1).default("main"),
+  arguments: stackArgs,
+});
+
+tfRouter.post("/stacks/:slug/projects", async (req, res) => {
+  const stack = getStack(req.params.slug);
+  if (!stack) return res.status(404).json({ error: "stack not found" });
+  const parsed = stackProjectSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const d = parsed.data;
+  // Render once now so bad settings fail here with a 400, not later inside a
+  // background job. What gets stored is the settings with the stack's
+  // defaults filled in: a default that changes later must not silently
+  // change an existing project's servers on its next render.
+  let settings: TfArguments;
+  try {
+    settings = resolveStackInputs(stack, d.arguments);
+    renderStack(stack, settings);
+  } catch (err) {
+    if (err instanceof TfInputValidationError) {
+      return res.status(400).json({ error: err.message, details: err.details });
+    }
+    throw err;
+  }
+  let project;
+  try {
+    project = await prisma.tfProject.create({
+      data: {
+        orgId: req.user!.orgId,
+        name: d.name,
+        source: "stack",
+        stackSlug: stack.slug,
+        destRepo: d.destRepo,
+        destBranch: d.destBranch,
+        providerConfig: settings,
+      },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return res.status(409).json({ error: `a project named ${d.name} already exists` });
+    }
+    throw err;
+  }
+  const job = await prisma.tfJob.create({
+    data: { projectId: project.id, kind: "stack", argumentsJson: settings },
+  });
+  void runJob(job.id).catch((err) => {
+    console.error(`tf job ${job.id} failed:`, err);
+  });
   res.status(202).json({ project, job });
 });

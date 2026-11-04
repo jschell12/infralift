@@ -1,0 +1,76 @@
+name: backup
+
+# Nightly pg_dump of production to R2, then proof that it restores: the
+# dump just written is loaded into a throwaway Postgres on the runner and
+# checked for the app's tables. A backup that has never been restored is a
+# guess, so the restore runs every night rather than when it is needed.
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: auto
+  AWS_ENDPOINT_URL_S3: ${{ vars.R2_ENDPOINT }}
+  AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+  AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+
+jobs:
+  backup:
+    if: vars.SSH_HOST != ''
+    runs-on: ubuntu-latest
+    outputs:
+      key: ${{ steps.dump.outputs.key }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/box-ssh
+        with:
+          ssh-host: ${{ vars.SSH_HOST }}
+          known-hosts: ${{ vars.SSH_KNOWN_HOSTS }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          access-client-id: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          access-client-secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      - id: dump
+        run: |
+          key="prod/$(date -u +%Y-%m-%dT%H%MZ).dump"
+          ssh box /srv/app-foundry/code/prod/bin/backup.sh prod > db.dump
+          test -s db.dump
+          aws s3 cp db.dump "s3://${{ vars.R2_BUCKET }}/$key" --no-progress
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "wrote $key ($(stat -c %s db.dump) bytes)"
+
+  verify-restore:
+    needs: backup
+    runs-on: ubuntu-latest
+    services:
+      scratch:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: scratch
+          POSTGRES_DB: app
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-retries 30
+    steps:
+      - run: aws s3 cp "s3://${{ vars.R2_BUCKET }}/${{ needs.backup.outputs.key }}" db.dump --no-progress
+      # The runner's own pg_restore is older than the server's dump format,
+      # so restore with the same major version that wrote it.
+      - name: Restore into scratch Postgres
+        run: |
+          docker run --rm --network host -v "$PWD:/w" -e PGPASSWORD=scratch postgres:17-alpine \
+            pg_restore -h localhost -U postgres -d app --no-owner --exit-on-error /w/db.dump
+      - name: Check the restored database
+        run: |
+          q() { docker run --rm --network host -e PGPASSWORD=scratch postgres:17-alpine psql -h localhost -U postgres -d app -tAc "$1"; }
+          [ "$(q "select to_regclass('public.analytics_events') is not null")" = t ] \
+            || { echo "restored dump has no analytics_events table" >&2; exit 1; }
+          echo "restored ${{ needs.backup.outputs.key }}: $(q 'select count(*) from analytics_events') analytics_events rows"
