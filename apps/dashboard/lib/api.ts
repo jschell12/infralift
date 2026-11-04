@@ -17,7 +17,17 @@ export async function api<T>(
     let detail = `${res.status}`;
     try {
       const body = await res.json();
-      detail = body.detail ?? body.error ?? detail;
+      const raw = body.detail ?? body.error ?? detail;
+      // zod's flatten() is an object; show its messages, not [object Object].
+      detail =
+        typeof raw === "string"
+          ? raw
+          : [
+              ...(raw?.formErrors ?? []),
+              ...Object.entries(raw?.fieldErrors ?? {}).map(
+                ([k, v]) => `${k}: ${(v as string[]).join(", ")}`
+              ),
+            ].join("; ") || JSON.stringify(raw);
     } catch {
       // non-JSON error body
     }

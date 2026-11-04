@@ -163,4 +163,28 @@ describe("PUT /stacks/projects/:id/settings", () => {
     expect(out.status).toBe(400);
     expect(h.projectUpdate).not.toHaveBeenCalled();
   });
+
+  it("refuses to rename the resource prefix of an existing project", async () => {
+    h.findFirst.mockResolvedValueOnce(project);
+    const out = await call("put", "/stacks/projects/:id/settings", {
+      params: { id: "p1" },
+      body: { arguments: { ...example, name: "renamed" } },
+    });
+    expect(out.status).toBe(400);
+    expect(String((out.body as { error: string }).error)).toContain("fixed after creation");
+    expect(h.projectUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("project names", () => {
+  it("refuses a name the stack could not use as its resource prefix", async () => {
+    for (const name of ["ab", "1app", "App"]) {
+      const out = await call("post", "/stacks/:slug/projects", {
+        params: { slug: "app-foundry-hetzner" },
+        body: { name, destRepo: "acme/app", arguments: { ...example, name } },
+      });
+      expect(out.status, name).toBe(400);
+    }
+    expect(h.projectCreate).not.toHaveBeenCalled();
+  });
 });

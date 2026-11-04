@@ -120,12 +120,15 @@ function SettingsFields({
   values,
   onChange,
   hide = [],
+  locked = [],
 }: {
   schema: InputSchema;
   values: Record<string, string>;
   onChange: (v: Record<string, string>) => void;
   /** keys the surrounding form already asks for in its own words */
   hide?: string[];
+  /** shown but not editable */
+  locked?: string[];
 }) {
   const required = new Set(schema.required ?? []);
   const set = (k: string, v: string) => onChange({ ...values, [k]: v });
@@ -153,7 +156,8 @@ function SettingsFields({
               </select>
             ) : (
               <input
-                className={INPUT}
+                className={`${INPUT} ${locked.includes(key) ? "opacity-60" : ""}`}
+                readOnly={locked.includes(key)}
                 type={prop.type === "integer" ? "number" : "text"}
                 min={prop.minimum}
                 max={prop.maximum}
@@ -161,6 +165,11 @@ function SettingsFields({
                 value={values[key] ?? ""}
                 onChange={(e) => set(key, e.target.value)}
               />
+            )}
+            {locked.includes(key) && (
+              <div className="text-xs text-warn mt-1">
+                Fixed after creation: every resource is named from it, so changing it would replace them.
+              </div>
             )}
             {prop.description && (
               <div className="text-xs text-faint mt-1">{prop.description}</div>
@@ -517,7 +526,12 @@ function SettingsDrawer({
       subtitle={`Saving opens a pull request against ${project.destRepo}@${project.destBranch}, or updates the one already open.`}
       onClose={onClose}
     >
-      <SettingsFields schema={stack.inputSchema} values={values} onChange={setValues} />
+      <SettingsFields
+        schema={stack.inputSchema}
+        values={values}
+        onChange={setValues}
+        locked={["name"]}
+      />
       <BackendPicker values={values} onChange={setValues} />
       {error && <div className="text-danger text-sm mt-3">{error}</div>}
       <div className="mt-5">

@@ -639,11 +639,11 @@ tfRouter.post("/stacks/:slug/preview", (req, res) => {
 });
 
 const stackProjectSchema = z.object({
+  // Same shape the stack's `name` setting needs, since the dashboard derives
+  // that from the project name: a name that passes here must also render.
   name: z
     .string()
-    .min(1)
-    .max(32)
-    .regex(/^[a-z0-9-]+$/),
+    .regex(/^[a-z][a-z0-9-]{2,31}$/, "3-32 characters: lowercase letters, digits and dashes, starting with a letter"),
   destRepo: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
   destBranch: z.string().min(1).default("main"),
   arguments: stackArgs,
@@ -713,6 +713,14 @@ tfRouter.put("/stacks/projects/:id/settings", async (req, res) => {
   if (!project) return res.status(404).json({ error: "project not found" });
   const stack = project.stackSlug ? getStack(project.stackSlug) : null;
   if (!stack) return res.status(404).json({ error: "stack not found" });
+  // Every resource is named from `name`; changing it would make the next
+  // apply replace the server, its volume and its tunnel.
+  const current = project.providerConfig as TfArguments;
+  if (parsed.data.arguments.name !== current.name) {
+    return res.status(400).json({
+      error: `name is fixed after creation (it is ${String(current.name)}); every resource is named from it`,
+    });
+  }
   let settings: TfArguments;
   try {
     settings = resolveStackInputs(stack, parsed.data.arguments);
