@@ -13,6 +13,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "seed:demo": "node dist/scripts/seed-demo.js",
     "test": "vitest run",
+    "validate:stacks": "tsx scripts/validate-stacks.mts",
     "test:watch": "vitest"
   },
   "prisma": {

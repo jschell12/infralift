@@ -1,0 +1,5 @@
+# Copy to backend.r2.hcl. Not secret; kept out of git because it is per-account.
+# R2 credentials come from AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
+bucket    = "{{name}}-tfstate"
+key       = "infra/terraform.tfstate"
+endpoints = { s3 = "https://<cloudflare-account-id>.r2.cloudflarestorage.com" }

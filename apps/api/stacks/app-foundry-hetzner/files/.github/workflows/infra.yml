@@ -1,0 +1,44 @@
+name: infra
+
+# Every change to the stack must validate under OpenTofu (the R2 backend)
+# and under Terraform (what a Terraform Cloud workspace runs).
+on:
+  pull_request:
+    paths: ["deploy/**", "infra/docker/**", "api/**", ".github/workflows/infra.yml"]
+  push:
+    branches: [main]
+    paths: ["deploy/**", "infra/docker/**", "api/**", ".github/workflows/infra.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_wrapper: false
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: tofu fmt -check -recursive deploy
+      - name: tofu validate (root, R2 backend)
+        working-directory: deploy/infra
+        run: tofu init -backend=false -input=false && tofu validate
+      - name: tofu validate (bootstrap)
+        working-directory: deploy/bootstrap
+        run: tofu init -backend=false -input=false && tofu validate
+      - name: terraform validate (generated module, as TFC runs it)
+        working-directory: deploy/infra/generated
+        run: terraform init -backend=false -input=false && terraform validate
+      - run: shellcheck deploy/box/bin/*.sh
+
+  box:
+    # The box layer for real: build the images, deploy a preview through
+    # Caddy, check routes, back up, restore, tear down. Docker only.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/box/test-local.sh

@@ -1,5 +1,19 @@
 # infralift status
 
+## 2026-11-04 (stacks)
+
+### Completed
+- **Stacks: whole deploy setups rendered into a customer's app repo as a pull request.** First stack `app-foundry-hetzner`, vendored from app-foundry `5941696`, whose `deploy/` is live at demo.infralift.dev: Hetzner CX23 behind a Cloudflare tunnel, a preview per PR, nightly backups restored to prove them, OpenTofu+R2 (encrypted state) or Terraform Cloud.
+  - `apps/api/stacks/<slug>/`: `files/` copied verbatim (executable bits kept), `templates/` for the few files that vary, `stack.json` with the input schema. Files are `managed` (rewritten on every change) or `seed` (`overrides.tf`, written only if missing).
+  - New `stack` job kind: render, branch `infralift/<project>-<job>`, one commit, PR against destBranch; never pushes to it. TFC backend also creates a workspace on `deploy/infra`. No-op renders delete the branch instead of opening an empty PR.
+  - Routes: `GET /tf/stacks`, `POST /tf/stacks/:slug/preview`, `POST /tf/stacks/:slug/projects`. Migration 0012 adds `TfProject.stackSlug`, `TfJob.prUrl`.
+  - CI job `stacks` renders every stack per backend and runs tofu/terraform validate + shellcheck. Golden test: the example inputs reproduce app-foundry's own `main.tf`/`backend.tf` byte for byte. `scripts/sync-stack.sh` re-vendors from app-foundry.
+
+### Next
+- Step 3: dashboard "new project" flow (template picker, target, backend) on these routes; a settings-edit route that re-renders into a new PR.
+- Files a stack stops shipping are not deleted from the customer repo yet.
+- `prisma migrate diff` against a fresh DB shows a pre-existing FK drift on `Workspace.connectionId` from 0011 (not from 0012).
+
 ## 2026-10-08 (session 13)
 
 ### Completed

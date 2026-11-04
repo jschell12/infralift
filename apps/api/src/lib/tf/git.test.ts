@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { commitFiles, ensureRepo, GitCommitError } from "./git.js";
+import {
+  commitFiles,
+  createBranch,
+  deleteBranch,
+  ensureRepo,
+  fileExists,
+  GitCommitError,
+  openPullRequest,
+} from "./git.js";
 
 // A GitHub stand-in that records calls and answers the handful of endpoints
 // the git data API walk touches. The sequence (ref -> commit -> blobs -> tree
@@ -18,6 +26,9 @@ function fakeGitHub(opts: {
   newTreeSha?: string;
   createRepoStatus?: number;
   orgCreateStatus?: number;
+  /** paths the contents API reports as present */
+  existingPaths?: string[];
+  createRefStatus?: number;
 }) {
   const calls: Call[] = [];
   const headTreeSha = opts.headTreeSha ?? "tree-head";
@@ -68,6 +79,23 @@ function fakeGitHub(opts: {
     }
     if (method === "POST" && path.endsWith("/git/commits")) {
       return json({ sha: "commit-new" }, 201);
+    }
+    if (method === "GET" && path.includes("/contents/")) {
+      const p = decodeURIComponent(path.split("/contents/")[1].split("?")[0]);
+      return (opts.existingPaths ?? []).includes(p)
+        ? json({ sha: "file-sha", content: Buffer.from("x").toString("base64") })
+        : json({ message: "Not Found" }, 404);
+    }
+    if (method === "POST" && path.endsWith("/git/refs")) {
+      const status = opts.createRefStatus ?? 201;
+      if (status >= 400) return json({ message: "Reference already exists" }, status);
+      return json({ ref: body?.ref, object: { sha: body?.sha } }, 201);
+    }
+    if (method === "DELETE" && path.includes("/git/refs/heads/")) {
+      return new Response(null, { status: 204 });
+    }
+    if (method === "POST" && path.endsWith("/pulls")) {
+      return json({ number: 7, html_url: "https://github.com/acme/app/pull/7" }, 201);
     }
     if (method === "PATCH" && path.includes("/git/refs/heads/")) {
       return json({ object: { sha: "commit-new" } });
@@ -268,5 +296,76 @@ describe("ensureRepo", () => {
     await expect(
       ensureRepo({ token: "t", repo: "acme/infra" })
     ).rejects.toThrow(/create acme\/infra on GitHub first/);
+  });
+});
+
+describe("stack helpers", () => {
+  it("commitFiles keeps an executable mode and defaults the rest to 100644", async () => {
+    const { calls } = fakeGitHub({});
+    await commitFiles({
+      token: "t",
+      repo: "acme/app",
+      branch: "infralift/x",
+      workDir: "",
+      files: [
+        { fileName: "deploy/box/bin/deploy.sh", content: "#!/bin/sh\n", mode: "100755" },
+        { fileName: "deploy/box/compose.yml", content: "services: {}\n" },
+      ],
+      message: "m",
+    });
+    const tree = calls.find((c) => c.path.endsWith("/git/trees"))!.body!.tree as {
+      path: string;
+      mode: string;
+    }[];
+    expect(tree.map((t) => [t.path, t.mode])).toEqual([
+      ["deploy/box/bin/deploy.sh", "100755"],
+      ["deploy/box/compose.yml", "100644"],
+    ]);
+  });
+
+  it("fileExists reads the contents API on the given branch", async () => {
+    const { calls } = fakeGitHub({ existingPaths: ["deploy/infra/overrides.tf"] });
+    expect(
+      await fileExists({ token: "t", repo: "acme/app", path: "deploy/infra/overrides.tf", branch: "main" })
+    ).toBe(true);
+    expect(
+      await fileExists({ token: "t", repo: "acme/app", path: "deploy/infra/nope.tf", branch: "main" })
+    ).toBe(false);
+    expect(calls[0].path).toContain("?ref=main");
+  });
+
+  it("createBranch starts the branch at the base branch's head", async () => {
+    const { calls } = fakeGitHub({});
+    await createBranch({ token: "t", repo: "acme/app", from: "main", branch: "infralift/x" });
+    const create = calls.find((c) => c.method === "POST" && c.path.endsWith("/git/refs"))!;
+    expect(create.body).toEqual({ ref: "refs/heads/infralift/x", sha: "commit-head" });
+  });
+
+  it("createBranch fails loudly when the branch already exists", async () => {
+    fakeGitHub({ createRefStatus: 422 });
+    await expect(
+      createBranch({ token: "t", repo: "acme/app", from: "main", branch: "infralift/x" })
+    ).rejects.toThrow(GitCommitError);
+  });
+
+  it("openPullRequest returns the PR number and URL", async () => {
+    const { calls } = fakeGitHub({});
+    const pr = await openPullRequest({
+      token: "t",
+      repo: "acme/app",
+      head: "infralift/x",
+      base: "main",
+      title: "t",
+      body: "b",
+    });
+    expect(pr).toEqual({ number: 7, url: "https://github.com/acme/app/pull/7" });
+    expect(calls.at(-1)!.body).toMatchObject({ head: "infralift/x", base: "main" });
+  });
+
+  it("deleteBranch treats a missing branch as done", async () => {
+    fakeGitHub({});
+    await expect(
+      deleteBranch({ token: "t", repo: "acme/app", branch: "infralift/x" })
+    ).resolves.toBeUndefined();
   });
 });

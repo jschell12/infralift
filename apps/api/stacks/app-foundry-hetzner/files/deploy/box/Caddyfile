@@ -1,0 +1,22 @@
+# Copied to /srv/app-foundry/caddy/Caddyfile by production's deploy.sh.
+# TLS ends at Cloudflare; cloudflared hands Caddy plain HTTP on localhost:80.
+{
+	auto_https off
+
+	# cloudflared connects from the docker bridge and puts the visitor's
+	# address in Cf-Connecting-Ip. Trust that header from private addresses
+	# only (nothing else can reach this port: it is bound to 127.0.0.1), so
+	# {client_ip} is the visitor rather than the bridge gateway.
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers Cf-Connecting-Ip
+	}
+}
+
+# One file per environment, written by bin/deploy.sh.
+import /etc/caddy/sites/*.caddy
+
+# Anything the tunnel routes here that no environment claims.
+:80 {
+	respond 404
+}

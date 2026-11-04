@@ -397,7 +397,9 @@ model TfProject {
   id     String @id @default(cuid())
   orgId  String
   name   String
-  // template | codegen | adopted. A codegen project is generated from an
+  // template | codegen | adopted | stack. A stack project renders a whole
+  // deploy setup (apps/api/stacks/<stackSlug>) into the customer's app repo
+  // and lands it as a pull request. A codegen project is generated from an
   // assessment and has no template version; a template project has no
   // assessment. An adopted project was built around workspaces imported from
   // the customer's TFC org; destRepo is the first adopted workspace's VCS repo,
@@ -409,6 +411,8 @@ model TfProject {
   assessmentId      String?
   // cloudflare | hetzner, for codegen projects.
   migrationTarget   String?
+  // Set for stack projects: the directory under apps/api/stacks.
+  stackSlug         String?
   destRepo          String // owner/repo
   destPath          String   @default("") // work dir inside repo, "" = root
   destBranch        String   @default("main")
@@ -449,7 +453,7 @@ model TfRendering {
 model TfJob {
   id            String   @id @default(cuid())
   projectId     String
-  // template | codegen
+  // template | codegen | stack
   kind          String   @default("template")
   // queued | render | commit | workspace | complete
   stage         String   @default("queued")
@@ -464,6 +468,8 @@ model TfJob {
   commitSha     String?
   fileCount     Int      @default(0)
   workspaceName String?
+  // Stack jobs land as a pull request rather than a push to destBranch.
+  prUrl         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

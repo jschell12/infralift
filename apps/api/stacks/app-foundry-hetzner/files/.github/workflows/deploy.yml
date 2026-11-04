@@ -1,0 +1,55 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    # Nothing to deploy to until deploy/infra has been applied.
+    if: vars.SSH_HOST != ''
+    uses: ./.github/workflows/build.yml
+    with:
+      tag: ${{ github.sha }}
+
+  deploy:
+    needs: build
+    if: vars.SSH_HOST != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://${{ vars.PROD_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/box-ssh
+        with:
+          ssh-host: ${{ vars.SSH_HOST }}
+          known-hosts: ${{ vars.SSH_KNOWN_HOSTS }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          access-client-id: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          access-client-secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      - name: Ship box files
+        run: ssh box "mkdir -p /srv/app-foundry/code/prod" && rsync -a --delete deploy/box/ "box:/srv/app-foundry/code/prod/"
+      - name: Deploy
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GHCR_TOKEN" | ssh box "docker login ghcr.io -u ${{ github.actor }} --password-stdin" >/dev/null
+          ssh box "/srv/app-foundry/code/prod/bin/deploy.sh prod ${{ vars.PROD_HOST }} ${{ github.sha }} ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+      - name: Smoke test
+        run: |
+          for _ in $(seq 20); do
+            if curl -fsS "https://${{ vars.PROD_HOST }}/api/health" | grep -q '"database":"ok"'; then exit 0; fi
+            sleep 6
+          done
+          echo "https://${{ vars.PROD_HOST }}/api/health never reported a healthy database" >&2
+          exit 1

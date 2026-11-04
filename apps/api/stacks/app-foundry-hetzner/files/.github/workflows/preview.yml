@@ -1,0 +1,82 @@
+name: preview
+
+# One copy of the app per open pull request, on a preview slot
+# (<subdomain>-preview-<slot>.<zone>) the box assigns. The slot names are
+# declared in tofu, so this workflow never touches DNS. The URL shows up as
+# the PR's "View deployment" button.
+#
+# pull_request (never pull_request_target): PRs from forks get no secrets
+# and are skipped, so outside code never runs with the deploy key.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  PR_ENV: pr-${{ github.event.pull_request.number }}
+
+jobs:
+  build:
+    if: vars.SSH_HOST != '' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/build.yml
+    with:
+      tag: ${{ github.event.pull_request.head.sha }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/box-ssh
+        with:
+          ssh-host: ${{ vars.SSH_HOST }}
+          known-hosts: ${{ vars.SSH_KNOWN_HOSTS }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          access-client-id: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          access-client-secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      - name: Ship box files
+        run: ssh box "mkdir -p /srv/app-foundry/code/$PR_ENV" && rsync -a --delete deploy/box/ "box:/srv/app-foundry/code/$PR_ENV/"
+      - name: Deploy
+        id: deploy
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GHCR_TOKEN" | ssh box "docker login ghcr.io -u ${{ github.actor }} --password-stdin" >/dev/null
+          ssh box "MAX_PREVIEWS=${{ vars.MAX_PREVIEWS }} /srv/app-foundry/code/$PR_ENV/bin/deploy.sh $PR_ENV '${{ vars.PREVIEW_HOST }}' ${{ github.event.pull_request.head.sha }} ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" | tee deploy.out
+          host=$(sed -n 's/^HOST=//p' deploy.out | tail -1)
+          [ -n "$host" ] || { echo "deploy.sh did not report a host" >&2; exit 1; }
+          echo "PR_HOST=$host" >> "$GITHUB_ENV"
+          echo "url=https://$host" >> "$GITHUB_OUTPUT"
+      - name: Smoke test
+        run: |
+          for _ in $(seq 20); do
+            if curl -fsS "https://$PR_HOST/api/health" | grep -q '"database":"ok"'; then exit 0; fi
+            sleep 6
+          done
+          echo "https://$PR_HOST/api/health never reported a healthy database" >&2
+          exit 1
+
+  teardown:
+    if: vars.SSH_HOST != '' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/box-ssh
+        with:
+          ssh-host: ${{ vars.SSH_HOST }}
+          known-hosts: ${{ vars.SSH_KNOWN_HOSTS }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          access-client-id: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          access-client-secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      # main's teardown, not the PR's: closing a PR should not run code it changed.
+      - run: ssh box "/srv/app-foundry/code/prod/bin/teardown.sh $PR_ENV"

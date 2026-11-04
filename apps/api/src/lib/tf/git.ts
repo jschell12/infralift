@@ -203,7 +203,8 @@ export async function commitFiles(opts: {
   repo: string;
   branch: string;
   workDir: string;
-  files: { fileName: string; content: string }[];
+  /** mode defaults to 100644; 100755 keeps a script executable */
+  files: { fileName: string; content: string; mode?: "100644" | "100755" }[];
   message: string;
 }): Promise<CommitFilesResult> {
   const { token, repo, branch } = opts;
@@ -241,7 +242,7 @@ export async function commitFiles(opts: {
   // base_tree means files outside workDir are preserved untouched.
   const tree: {
     path: string;
-    mode: "100644";
+    mode: "100644" | "100755";
     type: "blob";
     sha: string;
   }[] = [];
@@ -258,7 +259,7 @@ export async function commitFiles(opts: {
       );
     }
     const blob = (await blobRes.json()) as { sha: string };
-    tree.push({ path: paths[i], mode: "100644", type: "blob", sha: blob.sha });
+    tree.push({ path: paths[i], mode: file.mode ?? "100644", type: "blob", sha: blob.sha });
   }
 
   const treeRes = await gh(token, "POST", `/repos/${repo}/git/trees`, {
@@ -305,4 +306,97 @@ export async function commitFiles(opts: {
   }
 
   return { commitSha: commit.sha, noop: false, paths };
+}
+
+// ---------------------------------------------------------------------------
+// Branches and pull requests
+//
+// A stack lands in the customer's app repository, which they also work in, so
+// it arrives as a pull request they review and merge rather than as a commit
+// pushed onto their default branch.
+// ---------------------------------------------------------------------------
+
+/** True when `path` exists on `branch`. Used for seed files, which are only
+ * written when the repository does not have them yet. */
+export async function fileExists(opts: {
+  token: string;
+  repo: string;
+  path: string;
+  branch: string;
+}): Promise<boolean> {
+  return (await getExistingFile(opts.token, opts.repo, opts.path, opts.branch)) !== null;
+}
+
+/** Creates `branch` at the current head of `from`. */
+export async function createBranch(opts: {
+  token: string;
+  repo: string;
+  from: string;
+  branch: string;
+}): Promise<{ sha: string }> {
+  const { token, repo } = opts;
+  const refRes = await gh(
+    token,
+    "GET",
+    `/repos/${repo}/git/ref/heads/${encodeURIComponent(opts.from)}`
+  );
+  if (!refRes.ok) {
+    throw new GitCommitError(
+      `GitHub ref lookup failed (${refRes.status}) for ${repo}@${opts.from}`
+    );
+  }
+  const sha = ((await refRes.json()) as { object: { sha: string } }).object.sha;
+  const createRes = await gh(token, "POST", `/repos/${repo}/git/refs`, {
+    ref: `refs/heads/${opts.branch}`,
+    sha,
+  });
+  if (!createRes.ok) {
+    const text = await createRes.text();
+    throw new GitCommitError(
+      `GitHub branch creation failed (${createRes.status}) for ${repo}@${opts.branch}: ${text.slice(0, 200)}`
+    );
+  }
+  return { sha };
+}
+
+/** Deletes a branch. Missing is fine: the goal is that it does not exist. */
+export async function deleteBranch(opts: {
+  token: string;
+  repo: string;
+  branch: string;
+}): Promise<void> {
+  const res = await gh(
+    opts.token,
+    "DELETE",
+    `/repos/${opts.repo}/git/refs/heads/${encodeURIComponent(opts.branch)}`
+  );
+  if (!res.ok && res.status !== 404 && res.status !== 422) {
+    throw new GitCommitError(
+      `GitHub branch delete failed (${res.status}) for ${opts.repo}@${opts.branch}`
+    );
+  }
+}
+
+export async function openPullRequest(opts: {
+  token: string;
+  repo: string;
+  head: string;
+  base: string;
+  title: string;
+  body: string;
+}): Promise<{ number: number; url: string }> {
+  const res = await gh(opts.token, "POST", `/repos/${opts.repo}/pulls`, {
+    head: opts.head,
+    base: opts.base,
+    title: opts.title,
+    body: opts.body,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new GitCommitError(
+      `GitHub pull request creation failed (${res.status}) for ${opts.repo} ${opts.head} -> ${opts.base}: ${text.slice(0, 200)}`
+    );
+  }
+  const pr = (await res.json()) as { number: number; html_url: string };
+  return { number: pr.number, url: pr.html_url };
 }
