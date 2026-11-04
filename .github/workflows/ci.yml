@@ -79,7 +79,7 @@ jobs:
 
   deploy-web:
     name: Deploy marketing site
-    needs: check
+    needs: [check, stacks]
     # Gated on its own variable so the job stays dormant until
     # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are set. Without the
     # gate a missing secret turns main red on every merge.
@@ -133,7 +133,7 @@ jobs:
 
   deploy:
     name: Deploy to Framework
-    needs: check
+    needs: [check, stacks]
     if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     # Runner is on the Mac Mini (always-on, LAN access to Framework).
     # It rsyncs the checkout to Framework, builds Docker images there,

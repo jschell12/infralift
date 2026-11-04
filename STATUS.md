@@ -7,6 +7,7 @@
   - `apps/api/stacks/<slug>/`: `files/` copied verbatim (executable bits kept), `templates/` for the few files that vary, `stack.json` with the input schema. Files are `managed` (rewritten on every change) or `seed` (`overrides.tf`, written only if missing).
   - New `stack` job kind: render, branch `infralift/<project>-<job>`, one commit, PR against destBranch; never pushes to it. TFC backend also creates a workspace on `deploy/infra`. No-op renders delete the branch instead of opening an empty PR.
   - Routes: `GET /tf/stacks`, `POST /tf/stacks/:slug/preview`, `POST /tf/stacks/:slug/projects`. Migration 0012 adds `TfProject.stackSlug`, `TfJob.prUrl`.
+  - Re-running a job while its PR is open pushes to that PR. A failure after creating a branch deletes it. Stored settings have the schema defaults filled in, so a changed default never moves an existing project. The GitHub connection needs Contents, Pull requests and Workflows read/write on the destination repo.
   - CI job `stacks` renders every stack per backend and runs tofu/terraform validate + shellcheck. Golden test: the example inputs reproduce app-foundry's own `main.tf`/`backend.tf` byte for byte. `scripts/sync-stack.sh` re-vendors from app-foundry.
 
 ### Next

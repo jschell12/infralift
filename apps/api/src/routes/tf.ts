@@ -14,7 +14,7 @@ import { getTfcClient } from "../lib/tf/tfc-client.js";
 import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
 import { requireAdmin, isAdmin } from "../lib/cf-auth.js";
 import { toCodegenSample } from "../lib/tf/sample.js";
-import { getStack, listStacks, renderStack } from "../lib/stacks/index.js";
+import { getStack, listStacks, renderStack, resolveStackInputs } from "../lib/stacks/index.js";
 
 export const tfRouter = Router();
 
@@ -595,6 +595,10 @@ tfRouter.post("/approve", async (req, res) => {
 
 // -- stacks ------------------------------------------------------------------
 //
+// The org's GitHub connection needs, on the destination repo: Contents,
+// Pull requests and Workflows read/write. Workflows because a stack writes
+// .github/workflows, and GitHub refuses that push without it.
+//
 // A stack renders a whole deploy setup into the customer's app repository and
 // lands it as a pull request (lib/stacks, runStackJob). Its settings live on
 // the project, in providerConfig, so every later job re-renders from the same
@@ -652,28 +656,40 @@ tfRouter.post("/stacks/:slug/projects", async (req, res) => {
   }
   const d = parsed.data;
   // Render once now so bad settings fail here with a 400, not later inside a
-  // background job.
+  // background job. What gets stored is the settings with the stack's
+  // defaults filled in: a default that changes later must not silently
+  // change an existing project's servers on its next render.
+  let settings: TfArguments;
   try {
-    renderStack(stack, d.arguments);
+    settings = resolveStackInputs(stack, d.arguments);
+    renderStack(stack, settings);
   } catch (err) {
     if (err instanceof TfInputValidationError) {
       return res.status(400).json({ error: err.message, details: err.details });
     }
     throw err;
   }
-  const project = await prisma.tfProject.create({
-    data: {
-      orgId: req.user!.orgId,
-      name: d.name,
-      source: "stack",
-      stackSlug: stack.slug,
-      destRepo: d.destRepo,
-      destBranch: d.destBranch,
-      providerConfig: d.arguments,
-    },
-  });
+  let project;
+  try {
+    project = await prisma.tfProject.create({
+      data: {
+        orgId: req.user!.orgId,
+        name: d.name,
+        source: "stack",
+        stackSlug: stack.slug,
+        destRepo: d.destRepo,
+        destBranch: d.destBranch,
+        providerConfig: settings,
+      },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return res.status(409).json({ error: `a project named ${d.name} already exists` });
+    }
+    throw err;
+  }
   const job = await prisma.tfJob.create({
-    data: { projectId: project.id, kind: "stack", argumentsJson: d.arguments },
+    data: { projectId: project.id, kind: "stack", argumentsJson: settings },
   });
   void runJob(job.id).catch((err) => {
     console.error(`tf job ${job.id} failed:`, err);

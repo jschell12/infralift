@@ -400,3 +400,34 @@ export async function openPullRequest(opts: {
   const pr = (await res.json()) as { number: number; html_url: string };
   return { number: pr.number, url: pr.html_url };
 }
+
+/** The open pull request whose head branch starts with `prefix`, if any.
+ * A stack job reuses it so a re-run updates the PR instead of opening a
+ * second one. Only branches in the repository itself count, not forks. */
+export async function findOpenPullRequest(opts: {
+  token: string;
+  repo: string;
+  base: string;
+  headPrefix: string;
+}): Promise<{ number: number; url: string; branch: string } | null> {
+  const res = await gh(
+    opts.token,
+    "GET",
+    `/repos/${opts.repo}/pulls?state=open&base=${encodeURIComponent(opts.base)}&per_page=100`
+  );
+  if (!res.ok) {
+    throw new GitCommitError(`GitHub pull request list failed (${res.status}) for ${opts.repo}`);
+  }
+  const pulls = (await res.json()) as {
+    number: number;
+    html_url: string;
+    head: { ref: string; repo: { full_name: string } | null };
+  }[];
+  const hit = pulls.find(
+    (p) =>
+      p.head.ref.startsWith(opts.headPrefix) &&
+      p.head.repo?.full_name.toLowerCase() === opts.repo.toLowerCase()
+  );
+  return hit ? { number: hit.number, url: hit.html_url, branch: hit.head.ref } : null;
+}
+

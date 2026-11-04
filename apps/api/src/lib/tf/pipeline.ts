@@ -17,6 +17,7 @@ import {
   deleteBranch,
   ensureRepo,
   fileExists,
+  findOpenPullRequest,
   openPullRequest,
 } from "./git.js";
 import { getStack, renderStack } from "../stacks/index.js";
@@ -362,10 +363,14 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
 // Stack jobs: settings -> deploy setup -> pull request -> (TFC) workspace
 // ---------------------------------------------------------------------------
 
-/** Branch a stack job's pull request comes from. Unique per job, so a re-run
- * never collides with a PR that is still open. */
+/** Branch a stack job's pull request comes from. Unique per job; a re-run
+ * while an earlier PR is still open reuses that PR's branch instead. */
 export function stackBranchName(projectName: string, jobId: string): string {
-  return `infralift/${projectName}-${jobId.slice(-8)}`;
+  return `${stackBranchPrefix(projectName)}${jobId.slice(-8)}`;
+}
+
+export function stackBranchPrefix(projectName: string): string {
+  return `infralift/${projectName}-`;
 }
 
 /** Renders a stack into the customer's app repository as a pull request.
@@ -377,6 +382,10 @@ export function stackBranchName(projectName: string, jobId: string): string {
  */
 async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
   const project = job.project;
+  // Set once this job has created a branch of its own, so a failure before
+  // the PR exists can remove it rather than leave debris in the customer's
+  // repository.
+  let createdBranch: { token: string; branch: string } | null = null;
   try {
     // -- render ------------------------------------------------------------
     await setStage(jobId, "render", "running");
@@ -437,13 +446,24 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       data: { fileCount: files.length },
     });
 
-    const branch = stackBranchName(project.name, jobId);
-    await createBranch({
+    // A PR from an earlier run that is still open gets this run's commit, so
+    // the customer reviews one PR per project rather than one per click.
+    const openPr = await findOpenPullRequest({
       token,
       repo: project.destRepo,
-      from: project.destBranch,
-      branch,
+      base: project.destBranch,
+      headPrefix: stackBranchPrefix(project.name),
     });
+    const branch = openPr?.branch ?? stackBranchName(project.name, jobId);
+    if (!openPr) {
+      await createBranch({
+        token,
+        repo: project.destRepo,
+        from: project.destBranch,
+        branch,
+      });
+      createdBranch = { token, branch };
+    }
     const result = await commitFiles({
       token,
       repo: project.destRepo,
@@ -455,17 +475,23 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
         `Rendered from stack ${stack.slug} (source ${stack.source.repo}@${stack.source.commit.slice(0, 7)}).`,
     });
     if (result.noop) {
-      // The repository already matches; an empty PR would only be noise.
-      await deleteBranch({ token, repo: project.destRepo, branch });
+      // Nothing new. A fresh branch would make an empty PR, so it goes; an
+      // existing PR already carries these files and stays as it is.
+      if (createdBranch) {
+        await deleteBranch({ token, repo: project.destRepo, branch });
+        createdBranch = null;
+      }
       await setStage(
         jobId,
         "complete",
         "success",
-        `${files.length} files already up to date; no pull request`
+        openPr
+          ? `already up to date in ${openPr.url}`
+          : `${files.length} files already up to date; no pull request`
       );
       return;
     }
-    const pr = await openPullRequest({
+    const pr = openPr ?? await openPullRequest({
       token,
       repo: project.destRepo,
       head: branch,
@@ -482,6 +508,7 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
         "See `deploy/README.md` for the credentials and first apply.",
       ].join("\n"),
     });
+    createdBranch = null; // the PR owns the branch now
     await prisma.tfJob.update({
       where: { id: jobId },
       data: { commitSha: result.commitSha, prUrl: pr.url },
@@ -515,9 +542,16 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       jobId,
       "complete",
       "success",
-      `opened ${pr.url} (${files.length} files); ${workspaceNote}`
+      `${openPr ? "updated" : "opened"} ${pr.url} (${files.length} files); ${workspaceNote}`
     );
   } catch (err) {
+    if (createdBranch) {
+      await deleteBranch({
+        token: createdBranch.token,
+        repo: project.destRepo,
+        branch: createdBranch.branch,
+      }).catch(() => {});
+    }
     const msg = err instanceof Error ? err.message : String(err);
     const current = await prisma.tfJob.findUnique({
       where: { id: jobId },

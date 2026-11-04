@@ -48,7 +48,9 @@ interface Call {
   body: Record<string, unknown> | undefined;
 }
 
-function fakeGitHub(opts: { existingPaths?: string[]; unchanged?: boolean } = {}) {
+function fakeGitHub(
+  opts: { existingPaths?: string[]; unchanged?: boolean; openPrBranch?: string; failCommit?: boolean } = {}
+) {
   const calls: Call[] = [];
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status });
@@ -65,13 +67,23 @@ function fakeGitHub(opts: { existingPaths?: string[]; unchanged?: boolean } = {}
           ? json({ sha: "s", content: "" })
           : json({}, 404);
       }
+      if (method === "GET" && path.includes("/pulls?"))
+        return json(
+          opts.openPrBranch
+            ? [
+                { number: 9, html_url: "https://github.com/acme/app/pull/9", head: { ref: "someone/else", repo: { full_name: "acme/app" } } },
+                { number: 2, html_url: "https://github.com/acme/app/pull/2", head: { ref: opts.openPrBranch, repo: { full_name: "acme/app" } } },
+              ]
+            : []
+        );
       if (method === "GET" && path.includes("/git/ref/heads/")) return json({ object: { sha: "head" } });
       if (method === "POST" && path.endsWith("/git/refs")) return json({}, 201);
       if (method === "GET" && path.includes("/git/commits/")) return json({ tree: { sha: "tree-head" } });
       if (method === "POST" && path.endsWith("/git/blobs")) return json({ sha: "blob" }, 201);
       if (method === "POST" && path.endsWith("/git/trees"))
         return json({ sha: opts.unchanged ? "tree-head" : "tree-new" }, 201);
-      if (method === "POST" && path.endsWith("/git/commits")) return json({ sha: "commit-new" }, 201);
+      if (method === "POST" && path.endsWith("/git/commits"))
+        return opts.failCommit ? json({ message: "boom" }, 500) : json({ sha: "commit-new" }, 201);
       if (method === "PATCH" && path.includes("/git/refs/heads/")) return json({});
       if (method === "DELETE" && path.includes("/git/refs/heads/")) return new Response(null, { status: 204 });
       if (method === "POST" && path.endsWith("/pulls"))
@@ -195,5 +207,34 @@ describe("stack job", () => {
     stackJob({ ...example, server_type: "huge" });
     await runJob("job_abcdefgh12345678");
     expect(h.state.stages.at(-1)).toMatchObject({ stage: "render", status: "errored" });
+  });
+
+  it("a re-run while its PR is open pushes to that PR instead of opening another", async () => {
+    stackJob(example);
+    const calls = fakeGitHub({ openPrBranch: "infralift/acme-oldjob12" });
+    await runJob("job_abcdefgh12345678");
+    expect(calls.some((c) => c.method === "POST" && c.path.endsWith("/git/refs"))).toBe(false);
+    expect(calls.some((c) => c.method === "POST" && c.path.endsWith("/pulls"))).toBe(false);
+    const push = calls.find((c) => c.method === "PATCH")!;
+    expect(push.path).toBe(`/repos/acme/app/git/refs/heads/${encodeURIComponent("infralift/acme-oldjob12")}`);
+    expect(h.state.stages.at(-1)!.statusMessage).toContain("updated https://github.com/acme/app/pull/2");
+  });
+
+  it("removes the branch it created when a later step fails", async () => {
+    stackJob(example);
+    const calls = fakeGitHub({ failCommit: true });
+    await runJob("job_abcdefgh12345678");
+    expect(h.state.stages.at(-1)).toMatchObject({ stage: "commit", status: "errored" });
+    const branch = stackBranchName("acme", "job_abcdefgh12345678");
+    expect(calls.filter((c) => c.method === "DELETE").map((c) => c.path)).toEqual([
+      `/repos/acme/app/git/refs/heads/${encodeURIComponent(branch)}`,
+    ]);
+  });
+
+  it("never deletes an existing PR's branch on failure", async () => {
+    stackJob(example);
+    const calls = fakeGitHub({ openPrBranch: "infralift/acme-oldjob12", failCommit: true });
+    await runJob("job_abcdefgh12345678");
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
   });
 });
