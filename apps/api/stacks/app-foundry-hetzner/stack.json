@@ -2,6 +2,16 @@
   "slug": "app-foundry-hetzner",
   "name": "app-foundry on Hetzner",
   "description": "The app-foundry template on one Hetzner server behind a Cloudflare tunnel: production, a preview per pull request, nightly backups that are restored to prove them, and SSH only through Cloudflare Access. OpenTofu with encrypted R2 state, or Terraform Cloud.",
+  "template": {
+    "slug": "app-foundry",
+    "name": "app-foundry",
+    "description": "Three React frontends (marketing, dashboard, admin), a FastAPI backend and Postgres 17.",
+    "repo": "jschell12/app-foundry"
+  },
+  "target": {
+    "slug": "hetzner",
+    "name": "Hetzner Cloud"
+  },
   "source": {
     "repo": "jschell12/app-foundry",
     "commit": "59416969976e220b1ccbb0918c5bdaf654b344b5"

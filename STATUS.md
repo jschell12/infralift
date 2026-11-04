@@ -1,5 +1,19 @@
 # infralift status
 
+## 2026-11-04 (projects page)
+
+### Completed
+- **Dashboard `/projects`**: pick an app template (app-foundry) and a target (Hetzner; AWS, Google Cloud, DigitalOcean, Azure shown as coming soon), fill in the settings, choose OpenTofu+R2 or Terraform Cloud, preview the files (managed vs yours), and open a pull request. Each project card shows its stack, backend, URL, latest job and PR link; **Settings** re-renders into the open PR or a new one.
+  - New-project form derives the resource prefix and the deploy repo from the project name and repo instead of asking twice.
+  - API: `PUT /tf/stacks/projects/:id/settings` (complete settings, defaults filled in, org-scoped, new stack job); `/tf/stacks` returns `template` and `target`.
+  - Sidebar used `window.location` during render, so every page server-rendered "Dashboard" as active and React kept it; now `usePathname`. This was the hydration error on every page.
+  - Verified by driving the page in headless Chrome against a local API + Postgres: create, preview, derived fields stored, TFC without an org refused in plain words, settings save creates a stack job. Jobs stop at commit there because the local DB has no GitHub connection.
+
+### Next
+- Day-2 views (step 4): deploy history, logs and previews read from the GH Actions API and the box.
+- A first real stack PR against a scratch repo needs a GitHub connection with Contents, Pull requests and Workflows write.
+- `/favicon.ico` is a 404 on the dashboard.
+
 ## 2026-11-04 (stacks follow-ups)
 
 ### Completed

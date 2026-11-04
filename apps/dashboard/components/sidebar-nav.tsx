@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import type {
   AssessmentSummary,
   MigrationSummary,
@@ -10,6 +11,7 @@ import { api } from "../lib/api";
 
 const ITEMS = [
   { href: "/", label: "Dashboard", key: null },
+  { href: "/projects", label: "Projects", key: null },
   { href: "/connections", label: "Connections", key: "connections" },
   { href: "/assessments", label: "Assessments", key: "assessments" },
   { href: "/migrations", label: "Migrations", key: "migrations" },
@@ -37,9 +39,11 @@ export function SidebarNav({ pathname }: { pathname?: string }) {
     })();
   }, []);
 
-  const current =
-    pathname ??
-    (typeof window !== "undefined" ? window.location.pathname : "/");
+  // usePathname is the same on the server and in the browser; reading
+  // window.location here made the server render "/" as active on every page,
+  // and React keeps the server's classes after a hydration mismatch.
+  const routerPath = usePathname();
+  const current = pathname ?? routerPath ?? "/";
 
   return (
     <nav className="flex flex-col gap-0.5">
