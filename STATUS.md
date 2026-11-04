@@ -1,5 +1,12 @@
 # infralift status
 
+## 2026-11-04 (assessments + migrations into Projects)
+
+### Completed
+- **Assessments and Migrations are one feature under Projects.** New project offers "From a template" (stacks) or "From existing infrastructure": assess a connected account in the drawer, then "Choose a target" on the existing options page, which creates the codegen project. Codegen projects and done-for-you migrations (fixed-fee, phased) list on Projects beside stack projects.
+  - `/assessments` redirects to `/projects?start=existing`, `/migrations` to `/projects#migrations`; report and options pages keep their URLs, breadcrumbs point at Projects. Nav is Dashboard, Projects, Connections. Connections' button and the home page CTA open the existing-infrastructure path.
+  - Verified in headless Chrome against a local API with a seeded assessment, codegen project and migration.
+
 ## 2026-11-04 (projects page)
 
 ### Completed

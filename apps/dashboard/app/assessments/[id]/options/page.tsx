@@ -350,7 +350,7 @@ export default function MigrationOptionsPage({
   return (
     <>
       <div className="mb-2.5 text-[13px] text-muted">
-        <a href="/assessments">Assessments</a> /{" "}
+        <a href="/projects">Projects</a> /{" "}
         <a href={`/assessments/${report.assessmentId}`}>
           {PROVIDER_LABELS[report.provider]}
         </a>{" "}
@@ -492,9 +492,8 @@ export default function MigrationOptionsPage({
             >
               {approved.project.destRepo}
             </a>
-            . Track it on the{" "}
-            <a href="/terraform">Terraform page</a> &mdash; job{" "}
-            {approved.job.id.slice(-8)} is {approved.job.status}.
+            . Track it under <a href="/projects">Projects</a> (job{" "}
+            {approved.job.id.slice(-8)} is {approved.job.status}).
           </Note>
         </div>
       )}

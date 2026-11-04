@@ -140,7 +140,7 @@ export default function AssessmentReportPage({
         body: JSON.stringify({ assessmentId: report.id }),
       });
       setApproved(true);
-      window.location.href = "/migrations";
+      window.location.href = "/projects#migrations";
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -189,7 +189,7 @@ export default function AssessmentReportPage({
   return (
     <>
       <div className="mb-2.5 text-[13px] text-muted">
-        <a href="/assessments">Assessments</a> / {PROVIDER_LABELS[report.provider]}
+        <a href="/projects">Projects</a> / {PROVIDER_LABELS[report.provider]} assessment
       </div>
       <h1 className="mb-1.5 text-[26px] font-bold tracking-[-0.02em]">
         {PROVIDER_LABELS[report.provider]} assessment
