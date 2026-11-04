@@ -373,6 +373,14 @@ export function stackBranchPrefix(projectName: string): string {
   return `infralift/${projectName}-`;
 }
 
+/** True only for a branch stackBranchName made for this exact project. A
+ * prefix test would let project "app" claim "app-staging"'s branch, because
+ * "infralift/app-" is a prefix of "infralift/app-staging-...". */
+export function isStackBranch(projectName: string, ref: string): boolean {
+  const prefix = stackBranchPrefix(projectName);
+  return ref.startsWith(prefix) && /^[a-z0-9]{8}$/.test(ref.slice(prefix.length));
+}
+
 /** Renders a stack into the customer's app repository as a pull request.
  *
  * Unlike codegen, the destination is a repository the customer works in, so
@@ -410,18 +418,40 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       return;
     }
     const prefix = project.destPath ? `${project.destPath.replace(/^\/+|\/+$/g, "")}/` : "";
+
+    // A PR from an earlier run that is still open gets this run's commit, so
+    // the customer reviews one PR per project rather than one per click.
+    const openPr = await findOpenPullRequest({
+      token,
+      repo: project.destRepo,
+      base: project.destBranch,
+      isMine: (ref) => isStackBranch(project.name, ref),
+    });
+
+    // A seed file is the customer's once it exists anywhere they might have
+    // edited it: the default branch, or the open PR's branch this commit
+    // lands on.
+    const seedBranches = openPr ? [project.destBranch, openPr.branch] : [project.destBranch];
     const files = [];
     let seedsKept = 0;
     for (const f of rendered) {
-      if (
-        f.ownership === "seed" &&
-        (await fileExists({
-          token,
-          repo: project.destRepo,
-          path: `${prefix}${f.path}`,
-          branch: project.destBranch,
-        }))
-      ) {
+      let exists = false;
+      if (f.ownership === "seed") {
+        for (const b of seedBranches) {
+          if (
+            await fileExists({
+              token,
+              repo: project.destRepo,
+              path: `${prefix}${f.path}`,
+              branch: b,
+            })
+          ) {
+            exists = true;
+            break;
+          }
+        }
+      }
+      if (exists) {
         seedsKept++;
         continue;
       }
@@ -446,14 +476,6 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       data: { fileCount: files.length },
     });
 
-    // A PR from an earlier run that is still open gets this run's commit, so
-    // the customer reviews one PR per project rather than one per click.
-    const openPr = await findOpenPullRequest({
-      token,
-      repo: project.destRepo,
-      base: project.destBranch,
-      headPrefix: stackBranchPrefix(project.name),
-    });
     const branch = openPr?.branch ?? stackBranchName(project.name, jobId);
     if (!openPr) {
       await createBranch({
