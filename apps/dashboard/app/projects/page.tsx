@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PROVIDER_LABELS, type MigrationSummary } from "@infralift/shared";
 import { api } from "../../lib/api";
+import { AssessPanel } from "../../components/assess-panel";
+import { MigrationCard } from "../../components/migration-card";
 import {
   CARD,
   Chip,
@@ -14,11 +17,15 @@ import {
   type Tone,
 } from "../../components/ui";
 
-// Projects: pick an app template and a target, fill in the settings, and
-// infralift opens a pull request in your repo with the infrastructure as
-// code, the server scripts and the CI workflows. Every later change to the
-// settings is another pull request. Nothing here applies infrastructure;
-// merging and applying stay with you.
+// Projects: an app and where it runs, kept as code in a repository. A project
+// starts one of two ways:
+//   - from a template: pick an app and a target, and infralift opens a pull
+//     request with the infrastructure, server scripts and CI (a stack);
+//   - from existing infrastructure: assess a connected account, pick a target
+//     on the assessment's options page, and infralift generates the code for
+//     it (codegen).
+// Done-for-you migrations are listed here too. Nothing on this page applies
+// infrastructure; merging and applying stay with you.
 
 // -- API shapes ---------------------------------------------------------------
 
@@ -52,6 +59,8 @@ interface Project {
   name: string;
   source: string;
   stackSlug: string | null;
+  assessmentId: string | null;
+  migrationTarget: string | null;
   destRepo: string;
   destBranch: string;
   providerConfig: Settings;
@@ -91,6 +100,9 @@ const STATUS_TONE: Record<string, Tone> = {
   running: "warn",
   pending: "muted",
 };
+
+// Codegen targets as the API names them (TfProject.migrationTarget).
+const TARGET_NAMES: Record<string, string> = { hetzner: "Hetzner", cloudflare: "Cloudflare" };
 
 const label = (key: string) =>
   key.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
@@ -295,13 +307,19 @@ function FilePreview({ files }: { files: StackFile[] }) {
 
 function NewProjectDrawer({
   stacks,
+  start,
+  highlight,
   onClose,
   onCreated,
 }: {
   stacks: Stack[];
+  start: "template" | "existing";
+  /** connection to point at when arriving from Connections */
+  highlight: string | null;
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const [mode, setMode] = useState(start);
   const templates = useMemo(() => {
     const seen = new Map<string, Stack["template"]>();
     for (const s of stacks) seen.set(s.template.slug, s.template);
@@ -371,9 +389,31 @@ function NewProjectDrawer({
   return (
     <Drawer
       title="New project"
-      subtitle="infralift opens a pull request in your repo. Nothing is applied until you merge it and run the plan."
+      subtitle="infralift writes the infrastructure as code into your repo. Nothing is applied until you merge it and run the plan."
       onClose={onClose}
     >
+      <div className="grid grid-cols-2 gap-1 rounded-lg bg-bg p-1 mb-5">
+        {(
+          [
+            ["template", "From a template"],
+            ["existing", "From existing infrastructure"],
+          ] as const
+        ).map(([key, text]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setMode(key)}
+            className={`rounded-md px-2 py-2 text-[13px] font-semibold ${mode === key ? "bg-surface text-text" : "text-muted hover:text-text"}`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+
+      {mode === "existing" ? (
+        <AssessPanel highlight={highlight} />
+      ) : (
+      <>
       <label className={LABEL}>App template</label>
       <div className="grid gap-2 mb-5">
         {templates.map((t) => (
@@ -484,6 +524,8 @@ function NewProjectDrawer({
           </div>
         </>
       )}
+      </>
+      )}
     </Drawer>
   );
 }
@@ -549,18 +591,22 @@ export default function ProjectsPage() {
   const [stacks, setStacks] = useState<Stack[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [jobs, setJobs] = useState<Record<string, Job[]>>({});
-  const [creating, setCreating] = useState(false);
+  const [migrations, setMigrations] = useState<MigrationSummary[]>([]);
+  const [creating, setCreating] = useState<null | { start: "template" | "existing"; highlight: string | null }>(null);
   const [editing, setEditing] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [s, p] = await Promise.all([
+    const [s, p, m] = await Promise.all([
       api<Stack[]>("/tf/stacks"),
       api<Project[]>("/tf/projects"),
+      api<MigrationSummary[]>("/migrations"),
     ]);
-    const mine = p.filter((x) => x.source === "stack");
+    // Template projects belong to the older /terraform page.
+    const mine = p.filter((x) => x.source === "stack" || x.source === "codegen");
     setStacks(s);
     setProjects(mine);
+    setMigrations(m);
     const entries = await Promise.all(
       mine.map(async (x) => [x.id, await api<Job[]>(`/tf/jobs?projectId=${x.id}`)] as const)
     );
@@ -570,6 +616,17 @@ export default function ProjectsPage() {
   useEffect(() => {
     load().catch((e) => setError((e as Error).message));
   }, [load]);
+
+  // /projects?start=existing and /projects?assess=<connectionId> (from
+  // Connections, and where /assessments now redirects) open the drawer on the
+  // existing-infrastructure path.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const assess = q.get("assess");
+    if (assess || q.get("start") === "existing") {
+      setCreating({ start: "existing", highlight: assess });
+    }
+  }, []);
 
   // Poll while any job is still moving through the pipeline.
   useEffect(() => {
@@ -593,24 +650,62 @@ export default function ProjectsPage() {
             repository. Every change arrives as a pull request you review and merge.
           </p>
         </div>
-        <PrimaryButton onClick={() => setCreating(true)} disabled={stacks.length === 0}>
+        <PrimaryButton onClick={() => setCreating({ start: "template", highlight: null })}>
           New project
         </PrimaryButton>
       </div>
 
       {error && <div className="text-danger text-sm mb-4">{error}</div>}
 
-      {projects.length === 0 && !error && (
+      {projects.length === 0 && migrations.length === 0 && !error && (
         <div className={`${CARD} mb-4`}>
           <h3 className="text-base font-semibold mb-1.5">No projects yet</h3>
           <p className="text-muted text-sm">
-            Pick an app template and a target, and infralift opens a pull request with the
-            infrastructure as code, server scripts and CI.
+            Start from an app template and a target, or assess infrastructure you already run
+            and pick where it should go. Either way infralift writes it as code in your repo.
           </p>
         </div>
       )}
 
       {projects.map((p) => {
+        if (p.source === "codegen") {
+          const list = jobs[p.id] ?? [];
+          const latest = list[0];
+          const from = String(p.providerConfig.source ?? "");
+          return (
+            <div key={p.id} className={`${CARD} mb-4`}>
+              <div className="flex items-center gap-3 mb-2">
+                <h3 className="text-base font-semibold">{p.name}</h3>
+                <Chip tone="info">
+                  {PROVIDER_LABELS[from as keyof typeof PROVIDER_LABELS] ?? from} to{" "}
+                  {TARGET_NAMES[p.migrationTarget ?? ""] ?? p.migrationTarget ?? "?"}
+                </Chip>
+                <Chip tone="muted">from existing infrastructure</Chip>
+                {p.assessmentId && (
+                  <a
+                    className="ml-auto text-xs font-semibold text-muted hover:text-text"
+                    href={`/assessments/${p.assessmentId}`}
+                  >
+                    Assessment
+                  </a>
+                )}
+              </div>
+              <div className={`text-sm text-muted ${MONO} mb-3`}>
+                <a href={`https://github.com/${p.destRepo}`}>{p.destRepo}</a>@{p.destBranch}
+              </div>
+              {latest ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <Chip tone={STATUS_TONE[latest.status] ?? "muted"}>
+                    {latest.stage} · {latest.status}
+                  </Chip>
+                  <span className="text-muted truncate">{latest.statusMessage}</span>
+                </div>
+              ) : (
+                <div className="text-sm text-faint">No jobs yet.</div>
+              )}
+            </div>
+          );
+        }
         const stack = p.stackSlug ? stackBySlug.get(p.stackSlug) : undefined;
         const list = jobs[p.id] ?? [];
         const latest = list[0];
@@ -662,12 +757,25 @@ export default function ProjectsPage() {
         );
       })}
 
+      {migrations.length > 0 && (
+        <>
+          <h2 id="migrations" className="text-lg font-semibold mt-8 mb-3">
+            Done-for-you migrations
+          </h2>
+          {migrations.map((m) => (
+            <MigrationCard key={m.id} m={m} />
+          ))}
+        </>
+      )}
+
       {creating && (
         <NewProjectDrawer
           stacks={stacks}
-          onClose={() => setCreating(false)}
+          start={creating.start}
+          highlight={creating.highlight}
+          onClose={() => setCreating(null)}
           onCreated={() => {
-            setCreating(false);
+            setCreating(null);
             load().catch(() => {});
           }}
         />

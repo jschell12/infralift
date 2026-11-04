@@ -250,8 +250,8 @@ export default function ConnectionsPage() {
           )}
           {hasValid && (
             <div className="mt-4">
-              <PrimaryButton href="/assessments">
-                Run assessment &rarr;
+              <PrimaryButton href="/projects?start=existing">
+                Assess existing infrastructure
               </PrimaryButton>
             </div>
           )}

@@ -5,6 +5,13 @@ const API_BACKEND =
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Assessments and migrations live under Projects now. The report and
+  // options pages (/assessments/:id...) stay where they are; only the two
+  // list pages moved.
+  redirects: async () => [
+    { source: "/assessments", destination: "/projects?start=existing", permanent: false },
+    { source: "/migrations", destination: "/projects#migrations", permanent: false },
+  ],
   rewrites: async () => [
     {
       source: "/api/:path*",

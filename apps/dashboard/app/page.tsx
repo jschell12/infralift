@@ -265,7 +265,7 @@ export default function Dashboard() {
             We&apos;ll inventory every project, service, database, and function,
             then show you the monthly cost and where to cut it.
           </p>
-          <PrimaryButton href="/assessments">Run your assessment</PrimaryButton>
+          <PrimaryButton href="/projects?start=existing">Run your assessment</PrimaryButton>
         </div>
       </>
     );

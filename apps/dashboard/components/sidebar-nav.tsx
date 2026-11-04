@@ -2,19 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import type {
-  AssessmentSummary,
-  MigrationSummary,
-  ProviderConnectionSummary,
-} from "@infralift/shared";
+import type { ProviderConnectionSummary } from "@infralift/shared";
 import { api } from "../lib/api";
 
 const ITEMS = [
   { href: "/", label: "Dashboard", key: null },
   { href: "/projects", label: "Projects", key: null },
   { href: "/connections", label: "Connections", key: "connections" },
-  { href: "/assessments", label: "Assessments", key: "assessments" },
-  { href: "/migrations", label: "Migrations", key: "migrations" },
 ] as const;
 
 export function SidebarNav({ pathname }: { pathname?: string }) {
@@ -23,16 +17,8 @@ export function SidebarNav({ pathname }: { pathname?: string }) {
   useEffect(() => {
     void (async () => {
       try {
-        const [c, a, m] = await Promise.all([
-          api<ProviderConnectionSummary[]>("/connections"),
-          api<AssessmentSummary[]>("/assessments"),
-          api<MigrationSummary[]>("/migrations"),
-        ]);
-        setCounts({
-          connections: c.length,
-          assessments: a.filter((x) => x.status === "completed").length,
-          migrations: m.filter((x) => x.status !== "cancelled").length,
-        });
+        const c = await api<ProviderConnectionSummary[]>("/connections");
+        setCounts({ connections: c.length });
       } catch {
         // sidebar counts are decorative; ignore auth/network errors
       }
