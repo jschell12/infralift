@@ -6,6 +6,7 @@ import { herokuConnector } from "./heroku.js";
 import { awsConnector } from "./aws.js";
 import { firebaseConnector } from "./firebase.js";
 import { githubConnector } from "./github.js";
+import { gitlabConnector } from "./gitlab.js";
 import { netlifyConnector } from "./netlify.js";
 import { renderConnector } from "./render.js";
 import { railwayConnector } from "./railway.js";
@@ -21,6 +22,7 @@ const connectors: Record<Provider, Connector> = {
   aws: awsConnector,
   firebase: firebaseConnector,
   github: githubConnector,
+  gitlab: gitlabConnector,
   netlify: netlifyConnector,
   render: renderConnector,
   railway: railwayConnector,

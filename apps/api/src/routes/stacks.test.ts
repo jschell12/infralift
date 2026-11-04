@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   projectCreate: vi.fn(),
   projectUpdate: vi.fn(),
   jobCreate: vi.fn(),
+  connFindFirst: vi.fn(),
   runJob: vi.fn(async () => {}),
 }));
 
@@ -17,6 +18,7 @@ vi.mock("../lib/db.js", () => ({
   prisma: {
     tfProject: { findFirst: h.findFirst, create: h.projectCreate, update: h.projectUpdate },
     tfJob: { create: h.jobCreate },
+    providerConnection: { findFirst: h.connFindFirst },
   },
 }));
 vi.mock("../lib/tf/pipeline.js", () => ({ runJob: h.runJob }));
@@ -58,6 +60,7 @@ beforeEach(() => {
   h.jobCreate.mockImplementation(async ({ data }: { data: object }) => ({ id: "job1", ...data }));
   h.projectCreate.mockImplementation(async ({ data }: { data: object }) => ({ id: "p1", ...data }));
   h.projectUpdate.mockImplementation(async ({ data }: { data: object }) => ({ id: "p1", ...data }));
+  h.connFindFirst.mockResolvedValue({ id: "conn-gh" });
 });
 
 describe("GET /stacks", () => {
@@ -89,6 +92,53 @@ describe("POST /stacks/:slug/projects", () => {
     expect(data.providerConfig).toMatchObject({ ...example, server_type: "cx23", backend: "r2" });
     expect(h.jobCreate.mock.calls[0][0].data.kind).toBe("stack");
     expect(h.runJob).toHaveBeenCalledWith("job1");
+  });
+
+  it("greenfield: records the host, the org's connection and createRepo", async () => {
+    const out = await call("post", "/stacks/:slug/projects", {
+      params: { slug: "app-foundry-hetzner" },
+      body: { ...body, createRepo: true },
+    });
+    expect(out.status).toBe(202);
+    expect(h.connFindFirst.mock.calls[0][0].where).toEqual({ orgId: "org-a", provider: "github" });
+    expect(h.projectCreate.mock.calls[0][0].data).toMatchObject({
+      gitHost: "github",
+      gitConnectionId: "conn-gh",
+      createRepo: true,
+    });
+  });
+
+  it("refuses GitLab for a stack whose CI only runs on GitHub", async () => {
+    const out = await call("post", "/stacks/:slug/projects", {
+      params: { slug: "app-foundry-hetzner" },
+      body: { ...body, gitHost: "gitlab", destRepo: "acme/platform/web" },
+    });
+    expect(out.status).toBe(400);
+    expect(String((out.body as { error: string }).error)).toContain("GitHub");
+    expect(h.projectCreate).not.toHaveBeenCalled();
+  });
+
+  it("needs a connection to the host, and only looks in the caller's org", async () => {
+    h.connFindFirst.mockResolvedValueOnce(null);
+    const out = await call("post", "/stacks/:slug/projects", {
+      params: { slug: "app-foundry-hetzner" },
+      body: { ...body, connectionId: "conn-of-org-b" },
+    });
+    expect(out.status).toBe(400);
+    expect(h.connFindFirst.mock.calls[0][0].where).toEqual({
+      orgId: "org-a",
+      provider: "github",
+      id: "conn-of-org-b",
+    });
+    expect(h.projectCreate).not.toHaveBeenCalled();
+  });
+
+  it("refuses a nested path on GitHub", async () => {
+    const out = await call("post", "/stacks/:slug/projects", {
+      params: { slug: "app-foundry-hetzner" },
+      body: { ...body, destRepo: "acme/platform/web" },
+    });
+    expect(out.status).toBe(400);
   });
 
   it("answers 409 for a name the org already uses", async () => {

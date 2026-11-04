@@ -7,6 +7,7 @@ export const PROVIDERS = [
   "aws",
   "firebase",
   "github",
+  "gitlab",
   "netlify",
   "render",
   "railway",
@@ -17,6 +18,13 @@ export const PROVIDERS = [
 ] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
+/** Providers that host code. They are destinations (infralift creates repos
+ *  and opens pull or merge requests there), not assessment sources. */
+export const GIT_HOSTS = ["github", "gitlab"] as const;
+export type GitHost = (typeof GIT_HOSTS)[number];
+export const isGitHost = (p: string): p is GitHost =>
+  (GIT_HOSTS as readonly string[]).includes(p);
+
 export const PROVIDER_LABELS: Record<Provider, string> = {
   vercel: "Vercel",
   cloudflare: "Cloudflare",
@@ -24,6 +32,7 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
   aws: "AWS",
   firebase: "Firebase / GCP",
   github: "GitHub",
+  gitlab: "GitLab",
   netlify: "Netlify",
   render: "Render",
   railway: "Railway",

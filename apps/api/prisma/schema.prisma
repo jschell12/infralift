@@ -413,6 +413,13 @@ model TfProject {
   migrationTarget   String?
   // Set for stack projects: the directory under apps/api/stacks.
   stackSlug         String?
+  // Where destRepo lives (github | gitlab), and which of the org's
+  // connections to use there. Null connection = the org's first one.
+  gitHost           String   @default("github")
+  gitConnectionId   String?
+  // Greenfield: create destRepo from the stack's app template on the next
+  // job, then clear this.
+  createRepo        Boolean  @default(false)
   destRepo          String // owner/repo
   destPath          String   @default("") // work dir inside repo, "" = root
   destBranch        String   @default("main")

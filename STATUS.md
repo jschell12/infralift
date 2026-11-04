@@ -1,5 +1,17 @@
 # infralift status
 
+## 2026-11-04 (GitHub + GitLab, greenfield repos)
+
+### Completed
+- **GitLab connection** (PAT, `api` scope) beside GitHub; both are destinations, not assessment sources. GitHub's help text now lists what greenfield needs: Contents, Pull requests, Workflows, and Administration write.
+- **`lib/git/hosts.ts`**: one client over GitHub and GitLab for what a stack job does: create a repo from a template (GitHub `generate`; GitLab import by URL, polled until finished), branch, commit a tree (GitLab: create/update/chmod per file, unchanged files skipped by git blob sha), find/open a PR or MR.
+- **Greenfield**: New project can create the repository (private, from the stack's app template) and then lands the infrastructure in it as a PR. Migration 0013: `TfProject.gitHost`, `gitConnectionId`, `createRepo`.
+- Stacks declare `gitHosts`; app-foundry-hetzner is GitHub-only (GitHub Actions, tofu writes Actions secrets). GitLab is refused with a plain message in the API, the job and the dashboard.
+
+### Next
+- GitLab CI variant of app-foundry-hetzner (.gitlab-ci.yml, tofu `gitlab` provider for CI variables), then flip its `gitHosts`.
+- First live run: greenfield on a real GitHub account (see the test plan doc).
+
 ## 2026-11-04 (assessments + migrations into Projects)
 
 ### Completed
