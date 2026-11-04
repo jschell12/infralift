@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
+import { GIT_HOSTS, PROVIDER_LABELS } from "@infralift/shared";
 import { z } from "zod";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
@@ -612,6 +613,7 @@ tfRouter.get("/stacks", (_req, res) => {
       description: s.description,
       template: s.template,
       target: s.target,
+      gitHosts: s.gitHosts,
       inputSchema: s.inputSchema,
       example: s.example,
     }))
@@ -644,8 +646,14 @@ const stackProjectSchema = z.object({
   name: z
     .string()
     .regex(/^[a-z][a-z0-9-]{2,31}$/, "3-32 characters: lowercase letters, digits and dashes, starting with a letter"),
-  destRepo: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
+  // GitLab paths can nest groups: acme/platform/web.
+  destRepo: z.string().regex(/^[\w.-]+(\/[\w.-]+)+$/),
   destBranch: z.string().min(1).default("main"),
+  gitHost: z.enum(GIT_HOSTS).default("github"),
+  /** One of the org's connections to gitHost; default: the org's first. */
+  connectionId: z.string().min(1).optional(),
+  /** Greenfield: create destRepo from the stack's app template first. */
+  createRepo: z.boolean().default(false),
   arguments: stackArgs,
 });
 
@@ -657,6 +665,25 @@ tfRouter.post("/stacks/:slug/projects", async (req, res) => {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
   const d = parsed.data;
+  if (d.gitHost === "github" && d.destRepo.split("/").length !== 2) {
+    return res.status(400).json({ error: "a GitHub repository is owner/name" });
+  }
+  if (!stack.gitHosts.includes(d.gitHost)) {
+    return res.status(400).json({
+      error: `${stack.name} runs its CI on ${stack.gitHosts.map((h) => PROVIDER_LABELS[h]).join(", ")}; it cannot deploy from ${PROVIDER_LABELS[d.gitHost]} yet`,
+    });
+  }
+  const connection = await prisma.providerConnection.findFirst({
+    where: {
+      orgId: req.user!.orgId,
+      provider: d.gitHost,
+      ...(d.connectionId ? { id: d.connectionId } : {}),
+    },
+    select: { id: true },
+  });
+  if (!connection) {
+    return res.status(400).json({ error: `connect ${PROVIDER_LABELS[d.gitHost]} under Connections first` });
+  }
   // Render once now so bad settings fail here with a 400, not later inside a
   // background job. What gets stored is the settings with the stack's
   // defaults filled in: a default that changes later must not silently
@@ -679,6 +706,9 @@ tfRouter.post("/stacks/:slug/projects", async (req, res) => {
         name: d.name,
         source: "stack",
         stackSlug: stack.slug,
+        gitHost: d.gitHost,
+        gitConnectionId: connection.id,
+        createRepo: d.createRepo,
         destRepo: d.destRepo,
         destBranch: d.destBranch,
         providerConfig: settings,

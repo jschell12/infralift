@@ -12,6 +12,9 @@
     "slug": "hetzner",
     "name": "Hetzner Cloud"
   },
+  "gitHosts": [
+    "github"
+  ],
   "source": {
     "repo": "jschell12/app-foundry",
     "commit": "59416969976e220b1ccbb0918c5bdaf654b344b5"

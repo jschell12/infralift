@@ -10,17 +10,10 @@ import {
   type TfArguments,
   type ProviderConfig,
 } from "./render.js";
-import {
-  commitFile,
-  commitFiles,
-  createBranch,
-  deleteBranch,
-  ensureRepo,
-  fileExists,
-  findOpenPullRequest,
-  openPullRequest,
-} from "./git.js";
+import { commitFile, commitFiles, ensureRepo } from "./git.js";
 import { getStack, renderStack } from "../stacks/index.js";
+import { gitHostClient, type GitHostClient, type HostFile } from "../git/hosts.js";
+import { isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
 import { getWorkspaceAdapter } from "./workspace.js";
 import { generateHcl } from "./codegen.js";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
@@ -388,12 +381,28 @@ export function isStackBranch(projectName: string, ref: string): boolean {
  * and the customer merges them. Seed files (overrides.tf) are left out when
  * the repository already has them, which is what makes them the customer's.
  */
+/** Token for the project's git host: its own connection if it names one,
+ *  otherwise the org's best connection to that host. */
+async function getGitToken(
+  orgId: string,
+  host: GitHost,
+  connectionId: string | null
+): Promise<string | null> {
+  const conn = await prisma.providerConnection.findFirst({
+    where: { orgId, provider: host, ...(connectionId ? { id: connectionId } : {}) },
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+  });
+  return conn ? decryptToken(conn.encryptedToken) : null;
+}
+
 async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
   const project = job.project;
+  const host = (isGitHost(project.gitHost) ? project.gitHost : "github") as GitHost;
+  let client: GitHostClient | null = null;
   // Set once this job has created a branch of its own, so a failure before
-  // the PR exists can remove it rather than leave debris in the customer's
-  // repository.
-  let createdBranch: { token: string; branch: string } | null = null;
+  // the change request exists can remove it rather than leave debris in the
+  // customer's repository.
+  let createdBranch: string | null = null;
   try {
     // -- render ------------------------------------------------------------
     await setStage(jobId, "render", "running");
@@ -407,45 +416,77 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       );
       return;
     }
+    if (!stack.gitHosts.includes(host)) {
+      await setStage(
+        jobId,
+        "render",
+        "errored",
+        `${stack.name} runs its CI on ${stack.gitHosts.map((h) => PROVIDER_LABELS[h]).join(", ")}, not ${PROVIDER_LABELS[host]}`
+      );
+      return;
+    }
     const args = (job.argumentsJson ?? {}) as TfArguments;
     const rendered = renderStack(stack, args);
 
-    // -- commit ------------------------------------------------------------
-    await setStage(jobId, "commit", "running");
-    const token = await getGithubToken(project.orgId);
+    const token = await getGitToken(project.orgId, host, project.gitConnectionId);
     if (!token) {
-      await setStage(jobId, "commit", "errored", NO_GITHUB);
+      await setStage(
+        jobId,
+        "repo",
+        "errored",
+        `no ${PROVIDER_LABELS[host]} connection for this org: add one under Connections`
+      );
       return;
     }
+    client = gitHostClient(host, token);
+    const noun = client.changeRequestNoun;
+
+    // -- repo --------------------------------------------------------------
+    // Greenfield: the repository is created from the stack's app template,
+    // then the infrastructure lands in it the same way as anywhere else.
+    let destBranch = project.destBranch;
+    let createdRepoNote = "";
+    if (project.createRepo) {
+      await setStage(jobId, "repo", "running");
+      if (!(await client.repoExists(project.destRepo))) {
+        const created = await client.createFromTemplate({
+          template: stack.template.repo,
+          repo: project.destRepo,
+          private: true,
+        });
+        destBranch = created.defaultBranch;
+        createdRepoNote = `created ${created.url}; `;
+      }
+      await prisma.tfProject.update({
+        where: { id: project.id },
+        data: { createRepo: false, destBranch },
+      });
+    }
+
+    // -- commit ------------------------------------------------------------
+    await setStage(jobId, "commit", "running");
+    const repo = project.destRepo;
     const prefix = project.destPath ? `${project.destPath.replace(/^\/+|\/+$/g, "")}/` : "";
 
-    // A PR from an earlier run that is still open gets this run's commit, so
-    // the customer reviews one PR per project rather than one per click.
-    const openPr = await findOpenPullRequest({
-      token,
-      repo: project.destRepo,
-      base: project.destBranch,
+    // A change request from an earlier run that is still open gets this
+    // run's commit, so the customer reviews one per project, not per click.
+    const openCr = await client.findOpenChangeRequest({
+      repo,
+      base: destBranch,
       isMine: (ref) => isStackBranch(project.name, ref),
     });
 
     // A seed file is the customer's once it exists anywhere they might have
-    // edited it: the default branch, or the open PR's branch this commit
+    // edited it: the default branch, or the open request's branch this commit
     // lands on.
-    const seedBranches = openPr ? [project.destBranch, openPr.branch] : [project.destBranch];
-    const files = [];
+    const seedBranches = openCr ? [destBranch, openCr.branch] : [destBranch];
+    const files: HostFile[] = [];
     let seedsKept = 0;
     for (const f of rendered) {
       let exists = false;
       if (f.ownership === "seed") {
         for (const b of seedBranches) {
-          if (
-            await fileExists({
-              token,
-              repo: project.destRepo,
-              path: `${prefix}${f.path}`,
-              branch: b,
-            })
-          ) {
+          if (await client.fileExists({ repo, path: `${prefix}${f.path}`, branch: b })) {
             exists = true;
             break;
           }
@@ -476,19 +517,13 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       data: { fileCount: files.length },
     });
 
-    const branch = openPr?.branch ?? stackBranchName(project.name, jobId);
-    if (!openPr) {
-      await createBranch({
-        token,
-        repo: project.destRepo,
-        from: project.destBranch,
-        branch,
-      });
-      createdBranch = { token, branch };
+    const branch = openCr?.branch ?? stackBranchName(project.name, jobId);
+    if (!openCr) {
+      await client.createBranch({ repo, from: destBranch, branch });
+      createdBranch = branch;
     }
-    const result = await commitFiles({
-      token,
-      repo: project.destRepo,
+    const result = await client.commitFiles({
+      repo,
       branch,
       workDir: project.destPath,
       files,
@@ -497,32 +532,31 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
         `Rendered from stack ${stack.slug} (source ${stack.source.repo}@${stack.source.commit.slice(0, 7)}).`,
     });
     if (result.noop) {
-      // Nothing new. A fresh branch would make an empty PR, so it goes; an
-      // existing PR already carries these files and stays as it is.
+      // Nothing new. A fresh branch would make an empty request, so it goes;
+      // an existing request already carries these files and stays as it is.
       if (createdBranch) {
-        await deleteBranch({ token, repo: project.destRepo, branch });
+        await client.deleteBranch({ repo, branch });
         createdBranch = null;
       }
       await setStage(
         jobId,
         "complete",
         "success",
-        openPr
-          ? `already up to date in ${openPr.url}`
-          : `${files.length} files already up to date; no pull request`
+        openCr
+          ? `${createdRepoNote}already up to date in ${openCr.url}`
+          : `${createdRepoNote}${files.length} files already up to date; no ${noun}`
       );
       return;
     }
-    const pr = openPr ?? await openPullRequest({
-      token,
-      repo: project.destRepo,
+    const cr = openCr ?? await client.openChangeRequest({
+      repo,
       head: branch,
-      base: project.destBranch,
+      base: destBranch,
       title: `infralift: ${stack.name} for ${project.name}`,
       body: [
         `Rendered by infralift from the \`${stack.slug}\` stack.`,
         "",
-        `- ${files.length} files written; files under \`deploy/infra/generated/\` and the workflows are managed by infralift and rewritten on every change.`,
+        `- ${files.length} files written; files under \`deploy/infra/generated/\` and the CI files are managed by infralift and rewritten on every change.`,
         seedsKept
           ? `- ${seedsKept} file(s) you own (such as \`deploy/infra/overrides.tf\`) already existed and were left alone.`
           : "- `deploy/infra/overrides.tf` is yours from here on; infralift never rewrites it.",
@@ -530,10 +564,10 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
         "See `deploy/README.md` for the credentials and first apply.",
       ].join("\n"),
     });
-    createdBranch = null; // the PR owns the branch now
+    createdBranch = null; // the change request owns the branch now
     await prisma.tfJob.update({
       where: { id: jobId },
-      data: { commitSha: result.commitSha, prUrl: pr.url },
+      data: { commitSha: result.commitSha, prUrl: cr.url },
     });
     await prisma.tfRendering.updateMany({
       where: { projectId: project.id, fileName: { in: files.map((f) => f.fileName) } },
@@ -541,8 +575,8 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
     });
 
     // -- workspace ---------------------------------------------------------
-    // Only a Terraform Cloud backend has a workspace to create. It tracks
-    // destBranch, so it plans the change once the customer merges the PR.
+    // Only a Terraform Cloud backend has a workspace to create. It tracks the
+    // default branch, so it plans the change once the request is merged.
     await setStage(jobId, "workspace", "running");
     let workspaceNote = "state in R2; no workspace";
     if (args.backend === "tfc") {
@@ -550,8 +584,8 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       const adapter = getWorkspaceAdapter();
       await adapter.createWorkspace({
         workspaceName,
-        repo: project.destRepo,
-        branch: project.destBranch,
+        repo,
+        branch: destBranch,
         workingDirectory: `${prefix}deploy/infra`,
         autoApply: false,
       });
@@ -564,15 +598,11 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       jobId,
       "complete",
       "success",
-      `${openPr ? "updated" : "opened"} ${pr.url} (${files.length} files); ${workspaceNote}`
+      `${createdRepoNote}${openCr ? "updated" : "opened"} ${cr.url} (${files.length} files); ${workspaceNote}`
     );
   } catch (err) {
-    if (createdBranch) {
-      await deleteBranch({
-        token: createdBranch.token,
-        repo: project.destRepo,
-        branch: createdBranch.branch,
-      }).catch(() => {});
+    if (createdBranch && client) {
+      await client.deleteBranch({ repo: project.destRepo, branch: createdBranch }).catch(() => {});
     }
     const msg = err instanceof Error ? err.message : String(err);
     const current = await prisma.tfJob.findUnique({

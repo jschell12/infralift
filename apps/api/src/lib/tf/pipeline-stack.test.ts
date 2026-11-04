@@ -40,6 +40,8 @@ vi.mock("../crypto.js", () => ({ decryptToken: () => "token" }));
 vi.mock("./workspace.js", () => ({ getWorkspaceAdapter: () => h.adapter }));
 
 const { runJob, stackBranchName, isStackBranch } = await import("./pipeline.js");
+const { REPO_READY } = await import("../git/hosts.js");
+REPO_READY.intervalMs = 0;
 const { getStack } = await import("../stacks/index.js");
 
 interface Call {
@@ -56,6 +58,8 @@ function fakeGitHub(
     unchanged?: boolean;
     openPrBranch?: string;
     failCommit?: boolean;
+    /** the destination repo does not exist yet (greenfield) */
+    noRepo?: boolean;
   } = {}
 ) {
   const calls: Call[] = [];
@@ -84,6 +88,9 @@ function fakeGitHub(
               ]
             : []
         );
+      if (method === "GET" && path === "/repos/acme/app") return opts.noRepo ? json({}, 404) : json({});
+      if (method === "POST" && path === "/repos/jschell12/app-foundry/generate")
+        return json({ full_name: "acme/app", default_branch: "trunk", html_url: "https://github.com/acme/app" }, 201);
       if (method === "GET" && path.includes("/git/ref/heads/")) return json({ object: { sha: "head" } });
       if (method === "POST" && path.endsWith("/git/refs")) return json({}, 201);
       if (method === "GET" && path.includes("/git/commits/")) return json({ tree: { sha: "tree-head" } });
@@ -104,7 +111,11 @@ function fakeGitHub(
 
 const example = getStack("app-foundry-hetzner")!.example;
 
-function stackJob(args: Record<string, unknown>, stackSlug = "app-foundry-hetzner") {
+function stackJob(
+  args: Record<string, unknown>,
+  stackSlug = "app-foundry-hetzner",
+  extra: Record<string, unknown> = {}
+) {
   h.state.job = {
     id: "job_abcdefgh12345678",
     kind: "stack",
@@ -114,9 +125,13 @@ function stackJob(args: Record<string, unknown>, stackSlug = "app-foundry-hetzne
       orgId: "o1",
       name: "acme",
       stackSlug,
+      gitHost: "github",
+      gitConnectionId: null,
+      createRepo: false,
       destRepo: "acme/app",
       destPath: "",
       destBranch: "main",
+      ...extra,
     },
   };
 }
@@ -264,6 +279,41 @@ describe("stack job", () => {
     await runJob("job_abcdefgh12345678");
     const tree = calls.find((c) => c.path.endsWith("/git/trees"))!.body!.tree as { path: string }[];
     expect(tree.map((t) => t.path)).not.toContain("deploy/infra/overrides.tf");
+  });
+});
+
+describe("stack job: hosts and greenfield", () => {
+  it("creates the repo from the app template, then branches off its default branch", async () => {
+    stackJob(example, "app-foundry-hetzner", { createRepo: true });
+    const calls = fakeGitHub({ noRepo: true });
+    await runJob("job_abcdefgh12345678");
+    expect(h.state.stages.map((x) => x.stage)).toContain("repo");
+    const gen = calls.find((c) => c.path.endsWith("/generate"))!;
+    expect(gen.body).toMatchObject({ owner: "acme", name: "app", private: true });
+    expect(h.prisma.tfProject.update).toHaveBeenCalledWith({
+      where: { id: "p1" },
+      data: { createRepo: false, destBranch: "trunk" },
+    });
+    const pr = calls.find((c) => c.path.endsWith("/pulls") && c.method === "POST")!;
+    expect(pr.body).toMatchObject({ base: "trunk" });
+    expect(h.state.stages.at(-1)!.statusMessage).toContain("created https://github.com/acme/app");
+  });
+
+  it("does not create a repo that already exists", async () => {
+    stackJob(example, "app-foundry-hetzner", { createRepo: true });
+    const calls = fakeGitHub();
+    await runJob("job_abcdefgh12345678");
+    expect(calls.some((c) => c.path.endsWith("/generate"))).toBe(false);
+    expect(h.state.stages.at(-1)).toMatchObject({ stage: "complete", status: "success" });
+  });
+
+  it("refuses a GitLab project for a GitHub-only stack before touching anything", async () => {
+    stackJob(example, "app-foundry-hetzner", { gitHost: "gitlab", destRepo: "acme/platform/web" });
+    const calls = fakeGitHub();
+    await runJob("job_abcdefgh12345678");
+    expect(h.state.stages.at(-1)).toMatchObject({ stage: "render", status: "errored" });
+    expect(h.state.stages.at(-1)!.statusMessage).toContain("not GitLab");
+    expect(calls).toEqual([]);
   });
 });
 

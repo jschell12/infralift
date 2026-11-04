@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Ajv2020 as Ajv } from "ajv/dist/2020.js";
+import type { GitHost } from "@infralift/shared";
 import {
   renderTemplate,
   TfInputValidationError,
@@ -37,6 +38,10 @@ export interface StackManifest {
   template: { slug: string; name: string; description: string; repo: string };
   /** Where it runs. The dashboard pairs a template with a target to pick a stack. */
   target: { slug: string; name: string };
+  /** Where its CI runs. app-foundry-hetzner ships GitHub Actions and has tofu
+   *  write GitHub Actions secrets, so it is GitHub-only until it has a GitLab
+   *  CI counterpart. */
+  gitHosts: GitHost[];
   source: { repo: string; commit: string };
   inputSchema: Record<string, unknown>;
   /** Inputs that reproduce the source repo's own deploy/; CI renders with these. */

@@ -42,6 +42,7 @@ const FIELD: Record<Provider, { kind: FieldKind; label: string; placeholder: str
     label: "Fine-grained personal access token",
     placeholder: "paste token",
   },
+  gitlab: { kind: "token", label: "Personal access token (api scope)", placeholder: "glpat-..." },
   netlify: { kind: "token", label: "Personal access token", placeholder: "paste token" },
   render: { kind: "token", label: "API key", placeholder: "paste key" },
   railway: { kind: "token", label: "API token", placeholder: "paste token" },
@@ -71,7 +72,9 @@ const SCOPE_HELP: Record<Provider, string> = {
   firebase:
     "Create a service account at console.cloud.google.com/iam-admin/serviceaccounts with the Viewer role (or granular: Firebase Viewer, Cloud Functions Viewer, Cloud Datastore Viewer), generate a JSON key, and paste the full JSON. We inventory Hosting sites, Cloud Functions, and Firestore databases.",
   github:
-    "Create a fine-grained PAT at github.com/settings/tokens with Contents: Read and write. This is the one credential that is not read-only: it is used to commit generated Terraform, and nothing else. Scope it to the repository that will receive the code if you create that repository yourself. If you want infralift to create it for you, the token needs permission to create repositories for the owner instead.",
+    "Create a fine-grained PAT at github.com/settings/tokens for the account or organization your projects live in, with Contents, Pull requests and Workflows: Read and write, plus Administration: Read and write if infralift should create new repositories for you. Unlike the cloud connections this one writes: infralift creates project repositories from templates and opens pull requests with the infrastructure. It never pushes to your default branch.",
+  gitlab:
+    "Create a personal (or group) access token at gitlab.com/-/user_settings/personal_access_tokens with the api scope. infralift creates project repositories from templates and opens merge requests with the infrastructure; it never pushes to your default branch.",
   netlify:
     "Create a personal access token at app.netlify.com/user/applications. We read sites, forms, DNS zones, and build hooks, all read-only.",
   render:

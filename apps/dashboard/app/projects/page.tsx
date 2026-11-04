@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PROVIDER_LABELS, type MigrationSummary } from "@infralift/shared";
+import {
+  isGitHost,
+  PROVIDER_LABELS,
+  type GitHost,
+  type MigrationSummary,
+  type ProviderConnectionSummary,
+} from "@infralift/shared";
 import { api } from "../../lib/api";
 import { AssessPanel } from "../../components/assess-panel";
 import { MigrationCard } from "../../components/migration-card";
@@ -50,6 +56,7 @@ interface Stack {
   description: string;
   template: { slug: string; name: string; description: string; repo: string };
   target: { slug: string; name: string };
+  gitHosts: GitHost[];
   inputSchema: InputSchema;
   example: Settings;
 }
@@ -59,6 +66,7 @@ interface Project {
   name: string;
   source: string;
   stackSlug: string | null;
+  gitHost: GitHost;
   assessmentId: string | null;
   migrationTarget: string | null;
   destRepo: string;
@@ -331,8 +339,28 @@ function NewProjectDrawer({
   const stack = stacks.find((s) => s.slug === stackSlug);
 
   const [name, setName] = useState("");
-  const [destRepo, setDestRepo] = useState("");
+  // Where the project's code lives. A new repository is created from the
+  // template's repo (app code) and then gets the infrastructure as a PR/MR.
+  const [gitConns, setGitConns] = useState<ProviderConnectionSummary[]>([]);
+  const [connectionId, setConnectionId] = useState("");
+  const [newRepo, setNewRepo] = useState(true);
+  const [owner, setOwner] = useState("");
+  const [repoName, setRepoName] = useState("");
+  const [existingRepo, setExistingRepo] = useState("");
   const [destBranch, setDestBranch] = useState("main");
+  useEffect(() => {
+    api<ProviderConnectionSummary[]>("/connections")
+      .then((all) => {
+        const git = all.filter((c) => isGitHost(c.provider) && c.status === "valid");
+        setGitConns(git);
+        if (git[0]) setConnectionId(git[0].id);
+      })
+      .catch(() => {});
+  }, []);
+  const conn = gitConns.find((c) => c.id === connectionId);
+  const gitHost = (conn?.provider ?? "github") as GitHost;
+  const destRepo = newRepo ? (owner && (repoName || name) ? `${owner}/${repoName || name}` : "") : existingRepo;
+  const hostSupported = stack ? stack.gitHosts.includes(gitHost) : true;
   const [values, setValues] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<StackFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -347,7 +375,7 @@ function NewProjectDrawer({
         withBackend({
           ...values,
           name: values.name || name,
-          github_repository: values.github_repository || destRepo.split("/")[1] || "",
+          github_repository: values.github_repository || destRepo.split("/").pop() || "",
         })
       )
     : {};
@@ -376,7 +404,15 @@ function NewProjectDrawer({
     try {
       await api(`/tf/stacks/${stack.slug}/projects`, {
         method: "POST",
-        body: JSON.stringify({ name, destRepo, destBranch, arguments: settings }),
+        body: JSON.stringify({
+          name,
+          destRepo,
+          destBranch: newRepo ? "main" : destBranch,
+          gitHost,
+          connectionId,
+          createRepo: newRepo,
+          arguments: settings,
+        }),
       });
       onCreated();
     } catch (e) {
@@ -473,25 +509,93 @@ function NewProjectDrawer({
               onChange={(e) => setName(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-[1fr_120px] gap-2 mb-4">
-            <div>
-              <label className={LABEL}>App repository *</label>
-              <input
-                className={`${INPUT} ${MONO}`}
-                placeholder="owner/repo"
-                value={destRepo}
-                onChange={(e) => setDestRepo(e.target.value)}
-              />
+          <label className={LABEL}>Repository *</label>
+          {gitConns.length === 0 ? (
+            <div className="mb-4">
+              <Note>
+                Connect <a href="/connections?provider=github">GitHub</a> or{" "}
+                <a href="/connections?provider=gitlab">GitLab</a> first. The project&apos;s app
+                code and infrastructure live in a repository there.
+              </Note>
             </div>
-            <div>
-              <label className={LABEL}>Branch</label>
-              <input
-                className={INPUT}
-                value={destBranch}
-                onChange={(e) => setDestBranch(e.target.value)}
-              />
+          ) : (
+            <div className="mb-4">
+              <div className="flex gap-2 mb-2">
+                <select
+                  className={INPUT}
+                  value={connectionId}
+                  onChange={(e) => setConnectionId(e.target.value)}
+                >
+                  {gitConns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {PROVIDER_LABELS[c.provider]} · {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-1 rounded-lg bg-bg p-1 mb-2">
+                {(
+                  [
+                    [true, "Create a new repository"],
+                    [false, "Use an existing one"],
+                  ] as const
+                ).map(([v, text]) => (
+                  <button
+                    key={String(v)}
+                    type="button"
+                    onClick={() => setNewRepo(v)}
+                    className={`rounded-md px-2 py-1.5 text-[12px] font-semibold ${newRepo === v ? "bg-surface text-text" : "text-muted hover:text-text"}`}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+              {newRepo ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      className={`${INPUT} ${MONO}`}
+                      placeholder={gitHost === "gitlab" ? "group or group/subgroup" : "owner or org"}
+                      value={owner}
+                      onChange={(e) => setOwner(e.target.value)}
+                    />
+                    <input
+                      className={`${INPUT} ${MONO}`}
+                      placeholder={name || "repo name"}
+                      value={repoName}
+                      onChange={(e) => setRepoName(e.target.value)}
+                    />
+                  </div>
+                  <div className="text-xs text-faint mt-1">
+                    Private, created from {stack.template.repo}; the infrastructure then arrives as a{" "}
+                    {gitHost === "gitlab" ? "merge request" : "pull request"}.
+                  </div>
+                </>
+              ) : (
+                <div className="grid grid-cols-[1fr_120px] gap-2">
+                  <input
+                    className={`${INPUT} ${MONO}`}
+                    placeholder={gitHost === "gitlab" ? "group/project" : "owner/repo"}
+                    value={existingRepo}
+                    onChange={(e) => setExistingRepo(e.target.value)}
+                  />
+                  <input
+                    className={INPUT}
+                    value={destBranch}
+                    onChange={(e) => setDestBranch(e.target.value)}
+                  />
+                </div>
+              )}
+              {!hostSupported && (
+                <div className="text-xs text-warn mt-2">
+                  {stack.name} runs its CI on{" "}
+                  {stack.gitHosts.map((h) => PROVIDER_LABELS[h]).join(", ")}. A{" "}
+                  {PROVIDER_LABELS[gitHost]} version of this stack is coming; pick a{" "}
+                  {stack.gitHosts.map((h) => PROVIDER_LABELS[h]).join(" or ")} connection for now.
+                </div>
+              )}
             </div>
-          </div>
+          )}
           <SettingsFields
             schema={stack.inputSchema}
             values={values}
@@ -518,8 +622,17 @@ function NewProjectDrawer({
             >
               Preview files
             </button>
-            <PrimaryButton onClick={create} disabled={busy || !name || !destRepo}>
-              {busy ? "Opening PR..." : "Open pull request"}
+            <PrimaryButton
+              onClick={create}
+              disabled={busy || !name || !destRepo || !connectionId || !hostSupported}
+            >
+              {busy
+                ? "Working..."
+                : newRepo
+                  ? "Create repository"
+                  : gitHost === "gitlab"
+                    ? "Open merge request"
+                    : "Open pull request"}
             </PrimaryButton>
           </div>
         </>
@@ -691,7 +804,10 @@ export default function ProjectsPage() {
                 )}
               </div>
               <div className={`text-sm text-muted ${MONO} mb-3`}>
-                <a href={`https://github.com/${p.destRepo}`}>{p.destRepo}</a>@{p.destBranch}
+                <a href={`https://${p.gitHost === "gitlab" ? "gitlab.com" : "github.com"}/${p.destRepo}`}>
+                  {p.destRepo}
+                </a>
+                @{p.destBranch}
               </div>
               {latest ? (
                 <div className="flex items-center gap-2 text-sm">
