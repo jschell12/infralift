@@ -39,7 +39,7 @@ vi.mock("../db.js", () => ({ prisma: h.prisma }));
 vi.mock("../crypto.js", () => ({ decryptToken: () => "token" }));
 vi.mock("./workspace.js", () => ({ getWorkspaceAdapter: () => h.adapter }));
 
-const { runJob, stackBranchName } = await import("./pipeline.js");
+const { runJob, stackBranchName, isStackBranch } = await import("./pipeline.js");
 const { getStack } = await import("../stacks/index.js");
 
 interface Call {
@@ -49,7 +49,14 @@ interface Call {
 }
 
 function fakeGitHub(
-  opts: { existingPaths?: string[]; unchanged?: boolean; openPrBranch?: string; failCommit?: boolean } = {}
+  opts: {
+    existingPaths?: string[];
+    /** "<branch>:<path>" pairs; existingPaths count on every branch */
+    existingOn?: string[];
+    unchanged?: boolean;
+    openPrBranch?: string;
+    failCommit?: boolean;
+  } = {}
 ) {
   const calls: Call[] = [];
   const json = (body: unknown, status = 200) =>
@@ -63,7 +70,8 @@ function fakeGitHub(
       calls.push({ method, path, body });
       if (method === "GET" && path.includes("/contents/")) {
         const p = decodeURIComponent(path.split("/contents/")[1].split("?")[0]);
-        return (opts.existingPaths ?? []).includes(p)
+        const ref = decodeURIComponent(path.split("?ref=")[1] ?? "");
+        return (opts.existingPaths ?? []).includes(p) || (opts.existingOn ?? []).includes(`${ref}:${p}`)
           ? json({ sha: "s", content: "" })
           : json({}, 404);
       }
@@ -211,12 +219,12 @@ describe("stack job", () => {
 
   it("a re-run while its PR is open pushes to that PR instead of opening another", async () => {
     stackJob(example);
-    const calls = fakeGitHub({ openPrBranch: "infralift/acme-oldjob12" });
+    const calls = fakeGitHub({ openPrBranch: "infralift/acme-0ldj0b12" });
     await runJob("job_abcdefgh12345678");
     expect(calls.some((c) => c.method === "POST" && c.path.endsWith("/git/refs"))).toBe(false);
     expect(calls.some((c) => c.method === "POST" && c.path.endsWith("/pulls"))).toBe(false);
     const push = calls.find((c) => c.method === "PATCH")!;
-    expect(push.path).toBe(`/repos/acme/app/git/refs/heads/${encodeURIComponent("infralift/acme-oldjob12")}`);
+    expect(push.path).toBe(`/repos/acme/app/git/refs/heads/${encodeURIComponent("infralift/acme-0ldj0b12")}`);
     expect(h.state.stages.at(-1)!.statusMessage).toContain("updated https://github.com/acme/app/pull/2");
   });
 
@@ -233,8 +241,38 @@ describe("stack job", () => {
 
   it("never deletes an existing PR's branch on failure", async () => {
     stackJob(example);
-    const calls = fakeGitHub({ openPrBranch: "infralift/acme-oldjob12", failCommit: true });
+    const calls = fakeGitHub({ openPrBranch: "infralift/acme-0ldj0b12", failCommit: true });
     await runJob("job_abcdefgh12345678");
     expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+  });
+
+  it("does not take over another project's PR whose name shares a prefix", async () => {
+    stackJob(example); // project "acme"
+    const calls = fakeGitHub({ openPrBranch: "infralift/acme-staging-0ldj0b12" });
+    await runJob("job_abcdefgh12345678");
+    expect(calls.some((c) => c.method === "POST" && c.path.endsWith("/pulls"))).toBe(true);
+    const push = calls.find((c) => c.method === "PATCH")!;
+    expect(push.path).toContain(encodeURIComponent(stackBranchName("acme", "job_abcdefgh12345678")));
+  });
+
+  it("keeps an overrides.tf the customer edited on the open PR's branch", async () => {
+    stackJob(example);
+    const calls = fakeGitHub({
+      openPrBranch: "infralift/acme-0ldj0b12",
+      existingOn: ["infralift/acme-0ldj0b12:deploy/infra/overrides.tf"],
+    });
+    await runJob("job_abcdefgh12345678");
+    const tree = calls.find((c) => c.path.endsWith("/git/trees"))!.body!.tree as { path: string }[];
+    expect(tree.map((t) => t.path)).not.toContain("deploy/infra/overrides.tf");
+  });
+});
+
+describe("isStackBranch", () => {
+  it("matches only branches made for exactly this project", () => {
+    expect(isStackBranch("app", "infralift/app-abc12345")).toBe(true);
+    expect(isStackBranch("app", "infralift/app-staging-abc12345")).toBe(false);
+    expect(isStackBranch("app", "infralift/app-abc123456")).toBe(false);
+    expect(isStackBranch("app", "infralift/apps-abc12345")).toBe(false);
+    expect(isStackBranch("app", "feature/app-abc12345")).toBe(false);
   });
 });

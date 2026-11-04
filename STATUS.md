@@ -1,5 +1,12 @@
 # infralift status
 
+## 2026-11-04 (stacks follow-ups)
+
+### Completed
+- Stack jobs reuse an open PR only when its branch is exactly `infralift/<project>-<8 chars>`; a prefix match let project `app` push onto `app-staging`'s PR.
+- Seed files (`overrides.tf`) are kept if they exist on the default branch **or** on the open PR's branch, so a re-run no longer overwrites a customer's edit made on the PR.
+- Checked and rejected: `.dockerignore`'s `*.md` only excludes Markdown at the build-context root (measured with a throwaway `docker build`), so stack `.md` files do reach the image.
+
 ## 2026-11-04 (stacks)
 
 ### Completed
