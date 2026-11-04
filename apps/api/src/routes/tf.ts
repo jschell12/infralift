@@ -610,6 +610,8 @@ tfRouter.get("/stacks", (_req, res) => {
       slug: s.slug,
       name: s.name,
       description: s.description,
+      template: s.template,
+      target: s.target,
       inputSchema: s.inputSchema,
       example: s.example,
     }))
@@ -637,11 +639,11 @@ tfRouter.post("/stacks/:slug/preview", (req, res) => {
 });
 
 const stackProjectSchema = z.object({
+  // Same shape the stack's `name` setting needs, since the dashboard derives
+  // that from the project name: a name that passes here must also render.
   name: z
     .string()
-    .min(1)
-    .max(32)
-    .regex(/^[a-z0-9-]+$/),
+    .regex(/^[a-z][a-z0-9-]{2,31}$/, "3-32 characters: lowercase letters, digits and dashes, starting with a letter"),
   destRepo: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
   destBranch: z.string().min(1).default("main"),
   arguments: stackArgs,
@@ -696,3 +698,49 @@ tfRouter.post("/stacks/:slug/projects", async (req, res) => {
   });
   res.status(202).json({ project, job });
 });
+
+// Changing a stack project's settings re-renders it into a pull request, the
+// same as creating it. The body carries the complete settings, not a patch:
+// what the dashboard shows is what gets rendered.
+tfRouter.put("/stacks/projects/:id/settings", async (req, res) => {
+  const parsed = z.object({ arguments: stackArgs }).safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const project = await prisma.tfProject.findFirst({
+    where: { id: req.params.id, orgId: req.user!.orgId, source: "stack" },
+  });
+  if (!project) return res.status(404).json({ error: "project not found" });
+  const stack = project.stackSlug ? getStack(project.stackSlug) : null;
+  if (!stack) return res.status(404).json({ error: "stack not found" });
+  // Every resource is named from `name`; changing it would make the next
+  // apply replace the server, its volume and its tunnel.
+  const current = project.providerConfig as TfArguments;
+  if (parsed.data.arguments.name !== current.name) {
+    return res.status(400).json({
+      error: `name is fixed after creation (it is ${String(current.name)}); every resource is named from it`,
+    });
+  }
+  let settings: TfArguments;
+  try {
+    settings = resolveStackInputs(stack, parsed.data.arguments);
+    renderStack(stack, settings);
+  } catch (err) {
+    if (err instanceof TfInputValidationError) {
+      return res.status(400).json({ error: err.message, details: err.details });
+    }
+    throw err;
+  }
+  const updated = await prisma.tfProject.update({
+    where: { id: project.id },
+    data: { providerConfig: settings },
+  });
+  const job = await prisma.tfJob.create({
+    data: { projectId: project.id, kind: "stack", argumentsJson: settings },
+  });
+  void runJob(job.id).catch((err) => {
+    console.error(`tf job ${job.id} failed:`, err);
+  });
+  res.status(202).json({ project: updated, job });
+});
+

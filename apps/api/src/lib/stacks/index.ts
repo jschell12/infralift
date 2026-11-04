@@ -33,6 +33,10 @@ export interface StackManifest {
   slug: string;
   name: string;
   description: string;
+  /** The app this stack deploys, and the GitHub template a new repo comes from. */
+  template: { slug: string; name: string; description: string; repo: string };
+  /** Where it runs. The dashboard pairs a template with a target to pick a stack. */
+  target: { slug: string; name: string };
   source: { repo: string; commit: string };
   inputSchema: Record<string, unknown>;
   /** Inputs that reproduce the source repo's own deploy/; CI renders with these. */
