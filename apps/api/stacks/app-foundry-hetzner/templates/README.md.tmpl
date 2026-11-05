@@ -48,8 +48,7 @@ Credentials come from the environment only:
 | `CLOUDFLARE_API_TOKEN` | account: Tunnel, Access apps and policies, Access service tokens, R2 (all edit); zone `{{zone_name}}`: DNS edit, zone read. No token management. |
 {{#if delivery_github}}| `GITHUB_TOKEN`, `GITHUB_OWNER` | Actions secrets and variables on `{{github_repository}}` |
 {{/if}}{{#if delivery_gitlab}}| `GITLAB_TOKEN` | CI/CD variables and the backup schedule on `{{gitlab_project}}` (a token with the `api` scope) |
-{{/if}}
-| `TF_VAR_r2_backup_access_key_id`, `TF_VAR_r2_backup_secret_access_key` | R2 S3 keys scoped to the `{{name}}-backups` bucket |
+{{/if}}| `TF_VAR_r2_backup_access_key_id`, `TF_VAR_r2_backup_secret_access_key` | R2 S3 keys scoped to the `{{name}}-backups` bucket |
 {{#if backend_r2}}| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | R2 S3 keys scoped to the `{{name}}-tfstate` bucket |
 | `TF_VAR_state_passphrase` | encrypts state; `tofu init` needs it too, and losing it makes the state unreadable |
 {{/if}}
