@@ -19,11 +19,6 @@ variable "cloudflare_account_id" {
   type = string
 }
 
-variable "github_repository" {
-  description = "Repository (name only) that receives the deploy secrets and variables."
-  type        = string
-}
-
 variable "admin_emails" {
   description = "People allowed through Cloudflare Access to /admin, the analytics API, and SSH."
   type        = list(string)

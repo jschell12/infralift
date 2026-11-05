@@ -4,6 +4,11 @@
 # Actions settings, so no credential is ever copied by hand. These values are
 # in state, which is why the R2 backend encrypts it.
 
+variable "github_repository" {
+  description = "Repository (name only) that receives the deploy secrets and variables."
+  type        = string
+}
+
 locals {
   actions_secrets = {
     DEPLOY_SSH_KEY          = tls_private_key.deploy.private_key_openssh

@@ -307,12 +307,15 @@ describe("stack job: hosts and greenfield", () => {
     expect(h.state.stages.at(-1)).toMatchObject({ stage: "complete", status: "success" });
   });
 
-  it("refuses a GitLab project for a GitHub-only stack before touching anything", async () => {
-    stackJob(example, "app-foundry-hetzner", { gitHost: "gitlab", destRepo: "acme/platform/web" });
+  it("refuses a delivery that does not run on the project's host before touching anything", async () => {
+    stackJob({ ...example, delivery: "github-actions" }, "app-foundry-hetzner", {
+      gitHost: "gitlab",
+      destRepo: "acme/platform/web",
+    });
     const calls = fakeGitHub();
     await runJob("job_abcdefgh12345678");
     expect(h.state.stages.at(-1)).toMatchObject({ stage: "render", status: "errored" });
-    expect(h.state.stages.at(-1)!.statusMessage).toContain("not GitLab");
+    expect(h.state.stages.at(-1)!.statusMessage).toContain("does not run on GitLab; use GitLab CI");
     expect(calls).toEqual([]);
   });
 });

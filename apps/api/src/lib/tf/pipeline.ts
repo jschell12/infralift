@@ -11,7 +11,7 @@ import {
   type ProviderConfig,
 } from "./render.js";
 import { commitFile, commitFiles, ensureRepo } from "./git.js";
-import { getStack, renderStack } from "../stacks/index.js";
+import { deliveryFor, getStack, renderStack } from "../stacks/index.js";
 import { gitHostClient, type GitHostClient, type HostFile } from "../git/hosts.js";
 import { isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
 import { getWorkspaceAdapter } from "./workspace.js";
@@ -416,16 +416,28 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       );
       return;
     }
-    if (!stack.gitHosts.includes(host)) {
+    // A delivery runs on one git host; the project's settings must name one
+    // that runs where the project's repository lives (or name none, and get
+    // the stack's delivery for that host).
+    const stored = (job.argumentsJson ?? {}) as TfArguments;
+    const delivery = deliveryFor(stack, host, stored.delivery);
+    if (!delivery) {
+      const names = stack.deliveries.filter((d) => d.gitHost === host).map((d) => d.name);
       await setStage(
         jobId,
         "render",
         "errored",
-        `${stack.name} runs its CI on ${stack.gitHosts.map((h) => PROVIDER_LABELS[h]).join(", ")}, not ${PROVIDER_LABELS[host]}`
+        names.length
+          ? `delivery ${String(stored.delivery)} does not run on ${PROVIDER_LABELS[host]}; use ${names.join(" or ")}`
+          : `${stack.name} has no delivery that runs on ${PROVIDER_LABELS[host]}`
       );
       return;
     }
-    const args = (job.argumentsJson ?? {}) as TfArguments;
+    const args: TfArguments = {
+      ...stored,
+      delivery: delivery.slug,
+      ...(host === "gitlab" ? { gitlab_project: project.destRepo } : {}),
+    };
     const rendered = renderStack(stack, args);
 
     const token = await getGitToken(project.orgId, host, project.gitConnectionId);

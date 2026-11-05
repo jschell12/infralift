@@ -11,26 +11,32 @@ terraform {
     cloudflare = {
       source = "cloudflare/cloudflare"
     }
-    github = {
+{{#if delivery_github}}    github = {
       source = "integrations/github"
     }
-  }
+{{/if}}{{#if delivery_gitlab}}    gitlab = {
+      source = "gitlabhq/gitlab"
+    }
+{{/if}}  }
 }
 
 # Credentials come from the environment, never from files:
-#   HCLOUD_TOKEN, CLOUDFLARE_API_TOKEN, GITHUB_TOKEN (+ GITHUB_OWNER)
-provider "hcloud" {}
+{{#if delivery_github}}#   HCLOUD_TOKEN, CLOUDFLARE_API_TOKEN, GITHUB_TOKEN (+ GITHUB_OWNER)
+{{/if}}{{#if delivery_gitlab}}#   HCLOUD_TOKEN, CLOUDFLARE_API_TOKEN, GITLAB_TOKEN
+{{/if}}provider "hcloud" {}
 provider "cloudflare" {}
-provider "github" {}
-
+{{#if delivery_github}}provider "github" {}
+{{/if}}{{#if delivery_gitlab}}provider "gitlab" {}
+{{/if}}
 locals {
   # What the UI chose. overrides.tf wins on any key it sets.
   ui_settings = {
     name                  = "{{name}}"
     zone_name             = "{{zone_name}}"
     subdomain             = "{{subdomain}}"
-    github_repository     = "{{github_repository}}"
-    location              = "{{location}}"
+{{#if delivery_github}}    github_repository     = "{{github_repository}}"
+{{/if}}{{#if delivery_gitlab}}    gitlab_project        = "{{gitlab_project}}"
+{{/if}}    location              = "{{location}}"
     server_type           = "{{server_type}}"
     data_volume_gb        = {{data_volume_gb}}
     backup_retention_days = {{backup_retention_days}}
@@ -52,8 +58,9 @@ module "app" {
   name                  = local.settings.name
   zone_name             = local.settings.zone_name
   subdomain             = local.settings.subdomain
-  github_repository     = local.settings.github_repository
-  location              = local.settings.location
+{{#if delivery_github}}  github_repository     = local.settings.github_repository
+{{/if}}{{#if delivery_gitlab}}  gitlab_project        = local.settings.gitlab_project
+{{/if}}  location              = local.settings.location
   server_type           = local.settings.server_type
   data_volume_gb        = local.settings.data_volume_gb
   backup_retention_days = local.settings.backup_retention_days

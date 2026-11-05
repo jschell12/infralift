@@ -108,13 +108,31 @@ describe("POST /stacks/:slug/projects", () => {
     });
   });
 
-  it("refuses GitLab for a stack whose CI only runs on GitHub", async () => {
+  it("GitLab: picks GitLab CI and wires the project's own path", async () => {
     const out = await call("post", "/stacks/:slug/projects", {
       params: { slug: "app-foundry-hetzner" },
       body: { ...body, gitHost: "gitlab", destRepo: "acme/platform/web" },
     });
+    expect(out.status).toBe(202);
+    expect(h.connFindFirst.mock.calls[0][0].where).toMatchObject({ provider: "gitlab" });
+    expect(h.projectCreate.mock.calls[0][0].data).toMatchObject({
+      gitHost: "gitlab",
+      providerConfig: expect.objectContaining({ delivery: "gitlab-ci", gitlab_project: "acme/platform/web" }),
+    });
+  });
+
+  it("refuses a delivery that does not run on the repository's host", async () => {
+    const out = await call("post", "/stacks/:slug/projects", {
+      params: { slug: "app-foundry-hetzner" },
+      body: {
+        ...body,
+        gitHost: "gitlab",
+        destRepo: "acme/platform/web",
+        arguments: { ...example, delivery: "github-actions" },
+      },
+    });
     expect(out.status).toBe(400);
-    expect(String((out.body as { error: string }).error)).toContain("GitHub");
+    expect(String((out.body as { error: string }).error)).toContain("use GitLab CI");
     expect(h.projectCreate).not.toHaveBeenCalled();
   });
 

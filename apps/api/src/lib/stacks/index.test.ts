@@ -123,4 +123,51 @@ describe("renderStack: app-foundry-hetzner", () => {
     resolveStackInputs(stack, inputs);
     expect(inputs).toEqual(stack.example);
   });
+
+  it("gitlab-ci: GitLab files and wording, none of GitHub's", () => {
+    const files = byPath(
+      renderStack(stack, { ...stack.example, delivery: "gitlab-ci", gitlab_project: "acme/web" })
+    );
+    expect(files.has(".gitlab-ci.yml")).toBe(true);
+    expect(files.has("deploy/infra/generated/gitlab.tf")).toBe(true);
+    expect([...files.keys()].some((p) => p.startsWith(".github/"))).toBe(false);
+    expect(files.has("deploy/infra/generated/github.tf")).toBe(false);
+    expect(files.get("deploy/infra/generated/versions.tf")!.content).toContain("gitlabhq/gitlab");
+    const readme = files.get("deploy/README.md")!.content;
+    expect(readme).toContain("shipped by GitLab CI");
+    expect(readme).toContain("merge request");
+    expect(readme).not.toContain("GITHUB_TOKEN");
+  });
+
+  it("each delivery requires its own repository setting", () => {
+    const { github_repository: _, ...noRepo } = stack.example;
+    expect(() => renderStack(stack, noRepo)).toThrow(TfInputValidationError);
+    expect(() => renderStack(stack, { ...noRepo, delivery: "gitlab-ci" })).toThrow(TfInputValidationError);
+    expect(() =>
+      renderStack(stack, { ...noRepo, delivery: "gitlab-ci", gitlab_project: "acme/web" })
+    ).not.toThrow();
+  });
+
+  it("the README's credentials table stays one table for every delivery and backend", () => {
+    for (const delivery of ["github-actions", "gitlab-ci"]) {
+      for (const backend of ["r2", "tfc"]) {
+        const inputs = {
+          ...stack.example,
+          delivery,
+          backend,
+          ...(delivery === "gitlab-ci" ? { gitlab_project: "acme/web" } : {}),
+          ...(backend === "tfc" ? { tfc_organization: "acme" } : {}),
+        };
+        const readme = byPath(renderStack(stack, inputs)).get("deploy/README.md")!.content;
+        const lines = readme.split("\n");
+        const start = lines.findIndex((l) => l.startsWith("| Variable"));
+        const end = lines.findIndex((l, i) => i > start && !l.startsWith("|"));
+        const table = lines.slice(start, end).join("\n");
+        const label = `${delivery}/${backend}`;
+        expect(table, label).toContain("TF_VAR_r2_backup_access_key_id");
+        if (backend === "r2") expect(table, label).toContain("TF_VAR_state_passphrase");
+        expect(table, label).toContain(delivery === "gitlab-ci" ? "GITLAB_TOKEN" : "GITHUB_TOKEN");
+      }
+    }
+  });
 });

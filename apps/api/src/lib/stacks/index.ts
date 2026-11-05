@@ -17,9 +17,17 @@ import {
 // works as a unit, so it is stored on disk as files rather than as a DB row:
 //
 //   apps/api/stacks/<slug>/
-//     stack.json   manifest: input schema, rendered files, seed files
-//     files/       copied verbatim (executable bits kept)
+//     stack.json   manifest: layers, input schema, rendered files, seeds
+//     files/       copied verbatim for every project (executable bits kept)
+//     deliveries/<delivery>/files/
+//                  the CI files and credential wiring of one delivery
+//                  layer (GitHub Actions, GitLab CI); only the chosen one
+//                  is rendered
 //     templates/   the few files that vary per project, {{var}} syntax
+//
+// infralift owns the stack from here on. It started as app-foundry's own
+// deploy/ (stack.json "source"); the golden test keeps the templates
+// reproducing that commit's main.tf and backend.tf for the GitHub delivery.
 //
 // Every file is either "managed" (infralift rewrites it on each change) or
 // "seed" (written only when the repo does not have it yet). That is how
@@ -38,10 +46,11 @@ export interface StackManifest {
   template: { slug: string; name: string; description: string; repo: string };
   /** Where it runs. The dashboard pairs a template with a target to pick a stack. */
   target: { slug: string; name: string };
-  /** Where its CI runs. app-foundry-hetzner ships GitHub Actions and has tofu
-   *  write GitHub Actions secrets, so it is GitHub-only until it has a GitLab
-   *  CI counterpart. */
-  gitHosts: GitHost[];
+  /** How the app runs on the target. One per stack for now. */
+  runtime: { slug: string; name: string };
+  /** What builds and deploys it. Each delivery runs on one git host, which
+   *  is the compatibility rule the API and the dashboard enforce. */
+  deliveries: StackDelivery[];
   source: { repo: string; commit: string };
   inputSchema: Record<string, unknown>;
   /** Inputs that reproduce the source repo's own deploy/; CI renders with these. */
@@ -49,6 +58,31 @@ export interface StackManifest {
   rendered: { path: string; template: string; when?: When }[];
   exclude?: { prefix: string; when?: When }[];
   seed?: string[];
+}
+
+export interface StackDelivery {
+  slug: string;
+  name: string;
+  gitHost: GitHost;
+}
+
+/** The git hosts a stack can deploy from: those of its deliveries. */
+export function stackGitHosts(m: StackManifest): GitHost[] {
+  return [...new Set(m.deliveries.map((d) => d.gitHost))];
+}
+
+/** The delivery a project uses on a host: the one it names, or the
+ *  stack's first delivery for that host. */
+export function deliveryFor(
+  m: StackManifest,
+  host: GitHost,
+  requested?: unknown
+): StackDelivery | null {
+  if (typeof requested === "string") {
+    const d = m.deliveries.find((x) => x.slug === requested);
+    return d && d.gitHost === host ? d : null;
+  }
+  return m.deliveries.find((x) => x.gitHost === host) ?? null;
 }
 
 export interface StackFile {
@@ -130,9 +164,20 @@ export function renderStack(
 ): StackFile[] {
   const args = resolveStackInputs(manifest, inputs);
   // Flags for {{#if}} blocks, which test presence rather than value.
+  const delivery = manifest.deliveries.find((d) => d.slug === args.delivery);
+  if (!delivery) {
+    throw new TfInputValidationError([`unknown delivery ${String(args.delivery)}`]);
+  }
   const templateArgs: TfArguments = {
     ...args,
     [`backend_${args.backend}`]: true,
+    [`delivery_${delivery.gitHost}`]: true,
+    ci_name: delivery.name,
+    change_request: delivery.gitHost === "gitlab" ? "merge request" : "PR",
+    ci_store:
+      delivery.gitHost === "gitlab"
+        ? "this project's CI/CD variables"
+        : "this repository's Actions settings",
     state_tool: args.backend === "tfc" ? "Terraform (Terraform Cloud)" : "OpenTofu",
   };
 
@@ -144,16 +189,23 @@ export function renderStack(
     );
   const files = new Map<string, StackFile>();
 
-  const filesDir = join(stackDir, "files");
-  for (const full of walk(filesDir)) {
-    const path = relative(filesDir, full).split(sep).join("/");
-    if (excluded(path)) continue;
-    files.set(path, {
-      path,
-      content: readFileSync(full, "utf8"),
-      mode: statSync(full).mode & 0o111 ? "100755" : "100644",
-      ownership: seed.has(path) ? "seed" : "managed",
-    });
+  for (const filesDir of [
+    join(stackDir, "files"),
+    join(stackDir, "deliveries", delivery.slug, "files"),
+  ]) {
+    for (const full of walk(filesDir)) {
+      const path = relative(filesDir, full).split(sep).join("/");
+      if (excluded(path)) continue;
+      if (files.has(path)) {
+        throw new Error(`stack ${manifest.slug}: ${path} is both common and delivery-specific`);
+      }
+      files.set(path, {
+        path,
+        content: readFileSync(full, "utf8"),
+        mode: statSync(full).mode & 0o111 ? "100755" : "100644",
+        ownership: seed.has(path) ? "seed" : "managed",
+      });
+    }
   }
 
   for (const r of manifest.rendered) {

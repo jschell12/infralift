@@ -85,12 +85,12 @@ describe("GitLab", () => {
     const actions = calls.find((c) => c.path.endsWith("/repository/commits"))!.body!.actions as {
       action: string;
       file_path: string;
-      execute_filemode: boolean;
+      execute_filemode?: boolean;
     }[];
     expect(actions.map((a) => [a.action, a.file_path, a.execute_filemode])).toEqual([
-      ["update", "changed.txt", false],
+      ["update", "changed.txt", undefined],
       ["chmod", "deploy.sh", true],
-      ["create", "new.txt", false],
+      ["create", "new.txt", undefined],
     ]);
   });
 
@@ -216,6 +216,30 @@ describe("GitLab", () => {
       target_branch: "main",
       remove_source_branch: true,
     });
+  });
+});
+
+describe("GitLab executable files", () => {
+  it("creates an executable as create + chmod, since GitLab ignores the mode on create", async () => {
+    const calls = fake("https://gitlab.com/api/v4", [
+      (c) => (c.path.includes("/repository/tree") ? json([]) : undefined),
+      (c) => (c.method === "POST" && c.path.endsWith("/repository/commits") ? json({ id: "c" }, 201) : undefined),
+    ]);
+    await gitHostClient("gitlab", "t").commitFiles({
+      repo: "a/b",
+      branch: "x",
+      workDir: "",
+      message: "m",
+      files: [{ fileName: "deploy.sh", content: "#!/bin/sh\n", mode: "100755" }],
+    });
+    const actions = calls.find((c) => c.path.endsWith("/repository/commits"))!.body!.actions as {
+      action: string;
+      execute_filemode?: boolean;
+    }[];
+    expect(actions.map((a) => [a.action, a.execute_filemode])).toEqual([
+      ["create", undefined],
+      ["chmod", true],
+    ]);
   });
 });
 

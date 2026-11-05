@@ -1,5 +1,19 @@
 # infralift status
 
+## 2026-11-04 (layers: runtime + delivery adapters, GitLab end to end)
+
+### Completed
+- **Stacks are layered.** `stack.json` declares a `runtime` (compose on one server) and `deliveries` (GitHub Actions on GitHub, GitLab CI on GitLab). Files split into common `files/` plus `deliveries/<slug>/files/`, each with its CI files and its credential wiring. A delivery runs on one git host: the API, the job and the dashboard all enforce that rule.
+- **GitLab CI delivery**: `.gitlab-ci.yml` mirrors the GitHub workflows job for job (build to the project registry, deploy on the default branch, a review app per same-project MR with on_stop teardown, nightly backup from a tofu-created pipeline schedule, restore check, infra validation). `gitlab.tf` writes masked CI/CD variables, the deploy key as a file variable, and the schedule. Validated against GitLab's published CI JSON schema (locally; the check fails on a bad value).
+- GitLab commits keep scripts executable: `execute_filemode` only counts on a separate `chmod` action (from the #97 review). Reverted the stray `next-env.d.ts` from #97.
+- Dashboard: Runtime and Delivery pickers; delivery follows the repository's host; Kubernetes, Nomad, ECS, serverless, Jenkins and Argo shown with what holds each back.
+- infralift now owns the stack; `scripts/sync-stack.sh` is retired. The golden test still proves the GitHub templates reproduce app-foundry's original `main.tf` and `backend.tf`.
+- Design doc for all seven layers, imports and state splitting: https://claude.ai/artifact/15fkUAHftgjssF5D9uJP4W
+
+### Next
+- Live GitLab run (add to the test plan's Phase D).
+- Import: Terraform in a repo with S3/R2/GCS state.
+
 ## 2026-11-04 (GitHub + GitLab, greenfield repos)
 
 ### Completed

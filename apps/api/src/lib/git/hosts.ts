@@ -276,13 +276,15 @@ function gitlabClient(token: string): GitHostClient {
         const path = `${prefix}${f.fileName}`;
         const executable = f.mode === "100755";
         const have = existing.get(path);
+        // GitLab only honours execute_filemode on a chmod action, so the mode
+        // is set by its own action after the content one.
+        const wasExecutable = have?.mode === "100755";
         if (!have) {
-          actions.push({ action: "create", file_path: path, content: f.content, execute_filemode: executable });
-          continue;
+          actions.push({ action: "create", file_path: path, content: f.content });
+        } else if (have.sha !== gitBlobSha(f.content)) {
+          actions.push({ action: "update", file_path: path, content: f.content });
         }
-        if (have.sha !== gitBlobSha(f.content)) {
-          actions.push({ action: "update", file_path: path, content: f.content, execute_filemode: executable });
-        } else if ((have.mode === "100755") !== executable) {
+        if (executable !== wasExecutable && (executable || have)) {
           actions.push({ action: "chmod", file_path: path, execute_filemode: executable });
         }
       }

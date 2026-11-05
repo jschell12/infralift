@@ -56,6 +56,8 @@ interface Stack {
   description: string;
   template: { slug: string; name: string; description: string; repo: string };
   target: { slug: string; name: string };
+  runtime: { slug: string; name: string };
+  deliveries: { slug: string; name: string; gitHost: GitHost }[];
   gitHosts: GitHost[];
   inputSchema: InputSchema;
   example: Settings;
@@ -92,6 +94,20 @@ type Settings = Record<string, string | number | boolean>;
 
 // Targets on the roadmap, shown so the shape of the product is visible. Only
 // targets with a stack behind them can be picked.
+// Layers that have options on the roadmap but no stack behind them yet. Each
+// says what holds it back, so the dashboard shows the shape of the product
+// and the rule, not just a greyed-out word.
+const ROADMAP_RUNTIMES = [
+  { slug: "kubernetes", name: "Kubernetes", why: "coming: k3s on Hetzner first" },
+  { slug: "nomad", name: "Nomad", why: "coming" },
+  { slug: "ecs", name: "AWS ECS", why: "coming, with the AWS target" },
+  { slug: "serverless", name: "Serverless", why: "needs a serverless-shaped template" },
+];
+const ROADMAP_DELIVERIES = [
+  { slug: "jenkins", name: "Jenkins", why: "coming: needs a Jenkins connection" },
+  { slug: "argo", name: "Argo CD", why: "needs a Kubernetes runtime" },
+];
+
 const ROADMAP_TARGETS = [
   { slug: "aws", name: "AWS" },
   { slug: "gcp", name: "Google Cloud" },
@@ -289,7 +305,7 @@ function FilePreview({ files }: { files: StackFile[] }) {
         <b>{managed.length}</b> files infralift keeps up to date
         {seed.length > 0 && (
           <>
-            , and <b>{seed.length}</b> that are yours after the first PR (
+            , and <b>{seed.length}</b> that are yours once they exist in your repo (
             {seed.map((f) => (
               <code key={f.path} className={MONO}>
                 {f.path}
@@ -360,7 +376,10 @@ function NewProjectDrawer({
   const conn = gitConns.find((c) => c.id === connectionId);
   const gitHost = (conn?.provider ?? "github") as GitHost;
   const destRepo = newRepo ? (owner && (repoName || name) ? `${owner}/${repoName || name}` : "") : existingRepo;
-  const hostSupported = stack ? stack.gitHosts.includes(gitHost) : true;
+  // Delivery follows the repository's host: GitHub Actions on GitHub, GitLab
+  // CI on GitLab. That is the compatibility rule the API enforces too.
+  const delivery = stack?.deliveries.find((d) => d.gitHost === gitHost);
+  const hostSupported = !!delivery;
   const [values, setValues] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<StackFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -375,7 +394,10 @@ function NewProjectDrawer({
         withBackend({
           ...values,
           name: values.name || name,
-          github_repository: values.github_repository || destRepo.split("/").pop() || "",
+          delivery: delivery?.slug ?? "",
+          ...(gitHost === "gitlab"
+            ? { gitlab_project: destRepo }
+            : { github_repository: values.github_repository || destRepo.split("/").pop() || "" }),
         })
       )
     : {};
@@ -588,18 +610,55 @@ function NewProjectDrawer({
               )}
               {!hostSupported && (
                 <div className="text-xs text-warn mt-2">
-                  {stack.name} runs its CI on{" "}
-                  {stack.gitHosts.map((h) => PROVIDER_LABELS[h]).join(", ")}. A{" "}
-                  {PROVIDER_LABELS[gitHost]} version of this stack is coming; pick a{" "}
-                  {stack.gitHosts.map((h) => PROVIDER_LABELS[h]).join(" or ")} connection for now.
+                  {stack.name} has no delivery that runs on {PROVIDER_LABELS[gitHost]}.
                 </div>
               )}
             </div>
           )}
+          <label className={LABEL}>Runtime</label>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <span className="rounded-full px-3 py-1.5 text-xs font-semibold border border-accent text-accent">
+              {stack.runtime.name}
+            </span>
+            {ROADMAP_RUNTIMES.map((r) => (
+              <span
+                key={r.slug}
+                title={r.why}
+                className="rounded-full px-3 py-1.5 text-xs border border-border text-faint cursor-not-allowed"
+              >
+                {r.name}
+              </span>
+            ))}
+          </div>
+          <label className={LABEL}>Delivery</label>
+          <div className="flex flex-wrap gap-2 mb-1">
+            {stack.deliveries.map((d) => (
+              <span
+                key={d.slug}
+                title={d.gitHost === gitHost ? "" : `needs a ${PROVIDER_LABELS[d.gitHost]} repository`}
+                className={`rounded-full px-3 py-1.5 text-xs border ${d.gitHost === gitHost ? "border-accent text-accent font-semibold" : "border-border text-faint cursor-not-allowed"}`}
+              >
+                {d.name}
+              </span>
+            ))}
+            {ROADMAP_DELIVERIES.map((r) => (
+              <span
+                key={r.slug}
+                title={r.why}
+                className="rounded-full px-3 py-1.5 text-xs border border-border text-faint cursor-not-allowed"
+              >
+                {r.name}
+              </span>
+            ))}
+          </div>
+          <div className="text-xs text-faint mb-4">
+            Follows the repository: {delivery ? `${delivery.name} on ${PROVIDER_LABELS[gitHost]}` : "none for this host"}.
+            Hover a greyed option for what it needs.
+          </div>
           <SettingsFields
             schema={stack.inputSchema}
             values={values}
-            hide={["name", "github_repository"]}
+            hide={["name", "github_repository", "gitlab_project", "delivery"]}
             onChange={(v) => {
               setValues(v);
               setPreview(null);
@@ -686,6 +745,7 @@ function SettingsDrawer({
         values={values}
         onChange={setValues}
         locked={["name"]}
+        hide={["delivery", "gitlab_project"]}
       />
       <BackendPicker values={values} onChange={setValues} />
       {error && <div className="text-danger text-sm mt-3">{error}</div>}
@@ -838,6 +898,12 @@ export default function ProjectsPage() {
               <Chip tone="muted">
                 {p.providerConfig.backend === "tfc" ? "Terraform Cloud" : "OpenTofu + R2"}
               </Chip>
+              {stack && (
+                <Chip tone="muted">
+                  {stack.deliveries.find((d) => d.slug === p.providerConfig.delivery)?.name ??
+                    stack.deliveries.find((d) => d.gitHost === p.gitHost)?.name}
+                </Chip>
+              )}
               <div className="ml-auto flex gap-2">
                 {stack && (
                   <button
