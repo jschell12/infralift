@@ -12,8 +12,21 @@
     "slug": "hetzner",
     "name": "Hetzner Cloud"
   },
-  "gitHosts": [
-    "github"
+  "runtime": {
+    "slug": "compose",
+    "name": "Docker Compose on one server"
+  },
+  "deliveries": [
+    {
+      "slug": "github-actions",
+      "name": "GitHub Actions",
+      "gitHost": "github"
+    },
+    {
+      "slug": "gitlab-ci",
+      "name": "GitLab CI",
+      "gitHost": "gitlab"
+    }
   ],
   "source": {
     "repo": "jschell12/app-foundry",
@@ -26,8 +39,7 @@
     "required": [
       "name",
       "zone_name",
-      "subdomain",
-      "github_repository"
+      "subdomain"
     ],
     "properties": {
       "name": {
@@ -48,7 +60,12 @@
       "github_repository": {
         "type": "string",
         "pattern": "^[A-Za-z0-9_.-]{1,100}$",
-        "description": "The app repository (name only) that receives the deploy secrets."
+        "description": "GitHub Actions delivery: the app repository (name only) that receives the deploy secrets."
+      },
+      "gitlab_project": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+$",
+        "description": "GitLab CI delivery: the project's full path (groups included) that receives the CI/CD variables."
       },
       "location": {
         "type": "string",
@@ -87,6 +104,15 @@
         "maximum": 10,
         "default": 3
       },
+      "delivery": {
+        "type": "string",
+        "enum": [
+          "github-actions",
+          "gitlab-ci"
+        ],
+        "default": "github-actions",
+        "description": "What builds and deploys the app. Must match the repository's host."
+      },
       "backend": {
         "type": "string",
         "enum": [
@@ -104,21 +130,47 @@
         "pattern": "^[A-Za-z0-9_-]{1,90}$"
       }
     },
-    "if": {
-      "properties": {
-        "backend": {
-          "const": "tfc"
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "backend": {
+              "const": "tfc"
+            }
+          },
+          "required": [
+            "backend"
+          ]
+        },
+        "then": {
+          "required": [
+            "tfc_organization"
+          ]
         }
       },
-      "required": [
-        "backend"
-      ]
-    },
-    "then": {
-      "required": [
-        "tfc_organization"
-      ]
-    }
+      {
+        "if": {
+          "properties": {
+            "delivery": {
+              "const": "gitlab-ci"
+            }
+          },
+          "required": [
+            "delivery"
+          ]
+        },
+        "then": {
+          "required": [
+            "gitlab_project"
+          ]
+        },
+        "else": {
+          "required": [
+            "github_repository"
+          ]
+        }
+      }
+    ]
   },
   "example": {
     "name": "app-foundry-demo",

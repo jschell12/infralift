@@ -1,4 +1,5 @@
-// Renders every stack with its example inputs, once per state backend, and
+// Renders every stack with its example inputs, once per state backend and
+// delivery, and
 // runs the tools a customer will run on the output. A stack that renders but
 // does not validate is broken output, and only running the tools finds that.
 //
@@ -33,12 +34,15 @@ const has = (cmd: string) => {
 
 let failures = 0;
 for (const stack of listStacks()) {
+  for (const delivery of stack.deliveries)
   for (const backend of ["r2", "tfc"] as const) {
-    const label = `${stack.slug} [${backend}]`;
+    const label = `${stack.slug} [${delivery.slug}, ${backend}]`;
     const out = mkdtempSync(join(tmpdir(), `stack-${stack.slug}-${backend}-`));
     try {
       const inputs = {
         ...stack.example,
+        delivery: delivery.slug,
+        ...(delivery.gitHost === "gitlab" ? { gitlab_project: "acme/platform/web" } : {}),
         backend,
         ...(backend === "tfc" ? { tfc_organization: "example-org" } : {}),
       };

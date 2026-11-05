@@ -123,4 +123,28 @@ describe("renderStack: app-foundry-hetzner", () => {
     resolveStackInputs(stack, inputs);
     expect(inputs).toEqual(stack.example);
   });
+
+  it("gitlab-ci: GitLab files and wording, none of GitHub's", () => {
+    const files = byPath(
+      renderStack(stack, { ...stack.example, delivery: "gitlab-ci", gitlab_project: "acme/web" })
+    );
+    expect(files.has(".gitlab-ci.yml")).toBe(true);
+    expect(files.has("deploy/infra/generated/gitlab.tf")).toBe(true);
+    expect([...files.keys()].some((p) => p.startsWith(".github/"))).toBe(false);
+    expect(files.has("deploy/infra/generated/github.tf")).toBe(false);
+    expect(files.get("deploy/infra/generated/versions.tf")!.content).toContain("gitlabhq/gitlab");
+    const readme = files.get("deploy/README.md")!.content;
+    expect(readme).toContain("shipped by GitLab CI");
+    expect(readme).toContain("merge request");
+    expect(readme).not.toContain("GITHUB_TOKEN");
+  });
+
+  it("each delivery requires its own repository setting", () => {
+    const { github_repository: _, ...noRepo } = stack.example;
+    expect(() => renderStack(stack, noRepo)).toThrow(TfInputValidationError);
+    expect(() => renderStack(stack, { ...noRepo, delivery: "gitlab-ci" })).toThrow(TfInputValidationError);
+    expect(() =>
+      renderStack(stack, { ...noRepo, delivery: "gitlab-ci", gitlab_project: "acme/web" })
+    ).not.toThrow();
+  });
 });

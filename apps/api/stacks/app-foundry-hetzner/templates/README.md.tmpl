@@ -5,12 +5,12 @@ rewritten when the project changes in infralift except `infra/overrides.tf`,
 which is yours and is only written if it does not exist.
 
 The app runs on one Hetzner `{{server_type}}` in `{{location}}` behind a Cloudflare
-tunnel, declared in {{state_tool}} and shipped by GitHub Actions.
+tunnel, declared in {{state_tool}} and shipped by {{ci_name}}.
 
 | Host | What |
 |---|---|
 | `https://{{subdomain}}.{{zone_name}}` | production |
-| `https://{{subdomain}}-preview-<slot>.{{zone_name}}` | one per open PR, up to {{max_previews}} at once |
+| `https://{{subdomain}}-preview-<slot>.{{zone_name}}` | one per open {{change_request}}, up to {{max_previews}} at once |
 | `{{subdomain}}-ssh.{{zone_name}}` | SSH, only through Cloudflare Access |
 
 ```
@@ -33,10 +33,10 @@ deploy/
 - **Backups:** nightly `pg_dump` to R2, kept {{backup_retention_days}} days, and every dump is
   restored into a throwaway Postgres to prove it works.
 - **CI wiring:** apply writes every secret and variable the workflows need into
-  this repository's Actions settings.
+  {{ci_store}}.
 
 Anyone who can push a branch to this repository is effectively root on the
-box: same-repo PRs deploy with the deploy key. Fork PRs get no secrets.
+box: same-repo {{change_request}}s deploy with the deploy key. Forks get no secrets.
 
 ## Standing it up
 
@@ -46,7 +46,9 @@ Credentials come from the environment only:
 |---|---|
 | `HCLOUD_TOKEN` | the Hetzner project |
 | `CLOUDFLARE_API_TOKEN` | account: Tunnel, Access apps and policies, Access service tokens, R2 (all edit); zone `{{zone_name}}`: DNS edit, zone read. No token management. |
-| `GITHUB_TOKEN`, `GITHUB_OWNER` | Actions secrets and variables on `{{github_repository}}` |
+{{#if delivery_github}}| `GITHUB_TOKEN`, `GITHUB_OWNER` | Actions secrets and variables on `{{github_repository}}` |
+{{/if}}{{#if delivery_gitlab}}| `GITLAB_TOKEN` | CI/CD variables and the backup schedule on `{{gitlab_project}}` (a token with the `api` scope) |
+{{/if}}
 | `TF_VAR_r2_backup_access_key_id`, `TF_VAR_r2_backup_secret_access_key` | R2 S3 keys scoped to the `{{name}}-backups` bucket |
 {{#if backend_r2}}| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | R2 S3 keys scoped to the `{{name}}-tfstate` bucket |
 | `TF_VAR_state_passphrase` | encrypts state; `tofu init` needs it too, and losing it makes the state unreadable |
@@ -61,13 +63,15 @@ Credentials come from the environment only:
 2. Copy `terraform.tfvars.example` values into workspace variables too.
 3. Plan and apply from the workspace.
 {{/if}}
-Then push to the default branch, or run `deploy.yml` by hand. Every deploy job
+Then push to the default branch{{#if delivery_github}}, or run `deploy.yml` by hand{{/if}}{{#if delivery_gitlab}}, or run a pipeline on it by hand{{/if}}. Every deploy job
 is skipped until the infrastructure exists.
 
 ## Acceptance
 
 - a push to the default branch deploys, and `/api/health` reports `"database":"ok"`
-- a PR gets a working preview link, and closing it frees the slot
-- `backup.yml` writes a dump and its `verify-restore` job passes
+- a {{change_request}} gets a working preview link, and closing it frees the slot
+{{#if delivery_github}}- `backup.yml` writes a dump and its `verify-restore` job passes
+{{/if}}{{#if delivery_gitlab}}- the nightly schedule's `backup` job writes a dump and `verify_restore` passes (run it by hand with `BACKUP=1`)
+{{/if}}
 
 `box/test-local.sh` runs the server half of this in local Docker and in CI.

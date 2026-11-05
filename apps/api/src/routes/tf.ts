@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
-import { GIT_HOSTS, PROVIDER_LABELS } from "@infralift/shared";
+import { GIT_HOSTS, isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
 import { z } from "zod";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
@@ -15,7 +15,14 @@ import { getTfcClient } from "../lib/tf/tfc-client.js";
 import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
 import { requireAdmin, isAdmin } from "../lib/cf-auth.js";
 import { toCodegenSample } from "../lib/tf/sample.js";
-import { getStack, listStacks, renderStack, resolveStackInputs } from "../lib/stacks/index.js";
+import {
+  deliveryFor,
+  getStack,
+  listStacks,
+  renderStack,
+  resolveStackInputs,
+  stackGitHosts,
+} from "../lib/stacks/index.js";
 
 export const tfRouter = Router();
 
@@ -613,7 +620,9 @@ tfRouter.get("/stacks", (_req, res) => {
       description: s.description,
       template: s.template,
       target: s.target,
-      gitHosts: s.gitHosts,
+      runtime: s.runtime,
+      deliveries: s.deliveries,
+      gitHosts: stackGitHosts(s),
       inputSchema: s.inputSchema,
       example: s.example,
     }))
@@ -668,11 +677,24 @@ tfRouter.post("/stacks/:slug/projects", async (req, res) => {
   if (d.gitHost === "github" && d.destRepo.split("/").length !== 2) {
     return res.status(400).json({ error: "a GitHub repository is owner/name" });
   }
-  if (!stack.gitHosts.includes(d.gitHost)) {
+  // The delivery decides where CI runs, so it must match the repository's
+  // host. Unnamed, it is the stack's delivery for that host.
+  const delivery = deliveryFor(stack, d.gitHost, d.arguments.delivery);
+  if (!delivery) {
+    const fits = stack.deliveries.filter((x) => x.gitHost === d.gitHost).map((x) => x.name);
     return res.status(400).json({
-      error: `${stack.name} runs its CI on ${stack.gitHosts.map((h) => PROVIDER_LABELS[h]).join(", ")}; it cannot deploy from ${PROVIDER_LABELS[d.gitHost]} yet`,
+      error: fits.length
+        ? `${String(d.arguments.delivery)} does not run on ${PROVIDER_LABELS[d.gitHost]}; use ${fits.join(" or ")}`
+        : `${stack.name} has no delivery that runs on ${PROVIDER_LABELS[d.gitHost]}`,
     });
   }
+  // The repository the delivery wires up is the project's own, so it is
+  // taken from destRepo rather than asked for twice.
+  const repoName = d.destRepo.split("/").pop() ?? "";
+  const derived: TfArguments = { delivery: delivery.slug };
+  if (delivery.gitHost === "gitlab") derived.gitlab_project = d.destRepo;
+  else if (d.arguments.github_repository === undefined) derived.github_repository = repoName;
+  d.arguments = { ...d.arguments, ...derived };
   const connection = await prisma.providerConnection.findFirst({
     where: {
       orgId: req.user!.orgId,
@@ -751,6 +773,18 @@ tfRouter.put("/stacks/projects/:id/settings", async (req, res) => {
       error: `name is fixed after creation (it is ${String(current.name)}); every resource is named from it`,
     });
   }
+  const host = (isGitHost(project.gitHost) ? project.gitHost : "github") as GitHost;
+  const delivery = deliveryFor(stack, host, parsed.data.arguments.delivery ?? current.delivery);
+  if (!delivery) {
+    return res.status(400).json({
+      error: `${String(parsed.data.arguments.delivery)} does not run on ${PROVIDER_LABELS[host]}, where this project's repository lives`,
+    });
+  }
+  parsed.data.arguments = {
+    ...parsed.data.arguments,
+    delivery: delivery.slug,
+    ...(host === "gitlab" ? { gitlab_project: project.destRepo } : {}),
+  };
   let settings: TfArguments;
   try {
     settings = resolveStackInputs(stack, parsed.data.arguments);
