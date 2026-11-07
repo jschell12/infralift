@@ -1,4 +1,5 @@
 import { HclParseError, parseHcl, type HclBlock, type HclBody } from "./hcl.js";
+import { isSafePath } from "./check.js";
 
 // ---------------------------------------------------------------------------
 // Import scan: what a customer's Terraform repository holds, read statically.
@@ -300,6 +301,12 @@ function scanRoot(
       readiness = "blocked";
       notes.push(`The ${backend.type} backend is not supported for import yet.`);
   }
+  if (readiness === "ready" && !isSafePath(path)) {
+    readiness = "blocked";
+    notes.push(
+      "The directory name has characters other than letters, digits, dot, dash, underscore and slash. Rename it to import it."
+    );
+  }
   if (backend.partial && readiness === "ready") {
     if (backend.configFiles.length === 1) {
       notes.push(`Backend settings come from ${backend.configFiles[0]}; the check passes it to init.`);
@@ -364,7 +371,7 @@ function localModuleBlocks(
 function readBackend(block: HclBlock | null, info: DirInfo): Backend {
   const configFiles = info.other
     .filter((p) => p.endsWith(".tfbackend") || /^backend.*\.hcl$/.test(baseOf(p)))
-    .filter((p) => !/\.example$/.test(p))
+    .filter((p) => !/\.example$/.test(p) && isSafePath(p))
     .sort();
   if (!block) return { kind: "local", type: null, settings: {}, partial: false, configFiles };
   // Only settings that say where state is. A backend block can also carry
