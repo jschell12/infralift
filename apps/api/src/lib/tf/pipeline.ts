@@ -714,7 +714,7 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
           "The import is safe to finish when the check passes, which means the plan changes nothing: the code already matches what is running, so taking it over cannot cause downtime. If it fails, the job summary lists each resource that would change.",
           "",
           env.length
-            ? `Add these repository secrets before the check can run (Settings, Secrets and variables, Actions):\n\n${env.map((e) => `- \`${e.secret}\``).join("\n")}`
+            ? `Add these repository secrets before the check can run (Settings, Secrets and variables, Actions):\n\n${env.map((e) => `- \`${e.secret}\``).join("\n")}\n\nGive the cloud credentials read-only roles. A plan runs provider code and data sources with whatever the secrets allow, so read-only on state is not read-only on the account unless the roles are.`
             : "The check needs no secrets.",
           ...(root.notes.length ? ["", "Notes from the scan:", "", ...root.notes.map((n) => `- ${n}`)] : []),
         ].join("\n"),

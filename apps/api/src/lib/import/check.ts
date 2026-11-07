@@ -50,9 +50,12 @@ export function renderImportCheck(
   const tf = root.tool;
   const env = checkEnv(root);
   const label = root.path || "repository root";
-  const backendConfig = opts.backendConfigFile
-    ? ` -backend-config=${yamlString(relativeTo(root.path, opts.backendConfigFile))}`
-    : "";
+  for (const p of [root.path, opts.backendConfigFile ?? ""]) {
+    if (!isSafePath(p)) throw new Error(`refusing to write a check for the path ${JSON.stringify(p)}`);
+  }
+  // Repository paths reach the shell only through env vars, never spliced into
+  // a script, so a directory name cannot become a command in the customer's CI.
+  const backendConfig = opts.backendConfigFile ? ' -backend-config="$BACKEND_CONFIG"' : "";
   const setup =
     tf === "tofu"
       ? ["      - uses: opentofu/setup-opentofu@v1", "        with:", "          tofu_wrapper: false"]
@@ -89,6 +92,10 @@ export function renderImportCheck(
     "    env:",
     '      TF_IN_AUTOMATION: "1"',
     '      TF_INPUT: "0"',
+    `      MODULE_LABEL: ${yamlString(label)}`,
+    ...(opts.backendConfigFile
+      ? [`      BACKEND_CONFIG: ${yamlString(relativeTo(root.path, opts.backendConfigFile))}`]
+      : []),
     ...env.map((e) => `      ${e.env}: \${{ secrets.${e.secret} }}`),
     "    steps:",
     "      - uses: actions/checkout@v4",
@@ -127,7 +134,7 @@ export function renderImportCheck(
     "          total=$(jq '[.resource_changes[]? | select(.mode == \"managed\")] | length' plan.json)",
     "          drift=$(jq '[.resource_drift[]?] | length' plan.json)",
     "          {",
-    '            echo "## infralift import check: ' + label.replace(/"/g, "") + '"',
+    '            echo "## infralift import check: $MODULE_LABEL"',
     '            echo ""',
     '            if [ "$changes" -eq 0 ]; then',
     '              echo "No changes. All $total resources match the code, so infralift can take this module over without touching anything."',
@@ -148,6 +155,14 @@ export function renderImportCheck(
     "",
   ];
   return { path: file, content: lines.join("\n") };
+}
+
+/** Paths the check will name: letters, digits, dot, dash, underscore and
+ *  slash. Anything else (quotes, $, backticks, `${{`) is refused rather than
+ *  escaped, because it would pass through YAML, the Actions expression
+ *  engine and a shell, each with its own quoting. */
+export function isSafePath(path: string): boolean {
+  return /^[A-Za-z0-9._/-]*$/.test(path) && !path.split("/").includes("..");
 }
 
 /** A repository path as seen from the module's directory. */
