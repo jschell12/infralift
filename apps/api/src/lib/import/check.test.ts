@@ -1,0 +1,90 @@
+import { describe, expect, it } from "vitest";
+import { checkEnv, checkWorkflowPath, renderImportCheck, secretNameFor } from "./check.js";
+import { scanRepo } from "./scan.js";
+
+const root = (files: { path: string; content: string }[]) => scanRepo(files).roots[0];
+
+const PROD = root([
+  {
+    path: "infra/prod/main.tf",
+    content: `terraform {
+  backend "s3" {
+    bucket = "b"
+    key    = "k"
+  }
+}
+variable "db-password" {}
+resource "hcloud_server" "s" {}
+resource "github_repository" "r" {}
+`,
+  },
+]);
+
+describe("renderImportCheck", () => {
+  it("plans read-only: no lock, no apply, fails on any change", () => {
+    const { path, content } = renderImportCheck(PROD);
+    expect(path).toBe(".github/workflows/infralift-import-infra-prod.yml");
+    expect(content).toContain("terraform plan -input=false -lock=false -no-color -detailed-exitcode");
+    expect(content).not.toMatch(/\bapply\b(?! nothing)(?!\.)/);
+    expect(content).not.toContain("-auto-approve");
+    expect(content).toContain("permissions:\n  contents: read");
+    expect(content).toContain('working-directory: "infra/prod"');
+    expect(content.trimEnd().endsWith('[ "$changes" -eq 0 ]')).toBe(true);
+  });
+
+  it("passes each credential and unset variable through from a secret", () => {
+    const { content } = renderImportCheck(PROD);
+    expect(content).toContain("HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}");
+    // GitHub reserves the GITHUB_ prefix for secret names.
+    expect(content).toContain("GITHUB_TOKEN: ${{ secrets.INFRALIFT_GITHUB_TOKEN }}");
+    // Secret names cannot hold dashes; the env var keeps the variable's name.
+    expect(content).toContain("TF_VAR_db-password: ${{ secrets.TF_VAR_db_password }}");
+  });
+
+  it("uses OpenTofu when the repository does, and its backend config file", () => {
+    const tofu = root([
+      { path: "main.tf", content: 'terraform {\n  backend "gcs" {}\n}\nresource "google_storage_bucket" "b" {}\n' },
+      { path: "prod.tfbackend", content: 'bucket = "x"\n' },
+      { path: ".opentofu-version", content: "1.8.0\n" },
+    ]);
+    const { path, content } = renderImportCheck(tofu, { backendConfigFile: "prod.tfbackend" });
+    expect(path).toBe(".github/workflows/infralift-import-root.yml");
+    expect(content).toContain("opentofu/setup-opentofu@v1");
+    expect(content).toContain('tofu init -input=false -backend-config="prod.tfbackend"');
+    expect(content).toContain('working-directory: "."');
+    expect(content).toContain('- "**/*.tf"');
+  });
+
+  it("gives a nested module's config file relative to the module", () => {
+    const nested = root([
+      { path: "envs/prod/main.tf", content: 'terraform {\n  backend "s3" {}\n}\nresource "aws_s3_bucket" "b" {}\n' },
+      { path: "envs/prod/backend.hcl", content: 'bucket = "x"\n' },
+    ]);
+    expect(renderImportCheck(nested, { backendConfigFile: "envs/prod/backend.hcl" }).content).toContain(
+      '-backend-config="backend.hcl"'
+    );
+  });
+});
+
+describe("check helpers", () => {
+  it("names secrets GitHub will accept", () => {
+    expect(secretNameFor("HCLOUD_TOKEN")).toBe("HCLOUD_TOKEN");
+    expect(secretNameFor("GITHUB_TOKEN")).toBe("INFRALIFT_GITHUB_TOKEN");
+    expect(secretNameFor("TF_VAR_a-b")).toBe("TF_VAR_a_b");
+  });
+
+  it("lists credentials before variables", () => {
+    expect(checkEnv(PROD).map((e) => e.env)).toEqual([
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+      "GITHUB_TOKEN",
+      "HCLOUD_TOKEN",
+      "TF_VAR_db-password",
+    ]);
+  });
+
+  it("slugs the workflow file by module path", () => {
+    expect(checkWorkflowPath("")).toBe(".github/workflows/infralift-import-root.yml");
+    expect(checkWorkflowPath("Envs/Prod_EU")).toBe(".github/workflows/infralift-import-envs-prod-eu.yml");
+  });
+});

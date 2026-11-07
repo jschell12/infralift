@@ -10,6 +10,7 @@ import {
 } from "@infralift/shared";
 import { api } from "../../lib/api";
 import { AssessPanel } from "../../components/assess-panel";
+import { ImportPanel } from "../../components/import-panel";
 import { MigrationCard } from "../../components/migration-card";
 import {
   CARD,
@@ -24,12 +25,14 @@ import {
 } from "../../components/ui";
 
 // Projects: an app and where it runs, kept as code in a repository. A project
-// starts one of two ways:
+// starts one of three ways:
 //   - from a template: pick an app and a target, and infralift opens a pull
 //     request with the infrastructure, server scripts and CI (a stack);
 //   - from existing infrastructure: assess a connected account, pick a target
 //     on the assessment's options page, and infralift generates the code for
-//     it (codegen).
+//     it (codegen);
+//   - from a Terraform repo: scan a repository for root modules and import one
+//     behind a read-only plan check that must change nothing (imported).
 // Done-for-you migrations are listed here too. Nothing on this page applies
 // infrastructure; merging and applying stay with you.
 
@@ -73,7 +76,13 @@ interface Project {
   migrationTarget: string | null;
   destRepo: string;
   destBranch: string;
+  destPath: string;
   providerConfig: Settings;
+  importJson: {
+    backend: { kind: string };
+    resources: number;
+    tool: "terraform" | "tofu";
+  } | null;
 }
 
 interface Job {
@@ -329,6 +338,15 @@ function FilePreview({ files }: { files: StackFile[] }) {
 
 // -- drawers -------------------------------------------------------------------
 
+type Start = "template" | "existing" | "import";
+
+const BACKEND_NAMES: Record<string, string> = {
+  s3: "S3",
+  r2: "R2",
+  gcs: "GCS",
+  azurerm: "Azure Storage",
+};
+
 function NewProjectDrawer({
   stacks,
   start,
@@ -337,7 +355,7 @@ function NewProjectDrawer({
   onCreated,
 }: {
   stacks: Stack[];
-  start: "template" | "existing";
+  start: Start;
   /** connection to point at when arriving from Connections */
   highlight: string | null;
   onClose: () => void;
@@ -450,11 +468,12 @@ function NewProjectDrawer({
       subtitle="infralift writes the infrastructure as code into your repo. Nothing is applied until you merge it and run the plan."
       onClose={onClose}
     >
-      <div className="grid grid-cols-2 gap-1 rounded-lg bg-bg p-1 mb-5">
+      <div className="grid grid-cols-3 gap-1 rounded-lg bg-bg p-1 mb-5">
         {(
           [
             ["template", "From a template"],
-            ["existing", "From existing infrastructure"],
+            ["existing", "From a cloud account"],
+            ["import", "From a Terraform repo"],
           ] as const
         ).map(([key, text]) => (
           <button
@@ -468,7 +487,9 @@ function NewProjectDrawer({
         ))}
       </div>
 
-      {mode === "existing" ? (
+      {mode === "import" ? (
+        <ImportPanel onCreated={onCreated} />
+      ) : mode === "existing" ? (
         <AssessPanel highlight={highlight} />
       ) : (
       <>
@@ -765,7 +786,7 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [jobs, setJobs] = useState<Record<string, Job[]>>({});
   const [migrations, setMigrations] = useState<MigrationSummary[]>([]);
-  const [creating, setCreating] = useState<null | { start: "template" | "existing"; highlight: string | null }>(null);
+  const [creating, setCreating] = useState<null | { start: Start; highlight: string | null }>(null);
   const [editing, setEditing] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -776,7 +797,7 @@ export default function ProjectsPage() {
       api<MigrationSummary[]>("/migrations"),
     ]);
     // Template projects belong to the older /terraform page.
-    const mine = p.filter((x) => x.source === "stack" || x.source === "codegen");
+    const mine = p.filter((x) => ["stack", "codegen", "imported"].includes(x.source));
     setStacks(s);
     setProjects(mine);
     setMigrations(m);
@@ -796,7 +817,9 @@ export default function ProjectsPage() {
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const assess = q.get("assess");
-    if (assess || q.get("start") === "existing") {
+    if (q.get("start") === "import") {
+      setCreating({ start: "import", highlight: null });
+    } else if (assess || q.get("start") === "existing") {
       setCreating({ start: "existing", highlight: assess });
     }
   }, []);
@@ -834,8 +857,8 @@ export default function ProjectsPage() {
         <div className={`${CARD} mb-4`}>
           <h3 className="text-base font-semibold mb-1.5">No projects yet</h3>
           <p className="text-muted text-sm">
-            Start from an app template and a target, or assess infrastructure you already run
-            and pick where it should go. Either way infralift writes it as code in your repo.
+            Start from an app template and a target, assess a cloud account you already run,
+            or import a Terraform repository without touching what is running.
           </p>
         </div>
       )}
@@ -875,6 +898,45 @@ export default function ProjectsPage() {
                     {latest.stage} · {latest.status}
                   </Chip>
                   <span className="text-muted truncate">{latest.statusMessage}</span>
+                </div>
+              ) : (
+                <div className="text-sm text-faint">No jobs yet.</div>
+              )}
+            </div>
+          );
+        }
+        if (p.source === "imported") {
+          const list = jobs[p.id] ?? [];
+          const latest = list[0];
+          const pr = list.find((j) => j.prUrl)?.prUrl;
+          const scan = p.importJson;
+          return (
+            <div key={p.id} className={`${CARD} mb-4`}>
+              <div className="flex items-center gap-3 mb-2">
+                <h3 className="text-base font-semibold">{p.name}</h3>
+                <Chip tone="info">imported</Chip>
+                {scan && (
+                  <Chip tone="muted">
+                    {scan.resources} resources · {scan.tool === "tofu" ? "OpenTofu" : "Terraform"} ·{" "}
+                    {BACKEND_NAMES[scan.backend.kind] ?? scan.backend.kind} state
+                  </Chip>
+                )}
+              </div>
+              <div className={`text-sm text-muted ${MONO} mb-3`}>
+                <a href={`https://github.com/${p.destRepo}`}>{p.destRepo}</a>@{p.destBranch}
+                {p.destPath && ` · ${p.destPath}`}
+              </div>
+              {latest ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <Chip tone={STATUS_TONE[latest.status] ?? "muted"}>
+                    {latest.stage} · {latest.status}
+                  </Chip>
+                  <span className="text-muted truncate">{latest.statusMessage}</span>
+                  {pr && (
+                    <a className="ml-auto shrink-0 whitespace-nowrap text-accent text-sm font-semibold" href={pr}>
+                      View import check
+                    </a>
+                  )}
                 </div>
               ) : (
                 <div className="text-sm text-faint">No jobs yet.</div>

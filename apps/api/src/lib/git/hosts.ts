@@ -42,6 +42,12 @@ export interface GitHostClient {
   /** What the host calls the thing a stack job opens. */
   changeRequestNoun: "pull request" | "merge request";
   repoExists(repo: string): Promise<boolean>;
+  /** The repository's default branch. */
+  defaultBranch(repo: string): Promise<string>;
+  /** Every file path on `ref`. `truncated` when the host cut the listing short. */
+  listFiles(opts: { repo: string; ref: string }): Promise<{ paths: string[]; truncated: boolean }>;
+  /** A file's text on `ref`, or null when it does not exist. */
+  readFile(opts: { repo: string; path: string; ref: string }): Promise<string | null>;
   /** New repository holding a copy of `template` (a GitHub "owner/repo"). */
   createFromTemplate(opts: { template: string; repo: string; private: boolean }): Promise<CreatedRepo>;
   fileExists(opts: { repo: string; path: string; branch: string }): Promise<boolean>;
@@ -102,6 +108,35 @@ function githubClient(token: string): GitHostClient {
       if (res.status === 404) return false;
       if (!res.ok) throw new GitCommitError(`GitHub repo lookup failed (${res.status}) for ${repo}`);
       return true;
+    },
+
+    async defaultBranch(repo) {
+      const res = await gh("GET", `/repos/${repo}`);
+      if (!res.ok) throw new GitCommitError(`GitHub repo lookup failed (${res.status}) for ${repo}`);
+      return ((await res.json()) as { default_branch: string }).default_branch;
+    },
+
+    async listFiles({ repo, ref }) {
+      const res = await gh("GET", `/repos/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
+      if (!res.ok) throw new GitCommitError(`GitHub tree listing failed (${res.status}) for ${repo}@${ref}`);
+      const body = (await res.json()) as { tree: { path: string; type: string }[]; truncated: boolean };
+      return { paths: body.tree.filter((t) => t.type === "blob").map((t) => t.path), truncated: body.truncated };
+    },
+
+    async readFile({ repo, path, ref }) {
+      const res = await fetch(
+        `https://api.github.com/repos/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github.raw+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        }
+      );
+      if (res.status === 404) return null;
+      if (!res.ok) throw new GitCommitError(`GitHub file read failed (${res.status}) for ${repo}/${path}`);
+      return res.text();
     },
 
     async createFromTemplate({ template, repo, private: isPrivate }) {
@@ -208,6 +243,26 @@ function gitlabClient(token: string): GitHostClient {
       if (res.status === 404) return false;
       if (!res.ok) return fail(`project lookup for ${repo}`, res);
       return true;
+    },
+
+    async defaultBranch(repo) {
+      const res = await gl("GET", `/projects/${pid(repo)}`);
+      if (!res.ok) return fail(`project lookup for ${repo}`, res);
+      return ((await res.json()) as { default_branch: string }).default_branch;
+    },
+
+    async listFiles({ repo, ref }) {
+      return { paths: [...(await tree(repo, ref)).keys()], truncated: false };
+    },
+
+    async readFile({ repo, path, ref }) {
+      const res = await gl(
+        "GET",
+        `/projects/${pid(repo)}/repository/files/${encodeURIComponent(path)}/raw?ref=${encodeURIComponent(ref)}`
+      );
+      if (res.status === 404) return null;
+      if (!res.ok) return fail(`file read for ${repo}/${path}`, res);
+      return res.text();
     },
 
     async createFromTemplate({ template, repo, private: isPrivate }) {
