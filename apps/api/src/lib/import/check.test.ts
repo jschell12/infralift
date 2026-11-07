@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { checkEnv, checkWorkflowPath, renderImportCheck, secretNameFor } from "./check.js";
+import {
+  checkEnv,
+  checkGroups,
+  checkSetupLines,
+  checkWorkflowPath,
+  renderImportCheck,
+  secretNameFor,
+} from "./check.js";
 import { scanRepo } from "./scan.js";
 
 const root = (files: { path: string; content: string }[]) => scanRepo(files).roots[0];
@@ -98,6 +105,73 @@ describe("paths never reach the shell as code", () => {
     ]);
     expect(r.backend.configFiles).toEqual([]);
     expect(r.readiness).toBe("blocked");
+  });
+});
+
+describe("credentials: stored keys or OIDC", () => {
+  const tfFor = (backend: string, resources: string) =>
+    `terraform {\n  backend ${backend}\n}\n${resources}`;
+
+  it("lets AWS sign in with OIDC instead of stored keys", () => {
+    const aws = root([
+      { path: "main.tf", content: tfFor('"s3" {\n    bucket = "b"\n    key = "k"\n  }', 'resource "aws_s3_bucket" "b" {}\n') },
+    ]);
+    const { content } = renderImportCheck(aws);
+    expect(checkGroups(aws).map((g) => g.cloud)).toEqual(["aws"]);
+    expect(content).toContain("  id-token: write");
+    expect(content).toContain("if: vars.INFRALIFT_AWS_ROLE_ARN != ''");
+    expect(content).toContain("uses: aws-actions/configure-aws-credentials@v4");
+    expect(content).toContain("AWS_ACCESS_KEY_ID: ${{ steps.aws.outputs.aws-access-key-id || secrets.AWS_ACCESS_KEY_ID }}");
+    expect(content).toContain("AWS_SESSION_TOKEN: ${{ steps.aws.outputs.aws-session-token }}");
+    expect(content).toContain("OIDC_AWS: ${{ vars.INFRALIFT_AWS_ROLE_ARN != '' }}");
+    // Credentials live on the steps that use them, not at job level, where
+    // they would override the OIDC session.
+    expect(content.split("    steps:")[0]).not.toContain("AWS_ACCESS_KEY_ID");
+  });
+
+  it("lets Google Cloud and Azure sign in with OIDC", () => {
+    const multi = root([
+      {
+        path: "main.tf",
+        content: tfFor('"gcs" {\n    bucket = "b"\n  }', 'resource "google_storage_bucket" "b" {}\nresource "azurerm_resource_group" "g" {}\n'),
+      },
+    ]);
+    const { content } = renderImportCheck(multi);
+    expect(checkGroups(multi).map((g) => g.cloud)).toEqual(["gcp", "azure"]);
+    expect(content).toContain("uses: google-github-actions/auth@v2");
+    expect(content).toContain("ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID || vars.INFRALIFT_AZURE_CLIENT_ID }}");
+    expect(content).toContain("ARM_USE_OIDC: ${{ vars.INFRALIFT_AZURE_CLIENT_ID != '' && secrets.ARM_CLIENT_SECRET == '' }}");
+    expect(checkSetupLines(multi).join("\n")).toMatch(/Azure: secrets .* or for OIDC with no stored key, repository variables/);
+  });
+
+  it("hands R2 keys to init only, so an aws provider keeps AWS credentials", () => {
+    const both = root([
+      {
+        path: "main.tf",
+        content: tfFor(
+          '"s3" {\n    bucket = "b"\n    key = "k"\n    endpoints = { s3 = "https://x.r2.cloudflarestorage.com" }\n  }',
+          'resource "aws_s3_bucket" "b" {}\n'
+        ),
+      },
+    ]);
+    const { content } = renderImportCheck(both);
+    expect(content).toContain('init -input=false -backend-config="access_key=$R2_ACCESS_KEY_ID" -backend-config="secret_key=$R2_SECRET_ACCESS_KEY"');
+    expect(content).toContain("R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}");
+    expect(content).toContain("AWS_ACCESS_KEY_ID: ${{ steps.aws.outputs.aws-access-key-id || secrets.AWS_ACCESS_KEY_ID }}");
+  });
+
+  it("asks for no id-token permission when no cloud can use OIDC", () => {
+    const { content } = renderImportCheck(
+      root([{ path: "main.tf", content: tfFor('"gcs" {\n    bucket = "b"\n  }', "") + 'resource "hcloud_server" "s" {}\n' }])
+    );
+    // gcs backend brings in Google credentials, so this one does ask.
+    expect(content).toContain("id-token: write");
+    const plain = renderImportCheck({ ...PROD, credentials: ["HCLOUD_TOKEN"], requiredVariables: [] }).content;
+    expect(plain).not.toContain("id-token");
+  });
+
+  it("refuses an env name it cannot write safely", () => {
+    expect(() => checkEnv({ ...PROD, requiredVariables: ["x: ${{ secrets.A }} #"] })).toThrow(/refusing/);
   });
 });
 

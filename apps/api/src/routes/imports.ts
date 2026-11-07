@@ -8,7 +8,7 @@ import { GitCommitError } from "../lib/tf/git.js";
 import { runJob } from "../lib/tf/pipeline.js";
 import { readRepoForScan } from "../lib/import/read.js";
 import { scanRepo } from "../lib/import/scan.js";
-import { checkEnv, checkWorkflowPath } from "../lib/import/check.js";
+import { checkEnv, checkSetupLines, checkWorkflowPath } from "../lib/import/check.js";
 
 // Importing an existing Terraform repository. GitHub only for now; GitLab
 // follows once this path is proven.
@@ -70,7 +70,9 @@ importsRouter.post("/scan", async (req, res) => {
     roots: result.roots.map((r) => ({
       ...r,
       checkFile: checkWorkflowPath(r.path),
-      secrets: checkEnv(r).map((e) => e.secret),
+      // Only a module that can be imported gets a check, so only it lists setup.
+      secrets: r.readiness === "ready" ? checkEnv(r).map((e) => e.secret) : [],
+      setup: r.readiness === "ready" ? checkSetupLines(r) : [],
     })),
   });
 });
