@@ -16,6 +16,8 @@ import { gitHostClient, type GitHostClient, type HostFile } from "../git/hosts.j
 import { isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
 import { getWorkspaceAdapter } from "./workspace.js";
 import { generateHcl } from "./codegen.js";
+import { checkEnv, renderImportCheck } from "../import/check.js";
+import type { RootModule } from "../import/scan.js";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 
 // Staged pipeline: queued -> render -> commit -> workspace -> complete.
@@ -63,6 +65,9 @@ export async function runJob(jobId: string): Promise<void> {
   }
   if (job.kind === "stack") {
     return runStackJob(jobId, job);
+  }
+  if (job.kind === "import") {
+    return runImportJob(jobId, job);
   }
 
   const project = job.project;
@@ -621,6 +626,113 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       where: { id: jobId },
       select: { stage: true },
     });
+    await setStage(jobId, current?.stage ?? "render", "errored", msg);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Import jobs: scan -> read-only plan check -> pull request
+// ---------------------------------------------------------------------------
+
+/** Adds the import check for an existing root module to the customer's
+ *  repository as a pull request. Nothing in their Terraform is changed: the
+ *  only file is the workflow, and it plans without applying or locking. */
+async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
+  const project = job.project;
+  let client: GitHostClient | null = null;
+  let createdBranch: string | null = null;
+  try {
+    await setStage(jobId, "render", "running");
+    const root = project.importJson as unknown as RootModule | null;
+    if (!root || project.gitHost !== "github") {
+      await setStage(jobId, "render", "errored", "import needs a scanned module in a GitHub repository");
+      return;
+    }
+    const args = (job.argumentsJson ?? {}) as { backendConfigFile?: string | null };
+    const check = renderImportCheck(root, { backendConfigFile: args.backendConfigFile ?? null });
+
+    const token = await getGitToken(project.orgId, "github", project.gitConnectionId);
+    if (!token) {
+      await setStage(jobId, "commit", "errored", "no GitHub connection for this org: add one under Connections");
+      return;
+    }
+    client = gitHostClient("github", token);
+
+    await setStage(jobId, "commit", "running");
+    const repo = project.destRepo;
+    const openCr = await client.findOpenChangeRequest({
+      repo,
+      base: project.destBranch,
+      isMine: (ref) => isStackBranch(project.name, ref),
+    });
+    await prisma.tfRendering.upsert({
+      where: { projectId_fileName: { projectId: project.id, fileName: check.path } },
+      create: { projectId: project.id, fileName: check.path, argumentsJson: args, renderedBody: check.content },
+      update: { argumentsJson: args, renderedBody: check.content },
+    });
+    await prisma.tfJob.update({ where: { id: jobId }, data: { fileCount: 1 } });
+
+    const branch = openCr?.branch ?? stackBranchName(project.name, jobId);
+    if (!openCr) {
+      await client.createBranch({ repo, from: project.destBranch, branch });
+      createdBranch = branch;
+    }
+    const label = root.path || "the repository root";
+    const result = await client.commitFiles({
+      repo,
+      branch,
+      workDir: "",
+      files: [{ fileName: check.path, content: check.content }],
+      message: `infralift: import check for ${label}\n\nRead-only plan against the existing state; applies nothing.`,
+    });
+    if (result.noop) {
+      if (createdBranch) {
+        await client.deleteBranch({ repo, branch });
+        createdBranch = null;
+      }
+      await setStage(
+        jobId,
+        "complete",
+        "success",
+        openCr ? `already up to date in ${openCr.url}` : "the import check is already in the repository"
+      );
+      return;
+    }
+    const env = checkEnv(root);
+    const cr =
+      openCr ??
+      (await client.openChangeRequest({
+        repo,
+        head: branch,
+        base: project.destBranch,
+        title: `infralift: import check for ${label}`,
+        body: [
+          `infralift is importing the Terraform in \`${label}\` (${root.resources} resources, state in ${root.backend.kind}).`,
+          "",
+          "This pull request adds one file, a workflow that runs a **read-only** plan against the existing state. It applies nothing and runs with `-lock=false`, so it cannot change your infrastructure or block your own pipeline. infralift never sees your state or your credentials: the plan runs here, with your secrets.",
+          "",
+          "The import is safe to finish when the check passes, which means the plan changes nothing: the code already matches what is running, so taking it over cannot cause downtime. If it fails, the job summary lists each resource that would change.",
+          "",
+          env.length
+            ? `Add these repository secrets before the check can run (Settings, Secrets and variables, Actions):\n\n${env.map((e) => `- \`${e.secret}\``).join("\n")}`
+            : "The check needs no secrets.",
+          ...(root.notes.length ? ["", "Notes from the scan:", "", ...root.notes.map((n) => `- ${n}`)] : []),
+        ].join("\n"),
+      }));
+    createdBranch = null;
+    await prisma.tfJob.update({ where: { id: jobId }, data: { commitSha: result.commitSha, prUrl: cr.url } });
+    await setStage(
+      jobId,
+      "complete",
+      "success",
+      `${openCr ? "updated" : "opened"} ${cr.url}; ${env.length ? `add ${env.length} secret(s), then ` : ""}the check plans read-only`
+    );
+  } catch (err) {
+    if (createdBranch && client) {
+      await client.deleteBranch({ repo: project.destRepo, branch: createdBranch }).catch(() => {});
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    const current = await prisma.tfJob.findUnique({ where: { id: jobId }, select: { stage: true } });
     await setStage(jobId, current?.stage ?? "render", "errored", msg);
   }
 }

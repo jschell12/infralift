@@ -7,6 +7,7 @@ import { migrationsRouter } from "./routes/migrations.js";
 import { workspacesRouter } from "./routes/workspaces.js";
 import { providersRouter } from "./routes/providers.js";
 import { tfRouter } from "./routes/tf.js";
+import { importsRouter } from "./routes/imports.js";
 import { communitiesRouter } from "./routes/communities.js";
 import { leadsRouter } from "./routes/leads.js";
 import { intakeRouter } from "./routes/intake.js";
@@ -58,6 +59,7 @@ app.use("/assessments", assessmentsRouter);
 app.use("/migrations", migrationsRouter);
 app.use("/workspaces", workspacesRouter);
 app.use("/hosting", providersRouter);
+app.use("/tf/imports", importsRouter);
 app.use("/tf", tfRouter);
 
 // Admin-only routes

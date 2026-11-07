@@ -397,7 +397,7 @@ model TfProject {
   id     String @id @default(cuid())
   orgId  String
   name   String
-  // template | codegen | adopted | stack. A stack project renders a whole
+  // template | codegen | adopted | stack | imported. A stack project renders a whole
   // deploy setup (apps/api/stacks/<stackSlug>) into the customer's app repo
   // and lands it as a pull request. A codegen project is generated from an
   // assessment and has no template version; a template project has no
@@ -413,6 +413,9 @@ model TfProject {
   migrationTarget   String?
   // Set for stack projects: the directory under apps/api/stacks.
   stackSlug         String?
+  // Set for imported projects: the scan of the root module at destPath
+  // (lib/import/scan.ts RootModule). The job adds a read-only plan check.
+  importJson        Json?
   // Where destRepo lives (github | gitlab), and which of the org's
   // connections to use there. Null connection = the org's first one.
   gitHost           String   @default("github")
@@ -460,7 +463,7 @@ model TfRendering {
 model TfJob {
   id            String   @id @default(cuid())
   projectId     String
-  // template | codegen | stack
+  // template | codegen | stack | import
   kind          String   @default("template")
   // queued | render | commit | workspace | complete
   stage         String   @default("queued")
