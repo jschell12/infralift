@@ -28,6 +28,8 @@ interface ScannedRoot {
   readiness: "ready" | "adopt-tfc" | "blocked";
   notes: string[];
   secrets: string[];
+  /** What to set, one line per cloud (keys or OIDC) or secret. Markdown code spans. */
+  setup: string[];
   checkFile: string;
 }
 
@@ -243,10 +245,24 @@ function RootCard({
       )}
       {root.readiness === "ready" && (
         <div className="mt-3">
-          {root.secrets.length > 0 && (
+          {root.setup.length > 0 && (
             <div className="text-xs text-muted mb-3">
-              The check needs these repository secrets:{" "}
-              <span className={MONO}>{root.secrets.join(", ")}</span>
+              Before the check can run, set in the repository:
+              <ul className="mt-1 list-disc pl-4">
+                {root.setup.map((l) => (
+                  <li key={l}>
+                    {l.split("`").map((part, i) =>
+                      i % 2 ? (
+                        <span key={i} className={MONO}>
+                          {part}
+                        </span>
+                      ) : (
+                        part
+                      )
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           {needsFile && (

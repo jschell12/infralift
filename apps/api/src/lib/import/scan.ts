@@ -1,5 +1,5 @@
 import { HclParseError, parseHcl, type HclBlock, type HclBody } from "./hcl.js";
-import { isSafePath } from "./check.js";
+import { isSafeEnvName, isSafePath } from "./check.js";
 
 // ---------------------------------------------------------------------------
 // Import scan: what a customer's Terraform repository holds, read statically.
@@ -96,7 +96,9 @@ export function joinPath(dir: string, rel: string): string | null {
 // The plan check passes CI secrets of the same names through.
 const BACKEND_ENV: Partial<Record<BackendKind, string[]>> = {
   s3: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
-  r2: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+  // R2 keys are not AWS keys. The check hands them to init only, so an aws
+  // provider in the same module can still use AWS credentials.
+  r2: ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"],
   gcs: ["GOOGLE_CREDENTIALS"],
   azurerm: ["ARM_CLIENT_ID", "ARM_CLIENT_SECRET", "ARM_TENANT_ID", "ARM_SUBSCRIPTION_ID"],
 };
@@ -300,6 +302,13 @@ function scanRoot(
     default:
       readiness = "blocked";
       notes.push(`The ${backend.type} backend is not supported for import yet.`);
+  }
+  const badVariables = requiredVariables.filter((v) => !isSafeEnvName(`TF_VAR_${v}`));
+  if (readiness === "ready" && badVariables.length) {
+    readiness = "blocked";
+    notes.push(
+      `Variable name${badVariables.length > 1 ? "s" : ""} ${badVariables.map((v) => JSON.stringify(v)).join(", ")} ${badVariables.length > 1 ? "are" : "is"} not valid in Terraform (letters, digits, underscores and dashes, starting with a letter or underscore). Terraform will not plan this module until ${badVariables.length > 1 ? "they are" : "it is"} renamed.`
+    );
   }
   if (readiness === "ready" && !isSafePath(path)) {
     readiness = "blocked";

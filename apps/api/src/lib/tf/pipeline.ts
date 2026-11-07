@@ -16,7 +16,7 @@ import { gitHostClient, type GitHostClient, type HostFile } from "../git/hosts.j
 import { isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
 import { getWorkspaceAdapter } from "./workspace.js";
 import { generateHcl } from "./codegen.js";
-import { checkEnv, renderImportCheck } from "../import/check.js";
+import { checkEnv, checkSetupLines, renderImportCheck } from "../import/check.js";
 import type { RootModule } from "../import/scan.js";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 
@@ -699,6 +699,7 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
       return;
     }
     const env = checkEnv(root);
+    const setup = checkSetupLines(root);
     const cr =
       openCr ??
       (await client.openChangeRequest({
@@ -714,7 +715,7 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
           "The import is safe to finish when the check passes, which means the plan changes nothing: the code already matches what is running, so taking it over cannot cause downtime. If it fails, the job summary lists each resource that would change.",
           "",
           env.length
-            ? `Add these repository secrets before the check can run (Settings, Secrets and variables, Actions):\n\n${env.map((e) => `- \`${e.secret}\``).join("\n")}\n\nGive the cloud credentials read-only roles. A plan runs provider code and data sources with whatever the secrets allow, so read-only on state is not read-only on the account unless the roles are.`
+            ? `Set these before the check can run (Settings, Secrets and variables, Actions):\n\n${setup.map((l) => `- ${l}`).join("\n")}\n\nOIDC is the better choice where a cloud offers it: CI signs in as a role for each run and no key is stored. Either way, give the credentials read-only roles. A plan runs provider code and data sources with whatever the secrets allow, so read-only on state is not read-only on the account unless the roles are.`
             : "The check needs no secrets.",
           ...(root.notes.length ? ["", "Notes from the scan:", "", ...root.notes.map((n) => `- ${n}`)] : []),
         ].join("\n"),

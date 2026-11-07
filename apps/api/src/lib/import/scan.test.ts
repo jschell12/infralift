@@ -82,10 +82,10 @@ resource "cloudflare_record" "www" {}
     expect(roots[0].path).toBe("");
     expect(roots[0].backend.kind).toBe("r2");
     expect(roots[0].credentials).toEqual([
-      "AWS_ACCESS_KEY_ID",
-      "AWS_SECRET_ACCESS_KEY",
       "CLOUDFLARE_API_TOKEN",
       "HCLOUD_TOKEN",
+      "R2_ACCESS_KEY_ID",
+      "R2_SECRET_ACCESS_KEY",
     ]);
   });
 
@@ -120,6 +120,17 @@ resource "cloudflare_record" "www" {}
       { path: ".terraform.lock.hcl", content: 'provider "registry.opentofu.org/hashicorp/aws" {\n  version = "5.0.0"\n}\n' },
     ]);
     expect(roots[0].tool).toBe("tofu");
+  });
+
+  it("blocks variable names Terraform would reject", () => {
+    const { roots } = scanRepo([
+      {
+        path: "main.tf",
+        content: 'terraform {\n  backend "s3" {\n    bucket = "b"\n    key = "k"\n  }\n}\nvariable "x: ${{ secrets.X }} #" {}\nvariable "ok_name" {}\nresource "aws_s3_bucket" "b" {}\n',
+      },
+    ]);
+    expect(roots[0].readiness).toBe("blocked");
+    expect(roots[0].notes.join(" ")).toMatch(/not valid in Terraform/);
   });
 
   it("skips a backend with nothing under it", () => {
