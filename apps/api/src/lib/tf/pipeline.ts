@@ -15,19 +15,22 @@ import { deliveryFor, getStack, renderStack } from "../stacks/index.js";
 import { gitHostClient, type GitHostClient, type HostFile } from "../git/hosts.js";
 import { isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
 import { tfcAdapterFor } from "./tfc-connection.js";
+import { JobRun } from "../jobs/state.js";
 import { generateHcl } from "./codegen.js";
 import { checkEnv, checkSetupLines, renderImportCheck } from "../import/check.js";
 import type { RootModule } from "../import/scan.js";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 
-// Staged pipeline: queued -> render -> commit -> workspace -> complete.
-// Each stage flips status pending -> running -> success (or errored, which
-// halts the job with a short statusMessage).
+// Staged pipeline. Stages and statuses move only through the job state
+// machine (lib/jobs/state.ts); each runner holds one JobRun and reports to it.
 
-async function setStage(jobId: string, stage: string, status: string, message = "") {
-  await prisma.tfJob.update({
-    where: { id: jobId },
-    data: { stage, status, statusMessage: message.slice(0, 280) },
+/** A JobRun that records each state on the TfJob row. */
+function jobRun(jobId: string): JobRun {
+  return new JobRun(jobId, async (id, s) => {
+    await prisma.tfJob.update({
+      where: { id },
+      data: { stage: s.stage, status: s.status, statusMessage: s.message },
+    });
   });
 }
 
@@ -70,23 +73,19 @@ export async function runJob(jobId: string): Promise<void> {
     return runImportJob(jobId, job);
   }
 
+  const run = jobRun(jobId);
   const project = job.project;
   const version = project.templateVersion;
   const args = job.argumentsJson as TfArguments;
 
   try {
     if (!version) {
-      await setStage(
-        jobId,
-        "render",
-        "errored",
-        "template job on a project with no template version"
-      );
+      await run.fail("template job on a project with no template version", "render");
       return;
     }
 
     // -- render ------------------------------------------------------------
-    await setStage(jobId, "render", "running");
+    await run.start("render");
     validateArguments(version.inputSchema as object, args);
     const body = renderTemplate(version.templateBody, args);
     const fileName = renderedFileName(project.name, jobId);
@@ -107,10 +106,10 @@ export async function runJob(jobId: string): Promise<void> {
     });
 
     // -- commit ------------------------------------------------------------
-    await setStage(jobId, "commit", "running");
+    await run.start("commit");
     const token = await getGithubToken(project.orgId);
     if (!token) {
-      await setStage(jobId, "commit", "errored", NO_GITHUB);
+      await run.fail(NO_GITHUB, "commit");
       return;
     }
     const providerCfg = project.providerConfig as unknown as ProviderConfig;
@@ -141,7 +140,7 @@ export async function runJob(jobId: string): Promise<void> {
     }
 
     // -- workspace ---------------------------------------------------------
-    await setStage(jobId, "workspace", "running");
+    await run.start("workspace");
     // Only in the customer's own Terraform Cloud, through their connection.
     let workspaceNote = "no Terraform Cloud connection; no workspace";
     if (project.tfcConnectionId) {
@@ -160,24 +159,9 @@ export async function runJob(jobId: string): Promise<void> {
     }
 
     // -- complete ----------------------------------------------------------
-    await setStage(
-      jobId,
-      "complete",
-      "success",
-      fileResult.noop ? `up to date; ${workspaceNote}` : `committed ${commitSha ?? "?"}; ${workspaceNote}`
-    );
+    await run.succeed(fileResult.noop ? `up to date; ${workspaceNote}` : `committed ${commitSha ?? "?"}; ${workspaceNote}`);
   } catch (err) {
-    const msg =
-      err instanceof TfInputValidationError
-        ? err.message
-        : err instanceof Error
-          ? err.message
-          : String(err);
-    const current = await prisma.tfJob.findUnique({
-      where: { id: jobId },
-      select: { stage: true },
-    });
-    await setStage(jobId, current?.stage ?? "render", "errored", msg);
+    await run.failSafely(err);
   }
 }
 
@@ -196,29 +180,20 @@ type CodegenJob = Prisma.TfJobGetPayload<{ include: typeof JOB_INCLUDE }>;
  * only makes sense committed together.
  */
 async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
+  const run = jobRun(jobId);
   const project = job.project;
   const assessment = project.assessment;
 
   try {
     // -- render ------------------------------------------------------------
-    await setStage(jobId, "render", "running");
+    await run.start("render");
 
     if (!assessment) {
-      await setStage(
-        jobId,
-        "render",
-        "errored",
-        "codegen job on a project with no assessment"
-      );
+      await run.fail("codegen job on a project with no assessment", "render");
       return;
     }
     if (assessment.status !== "completed") {
-      await setStage(
-        jobId,
-        "render",
-        "errored",
-        `assessment is ${assessment.status}, not completed`
-      );
+      await run.fail(`assessment is ${assessment.status}, not completed`, "render");
       return;
     }
 
@@ -269,10 +244,10 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
     });
 
     // -- commit ------------------------------------------------------------
-    await setStage(jobId, "commit", "running");
+    await run.start("commit");
     const token = await getGithubToken(project.orgId);
     if (!token) {
-      await setStage(jobId, "commit", "errored", NO_GITHUB);
+      await run.fail(NO_GITHUB, "commit");
       return;
     }
 
@@ -318,7 +293,7 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
     }
 
     // -- workspace ---------------------------------------------------------
-    await setStage(jobId, "workspace", "running");
+    await run.start("workspace");
     // Only in the customer's own Terraform Cloud, through their connection.
     let workspaceNote = "no Terraform Cloud connection; no workspace";
     if (project.tfcConnectionId) {
@@ -340,19 +315,9 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
     const what = result.noop
       ? `${files.length} files already up to date`
       : `committed ${files.length} files as ${result.commitSha?.slice(0, 7)}`;
-    await setStage(
-      jobId,
-      "complete",
-      "success",
-      `${repo.created ? "created " + repo.repo + "; " : ""}${what}; ${workspaceNote}`
-    );
+    await run.succeed(`${repo.created ? "created " + repo.repo + "; " : ""}${what}; ${workspaceNote}`);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const current = await prisma.tfJob.findUnique({
-      where: { id: jobId },
-      select: { stage: true },
-    });
-    await setStage(jobId, current?.stage ?? "render", "errored", msg);
+    await run.failSafely(err);
   }
 }
 
@@ -400,6 +365,7 @@ async function getGitToken(
 }
 
 async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
+  const run = jobRun(jobId);
   const project = job.project;
   const host = (isGitHost(project.gitHost) ? project.gitHost : "github") as GitHost;
   let client: GitHostClient | null = null;
@@ -409,15 +375,10 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
   let createdBranch: string | null = null;
   try {
     // -- render ------------------------------------------------------------
-    await setStage(jobId, "render", "running");
+    await run.start("render");
     const stack = project.stackSlug ? getStack(project.stackSlug) : null;
     if (!stack) {
-      await setStage(
-        jobId,
-        "render",
-        "errored",
-        `stack ${project.stackSlug ?? "(none)"} not found`
-      );
+      await run.fail(`stack ${project.stackSlug ?? "(none)"} not found`, "render");
       return;
     }
     // A delivery runs on one git host; the project's settings must name one
@@ -427,13 +388,11 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
     const delivery = deliveryFor(stack, host, stored.delivery);
     if (!delivery) {
       const names = stack.deliveries.filter((d) => d.gitHost === host).map((d) => d.name);
-      await setStage(
-        jobId,
-        "render",
-        "errored",
+      await run.fail(
         names.length
           ? `delivery ${String(stored.delivery)} does not run on ${PROVIDER_LABELS[host]}; use ${names.join(" or ")}`
-          : `${stack.name} has no delivery that runs on ${PROVIDER_LABELS[host]}`
+          : `${stack.name} has no delivery that runs on ${PROVIDER_LABELS[host]}`,
+        "render"
       );
       return;
     }
@@ -446,12 +405,7 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
 
     const token = await getGitToken(project.orgId, host, project.gitConnectionId);
     if (!token) {
-      await setStage(
-        jobId,
-        "repo",
-        "errored",
-        `no ${PROVIDER_LABELS[host]} connection for this org: add one under Connections`
-      );
+      await run.fail(`no ${PROVIDER_LABELS[host]} connection for this org: add one under Connections`, "repo");
       return;
     }
     client = gitHostClient(host, token);
@@ -463,7 +417,7 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
     let destBranch = project.destBranch;
     let createdRepoNote = "";
     if (project.createRepo) {
-      await setStage(jobId, "repo", "running");
+      await run.start("repo");
       if (!(await client.repoExists(project.destRepo))) {
         const created = await client.createFromTemplate({
           template: stack.template.repo,
@@ -480,7 +434,7 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
     }
 
     // -- commit ------------------------------------------------------------
-    await setStage(jobId, "commit", "running");
+    await run.start("commit");
     const repo = project.destRepo;
     const prefix = project.destPath ? `${project.destPath.replace(/^\/+|\/+$/g, "")}/` : "";
 
@@ -554,10 +508,7 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
         await client.deleteBranch({ repo, branch });
         createdBranch = null;
       }
-      await setStage(
-        jobId,
-        "complete",
-        "success",
+      await run.succeed(
         openCr
           ? `${createdRepoNote}already up to date in ${openCr.url}`
           : `${createdRepoNote}${files.length} files already up to date; no ${noun}`
@@ -593,19 +544,14 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
     // -- workspace ---------------------------------------------------------
     // Only a Terraform Cloud backend has a workspace to create. It tracks the
     // default branch, so it plans the change once the request is merged.
-    await setStage(jobId, "workspace", "running");
+    await run.start("workspace");
     let workspaceNote = "state in R2; no workspace";
     if (args.backend === "tfc") {
       // The generated cloud {} block names the connection's organization
       // (the API derives tfc_organization from it), so the workspace lands in
       // the org the code points at.
       if (!project.tfcConnectionId) {
-        await setStage(
-          jobId,
-          "workspace",
-          "errored",
-          `opened ${cr.url}, but no Terraform Cloud connection is set: pick one in the project's settings`
-        );
+        await run.fail(`opened ${cr.url}, but no Terraform Cloud connection is set: pick one in the project's settings`, "workspace");
         return;
       }
       const workspaceName = String(args.tfc_workspace ?? args.name);
@@ -622,22 +568,12 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
     }
 
     // -- complete ----------------------------------------------------------
-    await setStage(
-      jobId,
-      "complete",
-      "success",
-      `${createdRepoNote}${openCr ? "updated" : "opened"} ${cr.url} (${files.length} files); ${workspaceNote}`
-    );
+    await run.succeed(`${createdRepoNote}${openCr ? "updated" : "opened"} ${cr.url} (${files.length} files); ${workspaceNote}`);
   } catch (err) {
     if (createdBranch && client) {
       await client.deleteBranch({ repo: project.destRepo, branch: createdBranch }).catch(() => {});
     }
-    const msg = err instanceof Error ? err.message : String(err);
-    const current = await prisma.tfJob.findUnique({
-      where: { id: jobId },
-      select: { stage: true },
-    });
-    await setStage(jobId, current?.stage ?? "render", "errored", msg);
+    await run.failSafely(err);
   }
 }
 
@@ -649,14 +585,15 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
  *  repository as a pull request. Nothing in their Terraform is changed: the
  *  only file is the workflow, and it plans without applying or locking. */
 async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
+  const run = jobRun(jobId);
   const project = job.project;
   let client: GitHostClient | null = null;
   let createdBranch: string | null = null;
   try {
-    await setStage(jobId, "render", "running");
+    await run.start("render");
     const root = project.importJson as unknown as RootModule | null;
     if (!root || project.gitHost !== "github") {
-      await setStage(jobId, "render", "errored", "import needs a scanned module in a GitHub repository");
+      await run.fail("import needs a scanned module in a GitHub repository", "render");
       return;
     }
     const args = (job.argumentsJson ?? {}) as {
@@ -668,12 +605,12 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
 
     const token = await getGitToken(project.orgId, "github", project.gitConnectionId);
     if (!token) {
-      await setStage(jobId, "commit", "errored", "no GitHub connection for this org: add one under Connections");
+      await run.fail("no GitHub connection for this org: add one under Connections", "commit");
       return;
     }
     client = gitHostClient("github", token);
 
-    await setStage(jobId, "commit", "running");
+    await run.start("commit");
     const repo = project.destRepo;
     const openCr = await client.findOpenChangeRequest({
       repo,
@@ -711,12 +648,7 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
         await client.deleteBranch({ repo, branch });
         createdBranch = null;
       }
-      await setStage(
-        jobId,
-        "complete",
-        "success",
-        openCr ? `already up to date in ${openCr.url}` : "the import check is already in the repository"
-      );
+      await run.succeed(openCr ? `already up to date in ${openCr.url}` : "the import check is already in the repository");
       return;
     }
     const env = checkEnv(root);
@@ -751,18 +683,13 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
       }));
     createdBranch = null;
     await prisma.tfJob.update({ where: { id: jobId }, data: { commitSha: result.commitSha, prUrl: cr.url } });
-    await setStage(
-      jobId,
-      "complete",
-      "success",
+    await run.succeed(
       `${openCr ? "updated" : "opened"} ${cr.url}; ${env.length ? `add ${env.length} secret(s), then ` : ""}the check plans read-only`
     );
   } catch (err) {
     if (createdBranch && client) {
       await client.deleteBranch({ repo: project.destRepo, branch: createdBranch }).catch(() => {});
     }
-    const msg = err instanceof Error ? err.message : String(err);
-    const current = await prisma.tfJob.findUnique({ where: { id: jobId }, select: { stage: true } });
-    await setStage(jobId, current?.stage ?? "render", "errored", msg);
+    await run.failSafely(err);
   }
 }

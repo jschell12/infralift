@@ -8,9 +8,8 @@ import { GitCommitError } from "../lib/tf/git.js";
 import { runJob } from "../lib/tf/pipeline.js";
 import { readRepoForScan } from "../lib/import/read.js";
 import { scanRepo } from "../lib/import/scan.js";
+import { CHECK_JOB_NAME, GENERATED_COMMIT_SUBJECT } from "../lib/import/contract.js";
 import {
-  CHECK_JOB_NAME,
-  GENERATED_COMMIT_SUBJECT,
   checkEnv,
   checkSetupLines,
   checkWorkflowPath,

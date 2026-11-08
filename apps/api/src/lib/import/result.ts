@@ -1,4 +1,5 @@
 import type { ChangeRequestState, CheckRun } from "../git/hosts.js";
+import { READ } from "./contract.js";
 
 // What the import check said, read back from GitHub. The workflow writes one
 // annotation per outcome (lib/import/check.ts), and this turns the check run
@@ -66,14 +67,14 @@ export function classifyCheck(
     else errors = [run.title];
   }
   if (run.conclusion === "success") {
-    return { ...base, state: "passed", message: notices.find((m) => m.startsWith("No changes")) ?? "No changes." };
+    return { ...base, state: "passed", message: notices.find(READ.passed) ?? "No changes." };
   }
   if (run.conclusion === "failure") {
-    const changes = errors.find((m) => / resources would change\.$/.test(m));
+    const changes = errors.find(READ.changes);
     if (changes) return { ...base, state: "changes", message: changes };
-    const setup = errors.find((m) => m.startsWith("Missing credentials."));
+    const setup = errors.find(READ.missing);
     if (setup) return { ...base, state: "needs-setup", message: setup };
-    const error = errors.find((m) => m.startsWith("The plan failed"));
+    const error = errors.find(READ.planFailed);
     if (error) return { ...base, state: "error", message: error };
   }
   return {
