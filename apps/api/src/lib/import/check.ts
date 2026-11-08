@@ -1,4 +1,5 @@
 import type { RootModule } from "./scan.js";
+import { CHECK_JOB_NAME, GENERATED_COMMIT_SUBJECT, OUTCOME } from "./contract.js";
 
 // ---------------------------------------------------------------------------
 // The import check: a GitHub Actions workflow infralift adds to the customer's
@@ -13,14 +14,6 @@ import type { RootModule } from "./scan.js";
 // what is running.
 // ---------------------------------------------------------------------------
 
-/** The check job's name, which GitHub uses as the check run's name. */
-export const CHECK_JOB_NAME = "Plan changes nothing";
-
-/** Subject of the commit the check makes when it generates resource code.
- *  GitHub does not run workflows for a commit pushed with the job's own
- *  token, so the result reader looks past this commit to the run that made
- *  it (lib/import/result.ts). */
-export const GENERATED_COMMIT_SUBJECT = "infralift: generated code for imported resources";
 
 export interface CheckFile {
   path: string;
@@ -207,7 +200,7 @@ export function renderImportCheck(
   }
   checkLines.push(
     '          if [ -n "$missing" ]; then',
-    '            echo "::error::Missing credentials. Add these repository secrets, then re-run:$missing.$hint"',
+    `            echo "::error::${OUTCOME.missingPrefix} Add these repository secrets, then re-run:$missing.$hint"`,
     "            exit 1",
     "          fi"
   );
@@ -287,7 +280,7 @@ export function renderImportCheck(
           "          set -e",
           '          if [ ! -s generated.tf ]; then',
           "            tail -n 80 generate.log",
-          '            echo "::error::The plan failed before it could compare anything. Nothing was changed."',
+          `            echo "::error::${OUTCOME.planFailed}"`,
           "            exit 1",
           "          fi",
           `          echo "generated $(grep -c '^resource ' generated.tf) resource blocks"`,
@@ -304,7 +297,7 @@ export function renderImportCheck(
     "          set -e",
     '          if [ "$code" -eq 1 ]; then',
     "            tail -n 80 plan.log",
-    '            msg="The plan failed before it could compare anything. Nothing was changed."',
+    `            msg="${OUTCOME.planFailed}"`,
     '            echo "$msg" > "$RUNNER_TEMP/infralift-result"',
     '            echo "::error::$msg"',
     "            exit 1",
@@ -340,11 +333,11 @@ export function renderImportCheck(
     // run to show the result, so their wording is part of the contract
     // (lib/import/result.ts).
     '          if [ "$changes" -eq 0 ]; then',
-    '            msg="No changes: all $total resources match the code."',
+    `            msg="${OUTCOME.passed("$total")}"`,
     '            echo "$msg" > "$RUNNER_TEMP/infralift-result"',
     '            echo "::notice::$msg"',
     "          else",
-    '            msg="$changes of $total resources would change."',
+    `            msg="${OUTCOME.changes("$changes", "$total")}"`,
     '            echo "$msg" > "$RUNNER_TEMP/infralift-result"',
     '            echo "::error::$msg"',
     "            exit 1",
