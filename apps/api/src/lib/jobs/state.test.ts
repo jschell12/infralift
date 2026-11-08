@@ -54,6 +54,37 @@ describe("JobRun", () => {
     expect((write.mock.calls[1] as unknown as [string, JobState])[1].message).toHaveLength(280);
   });
 
+  it("keeps its state when a write fails, so the error is still recorded", async () => {
+    // The reviewer's case: succeed()'s write throws, the runner's catch calls
+    // failSafely, and the row must end errored rather than stay running.
+    const rows: { stage: string; status: string }[] = [];
+    let failNext = false;
+    const write = vi.fn(async (_id: string, s: JobState) => {
+      if (failNext) {
+        failNext = false;
+        throw new Error("db down");
+      }
+      rows.push({ stage: s.stage, status: s.status });
+    });
+    const run = new JobRun("j1", write);
+    await run.start("render");
+    failNext = true;
+    await expect(run.succeed("ok")).rejects.toThrow("db down");
+    expect(run.current).toMatchObject({ stage: "render", status: "running" });
+    await run.failSafely(new Error("db down"));
+    expect(rows.at(-1)).toEqual({ stage: "render", status: "errored" });
+  });
+
+  it("failSafely does not throw when its own write fails", async () => {
+    const run = new JobRun("j1", async () => {
+      throw new Error("db down");
+    });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(run.failSafely(new Error("x"))).resolves.toBeUndefined();
+    expect(log).toHaveBeenCalled();
+    log.mockRestore();
+  });
+
   it("failSafely records an error once and never throws after the end", async () => {
     const write = vi.fn(async () => {});
     const run = new JobRun("j1", write);

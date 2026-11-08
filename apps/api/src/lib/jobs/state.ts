@@ -91,9 +91,13 @@ export class JobRun {
   }
 
   private async apply(event: JobEvent) {
-    const next = transition(this.state, event);
-    this.state = { ...next, message: next.message.slice(0, MESSAGE_LIMIT) };
-    await this.write(this.jobId, this.state);
+    const t = transition(this.state, event);
+    const next = { ...t, message: t.message.slice(0, MESSAGE_LIMIT) };
+    // Recorded first, adopted second: if the write fails, the run still holds
+    // the last state the database has, so a later failSafely can record the
+    // error instead of believing the job already ended.
+    await this.write(this.jobId, next);
+    this.state = next;
   }
 
   start(stage: Stage) {
@@ -108,13 +112,18 @@ export class JobRun {
     return this.apply({ type: "succeed", message });
   }
 
-  /** For catch blocks: records the error unless the job already ended, and
-   *  never throws, so an error path cannot raise a second error. */
+  /** For catch blocks: records the error unless the job already ended. It
+   *  never throws (a failed write is logged), so an error path cannot raise a
+   *  second error. */
   async failSafely(err: unknown) {
     if (isTerminal(this.state)) {
       console.error(`job ${this.jobId} errored after it ended:`, err);
       return;
     }
-    await this.fail(err instanceof Error ? err.message : String(err));
+    try {
+      await this.fail(err instanceof Error ? err.message : String(err));
+    } catch (writeErr) {
+      console.error(`job ${this.jobId} could not record its error:`, err, writeErr);
+    }
   }
 }

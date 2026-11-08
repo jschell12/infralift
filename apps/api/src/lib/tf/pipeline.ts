@@ -6,7 +6,6 @@ import {
   validateArguments,
   renderedFileName,
   renderProviderFile,
-  TfInputValidationError,
   type TfArguments,
   type ProviderConfig,
 } from "./render.js";
