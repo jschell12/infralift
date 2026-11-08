@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
-import { GIT_HOSTS, isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
+import { GIT_HOSTS } from "@infralift/shared";
 import { z } from "zod";
-import type { Project, Provider, ResourceInventoryItem } from "@infralift/shared";
+import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
 import { runJob } from "../lib/tf/pipeline.js";
 import {
@@ -15,16 +15,9 @@ import { getTfcClient } from "../lib/tf/tfc-client.js";
 import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
 import { requireAdmin, isAdmin } from "../lib/cf-auth.js";
 import { toCodegenSample } from "../lib/tf/sample.js";
-import { PROJECT_ROW_INCLUDE, ProjectShapeError, toProjectView } from "../lib/projects/view.js";
-import { TfcConnectionError, loadTfcConnection } from "../lib/tf/tfc-connection.js";
-import {
-  deliveryFor,
-  getStack,
-  listStacks,
-  renderStack,
-  resolveStackInputs,
-  stackGitHosts,
-} from "../lib/stacks/index.js";
+import { handle, parseBody } from "../lib/errors.js";
+import { listProjects } from "../services/projects.js";
+import { createStackProject, listStackSummaries, previewStack, updateStackSettings } from "../services/stacks.js";
 
 export const tfRouter = Router();
 
@@ -162,25 +155,12 @@ tfRouter.post("/templates/:slug/versions/:tag/preview", async (req, res) => {
 
 // -- projects ----------------------------------------------------------------
 
-tfRouter.get("/projects", async (req, res) => {
-  const { orgId } = req.user!;
-  const rows = await prisma.tfProject.findMany({
-    where: { orgId },
-    include: PROJECT_ROW_INCLUDE,
-    orderBy: { name: "asc" },
-  });
-  // One bad row must not take the list down; it is logged by id instead.
-  const projects: Project[] = [];
-  for (const row of rows) {
-    try {
-      projects.push(toProjectView(row));
-    } catch (err) {
-      if (!(err instanceof ProjectShapeError)) throw err;
-      console.error(err.message);
-    }
-  }
-  res.json(projects);
-});
+tfRouter.get(
+  "/projects",
+  handle(async (req, res) => {
+    res.json(await listProjects(req.user!.orgId));
+  })
+);
 
 const projectSchema = z.object({
   name: z
@@ -617,69 +597,11 @@ tfRouter.post("/approve", async (req, res) => {
 // place the UI edits.
 
 tfRouter.get("/stacks", (_req, res) => {
-  res.json(
-    listStacks().map((s) => ({
-      slug: s.slug,
-      name: s.name,
-      description: s.description,
-      template: s.template,
-      target: s.target,
-      runtime: s.runtime,
-      deliveries: s.deliveries,
-      gitHosts: stackGitHosts(s),
-      inputSchema: s.inputSchema,
-      example: s.example,
-    }))
-  );
+  res.json(listStackSummaries());
 });
 
 const stackArgs = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
-
-tfRouter.post("/stacks/:slug/preview", async (req, res) => {
-  const stack = getStack(req.params.slug);
-  if (!stack) return res.status(404).json({ error: "stack not found" });
-  const parsed = z
-    .object({ arguments: stackArgs, tfcConnectionId: z.string().min(1).nullish() })
-    .safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  // Rendered with the connection's organization, as the project will be.
-  const tfc = await withTfcConnection(req.user!.orgId, parsed.data.arguments, parsed.data.tfcConnectionId);
-  if ("error" in tfc) return res.status(400).json({ error: tfc.error });
-  try {
-    const files = renderStack(stack, tfc.args);
-    res.json({ files });
-  } catch (err) {
-    if (err instanceof TfInputValidationError) {
-      return res.status(400).json({ error: err.message, details: err.details });
-    }
-    throw err;
-  }
-});
-
-/**
- * A Terraform Cloud backend needs one of the org's TFC connections: the
- * workspace is created there, and tfc_organization is taken from it so the
- * generated cloud {} block names the same organization. Any other backend
- * clears the connection. Returns the arguments to render and the connection
- * id to store, or an error message.
- */
-async function withTfcConnection(
-  orgId: string,
-  args: TfArguments,
-  connectionId: string | null | undefined
-): Promise<{ args: TfArguments; tfcConnectionId: string | null } | { error: string }> {
-  if (args.backend !== "tfc") return { args, tfcConnectionId: null };
-  if (!connectionId) return { error: "a Terraform Cloud backend needs a Terraform Cloud connection: add one under Connections" };
-  try {
-    const cred = await loadTfcConnection(orgId, connectionId);
-    return { args: { ...args, tfc_organization: cred.organization }, tfcConnectionId: connectionId };
-  } catch (err) {
-    if (err instanceof TfcConnectionError) return { error: err.message };
-    throw err;
-  }
-}
+const settingsSchema = z.object({ arguments: stackArgs, tfcConnectionId: z.string().min(1).nullish() });
 
 const stackProjectSchema = z.object({
   // Same shape the stack's `name` setting needs, since the dashboard derives
@@ -691,168 +613,29 @@ const stackProjectSchema = z.object({
   destRepo: z.string().regex(/^[\w.-]+(\/[\w.-]+)+$/),
   destBranch: z.string().min(1).default("main"),
   gitHost: z.enum(GIT_HOSTS).default("github"),
-  /** One of the org's connections to gitHost; default: the org's first. */
   connectionId: z.string().min(1).optional(),
-  /** Greenfield: create destRepo from the stack's app template first. */
   createRepo: z.boolean().default(false),
-  /** The org's Terraform Cloud connection, for backend "tfc". */
   tfcConnectionId: z.string().min(1).nullish(),
   arguments: stackArgs,
 });
 
-tfRouter.post("/stacks/:slug/projects", async (req, res) => {
-  const stack = getStack(req.params.slug);
-  if (!stack) return res.status(404).json({ error: "stack not found" });
-  const parsed = stackProjectSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  const d = parsed.data;
-  if (d.gitHost === "github" && d.destRepo.split("/").length !== 2) {
-    return res.status(400).json({ error: "a GitHub repository is owner/name" });
-  }
-  // The delivery decides where CI runs, so it must match the repository's
-  // host. Unnamed, it is the stack's delivery for that host.
-  const delivery = deliveryFor(stack, d.gitHost, d.arguments.delivery);
-  if (!delivery) {
-    const fits = stack.deliveries.filter((x) => x.gitHost === d.gitHost).map((x) => x.name);
-    return res.status(400).json({
-      error: fits.length
-        ? `${String(d.arguments.delivery)} does not run on ${PROVIDER_LABELS[d.gitHost]}; use ${fits.join(" or ")}`
-        : `${stack.name} has no delivery that runs on ${PROVIDER_LABELS[d.gitHost]}`,
-    });
-  }
-  // The repository the delivery wires up is the project's own, so it is
-  // taken from destRepo rather than asked for twice.
-  const repoName = d.destRepo.split("/").pop() ?? "";
-  const derived: TfArguments = { delivery: delivery.slug };
-  if (delivery.gitHost === "gitlab") derived.gitlab_project = d.destRepo;
-  else if (d.arguments.github_repository === undefined) derived.github_repository = repoName;
-  d.arguments = { ...d.arguments, ...derived };
-  const tfc = await withTfcConnection(req.user!.orgId, d.arguments, d.tfcConnectionId);
-  if ("error" in tfc) return res.status(400).json({ error: tfc.error });
-  d.arguments = tfc.args;
-  const connection = await prisma.providerConnection.findFirst({
-    where: {
-      orgId: req.user!.orgId,
-      provider: d.gitHost,
-      ...(d.connectionId ? { id: d.connectionId } : {}),
-    },
-    select: { id: true },
-  });
-  if (!connection) {
-    return res.status(400).json({ error: `connect ${PROVIDER_LABELS[d.gitHost]} under Connections first` });
-  }
-  // Render once now so bad settings fail here with a 400, not later inside a
-  // background job. What gets stored is the settings with the stack's
-  // defaults filled in: a default that changes later must not silently
-  // change an existing project's servers on its next render.
-  let settings: TfArguments;
-  try {
-    settings = resolveStackInputs(stack, d.arguments);
-    renderStack(stack, settings);
-  } catch (err) {
-    if (err instanceof TfInputValidationError) {
-      return res.status(400).json({ error: err.message, details: err.details });
-    }
-    throw err;
-  }
-  let project;
-  try {
-    project = await prisma.tfProject.create({
-      data: {
-        orgId: req.user!.orgId,
-        name: d.name,
-        source: "stack",
-        stackSlug: stack.slug,
-        gitHost: d.gitHost,
-        gitConnectionId: connection.id,
-        createRepo: d.createRepo,
-        tfcConnectionId: tfc.tfcConnectionId,
-        destRepo: d.destRepo,
-        destBranch: d.destBranch,
-        providerConfig: settings,
-      },
-    });
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      return res.status(409).json({ error: `a project named ${d.name} already exists` });
-    }
-    throw err;
-  }
-  const job = await prisma.tfJob.create({
-    data: { projectId: project.id, kind: "stack", argumentsJson: settings },
-  });
-  void runJob(job.id).catch((err) => {
-    console.error(`tf job ${job.id} failed:`, err);
-  });
-  res.status(202).json({ project, job });
-});
+tfRouter.post(
+  "/stacks/:slug/preview",
+  handle(async (req, res) => {
+    res.json(await previewStack(req.user!.orgId, req.params.slug, parseBody(settingsSchema, req.body)));
+  })
+);
 
-// Changing a stack project's settings re-renders it into a pull request, the
-// same as creating it. The body carries the complete settings, not a patch:
-// what the dashboard shows is what gets rendered.
-tfRouter.put("/stacks/projects/:id/settings", async (req, res) => {
-  const parsed = z
-    .object({ arguments: stackArgs, tfcConnectionId: z.string().min(1).nullish() })
-    .safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  const project = await prisma.tfProject.findFirst({
-    where: { id: req.params.id, orgId: req.user!.orgId, source: "stack" },
-  });
-  if (!project) return res.status(404).json({ error: "project not found" });
-  const stack = project.stackSlug ? getStack(project.stackSlug) : null;
-  if (!stack) return res.status(404).json({ error: "stack not found" });
-  // Every resource is named from `name`; changing it would make the next
-  // apply replace the server, its volume and its tunnel.
-  const current = project.providerConfig as TfArguments;
-  if (parsed.data.arguments.name !== current.name) {
-    return res.status(400).json({
-      error: `name is fixed after creation (it is ${String(current.name)}); every resource is named from it`,
-    });
-  }
-  const host = (isGitHost(project.gitHost) ? project.gitHost : "github") as GitHost;
-  const delivery = deliveryFor(stack, host, parsed.data.arguments.delivery ?? current.delivery);
-  if (!delivery) {
-    return res.status(400).json({
-      error: `${String(parsed.data.arguments.delivery)} does not run on ${PROVIDER_LABELS[host]}, where this project's repository lives`,
-    });
-  }
-  parsed.data.arguments = {
-    ...parsed.data.arguments,
-    delivery: delivery.slug,
-    ...(host === "gitlab" ? { gitlab_project: project.destRepo } : {}),
-  };
-  // Unnamed, the project keeps the connection it has.
-  const tfc = await withTfcConnection(
-    req.user!.orgId,
-    parsed.data.arguments,
-    parsed.data.tfcConnectionId === undefined ? project.tfcConnectionId : parsed.data.tfcConnectionId
-  );
-  if ("error" in tfc) return res.status(400).json({ error: tfc.error });
-  parsed.data.arguments = tfc.args;
-  let settings: TfArguments;
-  try {
-    settings = resolveStackInputs(stack, parsed.data.arguments);
-    renderStack(stack, settings);
-  } catch (err) {
-    if (err instanceof TfInputValidationError) {
-      return res.status(400).json({ error: err.message, details: err.details });
-    }
-    throw err;
-  }
-  const updated = await prisma.tfProject.update({
-    where: { id: project.id },
-    data: { providerConfig: settings, tfcConnectionId: tfc.tfcConnectionId },
-  });
-  const job = await prisma.tfJob.create({
-    data: { projectId: project.id, kind: "stack", argumentsJson: settings },
-  });
-  void runJob(job.id).catch((err) => {
-    console.error(`tf job ${job.id} failed:`, err);
-  });
-  res.status(202).json({ project: updated, job });
-});
+tfRouter.post(
+  "/stacks/:slug/projects",
+  handle(async (req, res) => {
+    res.status(202).json(await createStackProject(req.user!.orgId, req.params.slug, parseBody(stackProjectSchema, req.body)));
+  })
+);
 
+tfRouter.put(
+  "/stacks/projects/:id/settings",
+  handle(async (req, res) => {
+    res.status(202).json(await updateStackSettings(req.user!.orgId, req.params.id, parseBody(settingsSchema, req.body)));
+  })
+);
