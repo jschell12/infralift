@@ -10,6 +10,8 @@ import type { Request, Response } from "express";
 //   InvalidInput  400  the request asks for something that cannot be done
 //   NotFound      404  no such thing in the caller's org
 //   Conflict      409  it exists already, or its state forbids this
+//   Unprocessable 422  values fail a template's schema
+//   TooManyRequests 429 a metered action is over its limit
 //   Upstream      502  a provider or git host refused or failed
 //   InvalidBody   400  the body failed its schema (zod's errors as `error`)
 //
@@ -46,6 +48,24 @@ export class NotFound extends AppError {
 export class Conflict extends AppError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(409, message, details);
+  }
+}
+
+/** 422: the request is well-formed but its values fail a template's schema.
+ *  The body's `error` is the validation details, as the dashboard reads it. */
+export class Unprocessable extends AppError {
+  constructor(readonly validation: unknown) {
+    super(422, "arguments do not match the template");
+  }
+
+  override body(): Record<string, unknown> {
+    return { error: this.validation };
+  }
+}
+
+export class TooManyRequests extends AppError {
+  constructor(message: string) {
+    super(429, message);
   }
 }
 

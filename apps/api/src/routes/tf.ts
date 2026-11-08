@@ -1,23 +1,28 @@
 import { Router } from "express";
-import { Prisma } from "@prisma/client";
-import { GIT_HOSTS } from "@infralift/shared";
+import { GIT_HOSTS, type ResourceInventoryItem } from "@infralift/shared";
 import { z } from "zod";
-import type { Provider, ResourceInventoryItem } from "@infralift/shared";
-import { prisma } from "../lib/db.js";
-import { runJob } from "../lib/tf/pipeline.js";
-import {
-  renderTemplate,
-  validateArguments,
-  TfInputValidationError,
-  type TfArguments,
-} from "../lib/tf/render.js";
+import type { TfArguments } from "../lib/tf/render.js";
 import { getTfcClient } from "../lib/tf/tfc-client.js";
-import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
-import { requireAdmin, isAdmin } from "../lib/cf-auth.js";
-import { toCodegenSample } from "../lib/tf/sample.js";
+import { requireAdmin } from "../lib/cf-auth.js";
 import { handle, parseBody } from "../lib/errors.js";
 import { listProjects } from "../services/projects.js";
 import { createStackProject, listStackSummaries, previewStack, updateStackSettings } from "../services/stacks.js";
+import { createTemplateProject, listRenderings, listTemplates, previewTemplate, publishTemplate } from "../services/templates.js";
+import { getJob, listJobs, queueProjectJob } from "../services/jobs.js";
+import {
+  approveMigration,
+  generateFromAssessment,
+  generatePreview,
+  setCodegenUnlock,
+} from "../services/codegen.js";
+
+// HTTP for Terraform projects, templates, jobs, codegen and stacks. The rules
+// live in services/*; each route validates its input, calls one service
+// function and sends the result.
+
+// Kept for tests that reach these through the router module.
+export { resetCodegenRateLimit } from "../services/codegen.js";
+export { visibleTemplates } from "../services/templates.js";
 
 export const tfRouter = Router();
 
@@ -48,28 +53,16 @@ tfRouter.get("/tfc-status", requireAdmin, async (_req, res) => {
   }
 });
 
-// -- templates ---------------------------------------------------------------
+// -- templates (services/templates.ts) ---------------------------------------
 
-// The shared catalog (orgId null) plus the caller's own private templates.
-// An adopted workspace's template points at that customer's repository, so
-// every lookup by slug goes through this filter, not just the listing.
-export function visibleTemplates(orgId: string) {
-  return { OR: [{ orgId: null }, { orgId }] };
-}
+const argsRecord = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
 
-tfRouter.get("/templates", async (req, res) => {
-  const templates = await prisma.tfTemplate.findMany({
-    where: visibleTemplates(req.user!.orgId),
-    include: {
-      versions: {
-        select: { id: true, releaseTag: true, inputSchema: true, createdAt: true },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-    orderBy: { slug: "asc" },
-  });
-  res.json(templates);
-});
+tfRouter.get(
+  "/templates",
+  handle(async (req, res) => {
+    res.json(await listTemplates(req.user!.orgId));
+  })
+);
 
 const templateSchema = z.object({
   slug: z.string().regex(/^[a-z0-9-]+$/),
@@ -80,80 +73,25 @@ const templateSchema = z.object({
   inputSchema: z.record(z.string(), z.unknown()),
 });
 
-// Admin-only. TfTemplate has no orgId: it is one catalog shared by every org,
-// keyed on slug, and templateBody is Terraform that the pipeline renders,
-// commits to a repo and hands to a workspace. An unauthenticated-shaped write
-// here was fine while the only account was the owner's; with signup open it
-// would let anyone who can sign in with GitHub upsert a template other orgs
-// build from. The GET below stays open because reading the catalog is what
-// the dashboard's terraform page does.
-tfRouter.post("/templates", requireAdmin, async (req, res) => {
-  const parsed = templateSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  const { slug, name, description, releaseTag, templateBody, inputSchema } =
-    parsed.data;
-  const existing = await prisma.tfTemplate.findUnique({ where: { slug } });
-  if (existing?.orgId) {
-    return res.status(409).json({ error: "slug belongs to an org-private template" });
-  }
-  const template = await prisma.tfTemplate.upsert({
-    where: { slug },
-    create: { slug, name, description },
-    update: { name, description },
-  });
-  const version = await prisma.tfTemplateVersion.create({
-    data: {
-      templateId: template.id,
-      releaseTag,
-      templateBody,
-      inputSchema: inputSchema as object,
-    },
-  });
-  res.status(201).json({ template, version });
-});
+// Admin-only: the catalog is shared by every org and its bodies are Terraform
+// the pipeline renders and commits. Reading it stays open.
+tfRouter.post(
+  "/templates",
+  requireAdmin,
+  handle(async (req, res) => {
+    res.status(201).json(await publishTemplate(parseBody(templateSchema, req.body)));
+  })
+);
 
-// Dry-run render: validate arguments + return the rendered body without
-// touching git or workspaces.
-const previewSchema = z.object({
-  arguments: z.record(
-    z.string(),
-    z.union([z.string(), z.number(), z.boolean()])
-  ),
-});
+tfRouter.post(
+  "/templates/:slug/versions/:tag/preview",
+  handle(async (req, res) => {
+    const { arguments: args } = parseBody(z.object({ arguments: argsRecord }), req.body);
+    res.json(await previewTemplate(req.user!.orgId, req.params.slug, req.params.tag, args as TfArguments));
+  })
+);
 
-tfRouter.post("/templates/:slug/versions/:tag/preview", async (req, res) => {
-  const parsed = previewSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  const template = await prisma.tfTemplate.findFirst({
-    where: { slug: req.params.slug, ...visibleTemplates(req.user!.orgId) },
-  });
-  if (!template) return res.status(404).json({ error: "template not found" });
-  const version = await prisma.tfTemplateVersion.findUnique({
-    where: {
-      templateId_releaseTag: {
-        templateId: template.id,
-        releaseTag: req.params.tag,
-      },
-    },
-  });
-  if (!version) return res.status(404).json({ error: "version not found" });
-  try {
-    const args = parsed.data.arguments as TfArguments;
-    validateArguments(version.inputSchema as object, args);
-    res.json({ rendered: renderTemplate(version.templateBody, args) });
-  } catch (err) {
-    if (err instanceof TfInputValidationError) {
-      return res.status(422).json({ error: err.details });
-    }
-    throw err;
-  }
-});
-
-// -- projects ----------------------------------------------------------------
+// -- projects --------------------------------------------------------------------
 
 tfRouter.get(
   "/projects",
@@ -181,114 +119,50 @@ const projectSchema = z.object({
   }),
 });
 
-tfRouter.post("/projects", async (req, res) => {
-  const parsed = projectSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  const { orgId } = req.user!;
-  const d = parsed.data;
-  const template = await prisma.tfTemplate.findFirst({
-    where: { slug: d.templateSlug, ...visibleTemplates(orgId) },
-  });
-  if (!template) return res.status(404).json({ error: "template not found" });
-  const version = await prisma.tfTemplateVersion.findUnique({
-    where: {
-      templateId_releaseTag: {
-        templateId: template.id,
-        releaseTag: d.releaseTag,
-      },
-    },
-  });
-  if (!version) return res.status(404).json({ error: "version not found" });
-  const project = await prisma.tfProject.create({
-    data: {
-      orgId,
-      name: d.name,
-      templateVersionId: version.id,
-      destRepo: d.destRepo,
-      destPath: d.destPath,
-      destBranch: d.destBranch,
-      providerConfig: d.providerConfig,
-    },
-  });
-  res.status(201).json(project);
+tfRouter.post(
+  "/projects",
+  handle(async (req, res) => {
+    res.status(201).json(await createTemplateProject(req.user!.orgId, parseBody(projectSchema, req.body)));
+  })
+);
+
+tfRouter.get(
+  "/projects/:id/renderings",
+  handle(async (req, res) => {
+    res.json(await listRenderings(req.user!.orgId, req.params.id));
+  })
+);
+
+// -- jobs (services/jobs.ts) ---------------------------------------------------------
+
+tfRouter.post(
+  "/jobs",
+  handle(async (req, res) => {
+    const d = parseBody(z.object({ projectId: z.string().min(1), arguments: argsRecord }), req.body);
+    res.status(202).json(await queueProjectJob(req.user!.orgId, d.projectId, d.arguments as TfArguments));
+  })
+);
+
+tfRouter.get(
+  "/jobs",
+  handle(async (req, res) => {
+    res.json(await listJobs(req.user!.orgId, String(req.query.projectId ?? "")));
+  })
+);
+
+tfRouter.get(
+  "/jobs/:id",
+  handle(async (req, res) => {
+    res.json(await getJob(req.user!.orgId, req.params.id));
+  })
+);
+
+// -- codegen and approval (services/codegen.ts) --------------------------------------
+
+const caller = (req: { user?: { orgId: string; email: string } }) => ({
+  orgId: req.user!.orgId,
+  email: req.user!.email,
 });
-
-tfRouter.get("/projects/:id/renderings", async (req, res) => {
-  // Scope by org: a project id is guessable, and its renderings carry the
-  // customer's infrastructure.
-  const project = await prisma.tfProject.findFirst({
-    where: { id: req.params.id, orgId: req.user!.orgId },
-    select: { id: true },
-  });
-  if (!project) return res.status(404).json({ error: "project not found" });
-  const renderings = await prisma.tfRendering.findMany({
-    where: { projectId: project.id },
-    orderBy: { createdAt: "desc" },
-  });
-  res.json(renderings);
-});
-
-// -- jobs --------------------------------------------------------------------
-
-const jobSchema = z.object({
-  projectId: z.string().min(1),
-  arguments: z.record(
-    z.string(),
-    z.union([z.string(), z.number(), z.boolean()])
-  ),
-});
-
-tfRouter.post("/jobs", async (req, res) => {
-  const parsed = jobSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  const project = await prisma.tfProject.findFirst({
-    where: { id: parsed.data.projectId, orgId: req.user!.orgId },
-  });
-  if (!project) return res.status(404).json({ error: "project not found" });
-  // A stack project re-renders from its stored settings; ad-hoc arguments
-  // would let a job disagree with what the project says it is.
-  const isStack = project.source === "stack";
-  const job = await prisma.tfJob.create({
-    data: {
-      projectId: project.id,
-      kind: isStack ? "stack" : "template",
-      argumentsJson: isStack
-        ? (project.providerConfig as Prisma.InputJsonObject)
-        : parsed.data.arguments,
-    },
-  });
-  // Fire-and-forget: the staged pipeline updates stage/status as it goes.
-  void runJob(job.id).catch((err) => {
-    console.error(`tf job ${job.id} failed:`, err);
-  });
-  res.status(202).json(job);
-});
-
-tfRouter.get("/jobs", async (req, res) => {
-  const projectId = String(req.query.projectId ?? "");
-  if (!projectId) return res.status(400).json({ error: "projectId required" });
-  const jobs = await prisma.tfJob.findMany({
-    where: { projectId, project: { orgId: req.user!.orgId } },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  });
-  res.json(jobs);
-});
-
-tfRouter.get("/jobs/:id", async (req, res) => {
-  const job = await prisma.tfJob.findFirst({
-    where: { id: req.params.id, project: { orgId: req.user!.orgId } },
-    include: { rendering: true },
-  });
-  if (!job) return res.status(404).json({ error: "job not found" });
-  res.json(job);
-});
-
-// -- codegen: assessment to HCL -----------------------------------------------
 
 const codegenSchema = z.object({
   assessmentId: z.string().min(1),
@@ -300,185 +174,26 @@ const codegenSchema = z.object({
   migrationTarget: z.enum(["cloudflare", "hetzner"]).nullable().default(null),
 });
 
-// ---------------------------------------------------------------------------
-// Codegen gate
-// ---------------------------------------------------------------------------
-//
-// The assessment, the cost comparison and the ranked targets are free and
-// should stay free. Applyable Terraform is the deliverable, and until the
-// unlock below it was returned to any signed-in user. Owner-only Access made
-// that harmless; self-serve signup did not.
-
-/** Full output for admins and for orgs an admin has cleared. */
-async function codegenUnlocked(req: {
-  user?: { orgId: string; email: string };
-}): Promise<boolean> {
-  if (isAdmin(req.user?.email)) return true;
-  const org = await prisma.org.findUnique({
-    where: { id: req.user!.orgId },
-    select: { codegenUnlocked: true },
-  });
-  return org?.codegenUnlocked ?? false;
-}
-
-// Locked callers are metered too. Codegen is the most expensive thing an
-// anonymous signup can make us do, and /codegen/preview will render HCL from
-// an inventory typed by hand, so without this it is a free codegen service
-// for anyone who can complete a Google login. In-process like the intake
-// limiter: a second replica means a second bucket, which is an acceptable
-// ceiling for a CPU-bound render.
-const CODEGEN_WINDOW_MS = 60 * 60 * 1000;
-const CODEGEN_MAX_PER_HOUR = 20;
-const codegenHits = new Map<string, number[]>();
-
-function codegenRateLimited(orgId: string, now = Date.now()): boolean {
-  const recent = (codegenHits.get(orgId) ?? []).filter(
-    (t) => now - t < CODEGEN_WINDOW_MS
-  );
-  if (recent.length >= CODEGEN_MAX_PER_HOUR) {
-    codegenHits.set(orgId, recent);
-    return true;
-  }
-  recent.push(now);
-  codegenHits.set(orgId, recent);
-  if (codegenHits.size > 5000) {
-    for (const [k, times] of codegenHits) {
-      const live = times.filter((t) => now - t < CODEGEN_WINDOW_MS);
-      if (live.length === 0) codegenHits.delete(k);
-      else codegenHits.set(k, live);
-    }
-  }
-  return false;
-}
-
-/** Exported for tests. */
-export function resetCodegenRateLimit(): void {
-  codegenHits.clear();
-}
-
-// Flip the unlock. Admin-only, and deliberately a route rather than a manual
-// UPDATE: unlocking is the moment a prospect becomes a customer, so it should
-// be something the admin app can do and something that leaves a log line,
-// not something typed into psql. A payment webhook can call the same path.
-const unlockSchema = z.object({
-  orgId: z.string().min(1),
-  unlocked: z.boolean(),
+const codegenPreviewSchema = z.object({
+  provider: z.string().min(1),
+  // Bounded: this array is caller-supplied and every entry is rendered, so an
+  // unbounded one is a CPU amplifier behind a free signup.
+  inventory: z
+    .array(
+      z.object({
+        provider: z.string(),
+        type: z.string(),
+        externalId: z.string(),
+        name: z.string(),
+        region: z.string().optional(),
+        monthlyCostCents: z.number().optional(),
+        metadata: z.record(z.unknown()).optional(),
+      })
+    )
+    .max(1000),
+  backend: z.enum(["tfc", "s3", "local"]).default("local"),
+  migrationTarget: z.enum(["cloudflare", "hetzner"]).nullable().default(null),
 });
-
-tfRouter.post("/unlock", requireAdmin, async (req, res) => {
-  const parsed = unlockSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  const org = await prisma.org.update({
-    where: { id: parsed.data.orgId },
-    data: { codegenUnlocked: parsed.data.unlocked },
-    select: { id: true, name: true, codegenUnlocked: true },
-  });
-  console.log(
-    `codegen ${org.codegenUnlocked ? "unlocked" : "locked"} for org ${org.id} (${org.name}) by ${req.user!.email}`
-  );
-  res.json(org);
-});
-
-tfRouter.post("/codegen", async (req, res) => {
-  const parsed = codegenSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  const { orgId } = req.user!;
-  const { assessmentId, ...opts } = parsed.data;
-
-  const assessment = await prisma.assessment.findUnique({
-    where: { id: assessmentId },
-    include: { inventory: true },
-  });
-  if (!assessment || assessment.orgId !== orgId) {
-    return res.status(404).json({ error: "assessment not found" });
-  }
-  if (assessment.status !== "completed") {
-    return res.status(400).json({ error: "assessment not completed" });
-  }
-  if (codegenRateLimited(orgId)) {
-    return res
-      .status(429)
-      .json({ error: "Too many codegen requests. Try again later." });
-  }
-
-  const inventory: ResourceInventoryItem[] = assessment.inventory.map((i) => ({
-    provider: i.provider as Provider,
-    type: i.type,
-    externalId: i.externalId,
-    name: i.name,
-    region: i.region ?? undefined,
-    monthlyCostCents: i.monthlyCostCents ?? undefined,
-    metadata: (i.metadata as Record<string, unknown>) ?? undefined,
-  }));
-
-  const files = generateHcl({
-    provider: assessment.provider as Provider,
-    inventory,
-    ...opts,
-  } as CodegenOptions);
-
-  if (await codegenUnlocked(req)) {
-    return res.json({ locked: false, files, resourceCount: inventory.length });
-  }
-  res.json({ ...toCodegenSample(files), resourceCount: inventory.length });
-});
-
-// Preview: generate HCL without an assessment (from provided inventory)
-tfRouter.post("/codegen/preview", async (req, res) => {
-  const schema = z.object({
-    provider: z.string().min(1),
-    // Bounded: this array is caller-supplied and every entry is rendered,
-    // so an unbounded one is a CPU amplifier behind a free signup.
-    inventory: z.array(z.object({
-      provider: z.string(),
-      type: z.string(),
-      externalId: z.string(),
-      name: z.string(),
-      region: z.string().optional(),
-      monthlyCostCents: z.number().optional(),
-      metadata: z.record(z.unknown()).optional(),
-    })).max(1000),
-    backend: z.enum(["tfc", "s3", "local"]).default("local"),
-    migrationTarget: z.enum(["cloudflare", "hetzner"]).nullable().default(null),
-  });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  if (codegenRateLimited(req.user!.orgId)) {
-    return res
-      .status(429)
-      .json({ error: "Too many codegen requests. Try again later." });
-  }
-
-  const files = generateHcl({
-    provider: parsed.data.provider as Provider,
-    inventory: parsed.data.inventory as ResourceInventoryItem[],
-    backend: parsed.data.backend,
-    migrationTarget: parsed.data.migrationTarget,
-  });
-
-  // Gated identically to /codegen. This route takes an inventory rather than
-  // an assessment id, so leaving it open would have made the gate above
-  // decorative: paste your own inventory, get the same files.
-  if (await codegenUnlocked(req)) {
-    return res.json({
-      locked: false,
-      files,
-      resourceCount: parsed.data.inventory.length,
-    });
-  }
-  res.json({
-    ...toCodegenSample(files),
-    resourceCount: parsed.data.inventory.length,
-  });
-});
-
-// -- approval: assessment to a real repo and workspace ------------------------
 
 const approveSchema = z.object({
   assessmentId: z.string().min(1),
@@ -498,92 +213,36 @@ const approveSchema = z.object({
   s3Endpoint: z.string().optional(),
 });
 
-/** The approval step of the funnel. The customer has seen their options and
- * picked a target; this turns the assessment into a repository of Terraform
- * and a workspace to run it in.
- *
- * Re-approving the same assessment and target reuses the project and adds a
- * job, so the repo converges rather than forking into a second project. */
-tfRouter.post("/approve", async (req, res) => {
-  const parsed = approveSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  const orgId = req.user!.orgId;
-  const input = parsed.data;
+tfRouter.post(
+  "/unlock",
+  requireAdmin,
+  handle(async (req, res) => {
+    const d = parseBody(z.object({ orgId: z.string().min(1), unlocked: z.boolean() }), req.body);
+    res.json(await setCodegenUnlock(req.user!.email, d));
+  })
+);
 
-  const assessment = await prisma.assessment.findFirst({
-    where: { id: input.assessmentId, orgId },
-    select: { id: true, provider: true, status: true },
-  });
-  if (!assessment) return res.status(404).json({ error: "assessment not found" });
-  if (assessment.status !== "completed") {
-    return res.status(400).json({ error: "Assessment not completed" });
-  }
+tfRouter.post(
+  "/codegen",
+  handle(async (req, res) => {
+    res.json(await generateFromAssessment(caller(req), parseBody(codegenSchema, req.body)));
+  })
+);
 
-  const name =
-    input.projectName ??
-    `${assessment.provider}-to-${input.migrationTarget}-${assessment.id.slice(-6)}`;
+tfRouter.post(
+  "/codegen/preview",
+  handle(async (req, res) => {
+    const d = parseBody(codegenPreviewSchema, req.body);
+    res.json(await generatePreview(caller(req), { ...d, inventory: d.inventory as ResourceInventoryItem[] }));
+  })
+);
 
-  const existing = await prisma.tfProject.findFirst({
-    where: { orgId, name },
-  });
-  if (existing && existing.assessmentId !== assessment.id) {
-    return res.status(409).json({
-      error: `project "${name}" already exists for a different assessment`,
-    });
-  }
-
-  const projectData = {
-    orgId,
-    name,
-    source: "codegen",
-    assessmentId: assessment.id,
-    migrationTarget: input.migrationTarget,
-    destRepo: input.repo,
-    destPath: input.destPath,
-    destBranch: input.destBranch,
-    // Codegen writes its own versions.tf and provider.tf, so this is recorded
-    // for reference rather than used to render a provider file.
-    providerConfig: {
-      name: input.migrationTarget,
-      target: input.migrationTarget,
-      source: assessment.provider,
-    },
-  };
-
-  const project = existing
-    ? await prisma.tfProject.update({
-        where: { id: existing.id },
-        data: {
-          destRepo: projectData.destRepo,
-          destPath: projectData.destPath,
-          destBranch: projectData.destBranch,
-          migrationTarget: projectData.migrationTarget,
-        },
-      })
-    : await prisma.tfProject.create({ data: projectData });
-
-  const job = await prisma.tfJob.create({
-    data: {
-      projectId: project.id,
-      kind: "codegen",
-      argumentsJson: {
-        backend: input.backend,
-        ...(input.tfcOrg ? { tfcOrg: input.tfcOrg } : {}),
-        ...(input.s3Bucket ? { s3Bucket: input.s3Bucket } : {}),
-        ...(input.s3Endpoint ? { s3Endpoint: input.s3Endpoint } : {}),
-      },
-    },
-  });
-
-  // Fire-and-forget, same as template jobs: the dashboard polls stage/status.
-  void runJob(job.id).catch((err) => {
-    console.error(`tf codegen job ${job.id} failed:`, err);
-  });
-
-  res.status(202).json({ project, job });
-});
+tfRouter.post(
+  "/approve",
+  handle(async (req, res) => {
+    res.status(202).json(await approveMigration(req.user!.orgId, parseBody(approveSchema, req.body)));
+  })
+);
 
 // -- stacks ------------------------------------------------------------------
 //
