@@ -24,7 +24,7 @@ vi.mock("../lib/db.js", () => ({
   },
 }));
 vi.mock("../lib/crypto.js", () => ({ decryptToken: () => "token" }));
-vi.mock("../lib/tf/pipeline.js", () => ({ runJob: h.runJob }));
+vi.mock("../lib/jobs/start.js", () => ({ startJob: h.runJob }));
 
 const { importsRouter } = await import("./imports.js");
 

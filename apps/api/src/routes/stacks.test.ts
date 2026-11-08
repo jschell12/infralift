@@ -21,7 +21,7 @@ vi.mock("../lib/db.js", () => ({
     providerConnection: { findFirst: h.connFindFirst },
   },
 }));
-vi.mock("../lib/tf/pipeline.js", () => ({ runJob: h.runJob }));
+vi.mock("../lib/jobs/start.js", () => ({ startJob: h.runJob }));
 vi.mock("../lib/tf/tfc-connection.js", () => {
   class TfcConnectionError extends Error {}
   return {

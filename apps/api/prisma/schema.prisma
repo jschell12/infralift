@@ -485,6 +485,9 @@ model TfJob {
   workspaceName String?
   // Stack jobs land as a pull request rather than a push to destBranch.
   prUrl         String?
+  // Queue (lib/jobs/queue.ts): set once, by the one process that runs it.
+  claimedAt     DateTime?
+  claimedBy     String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -492,6 +495,7 @@ model TfJob {
   rendering TfRendering? @relation(fields: [renderingId], references: [id])
 
   @@index([projectId, createdAt])
+  @@index([status, claimedAt])
 }
 
 // Communities and forums where infralift's target audience discusses
