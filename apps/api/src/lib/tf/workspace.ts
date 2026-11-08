@@ -1,9 +1,9 @@
 // Workspace adapter interface. TfCloudWorkspaceAdapter targets the HCP
-// Terraform (Terraform Cloud) v2 API and is selected when TFC_TOKEN and
-// TFC_ORG are set; otherwise the stub keeps the job pipeline able to
-// complete end-to-end without external credentials.
+// Terraform (Terraform Cloud) v2 API. Jobs get one only through a project's
+// own Terraform Cloud connection (lib/tf/tfc-connection.ts); there is no
+// adapter for infralift's own organization, so nothing can fall back to it.
 
-import { TfcClient, TfcClientError, getTfcClient } from "./tfc-client.js";
+import { TfcClient, TfcClientError } from "./tfc-client.js";
 
 export interface WorkspaceRun {
   runId: string;
@@ -20,29 +20,6 @@ export interface WorkspaceAdapter {
   }): Promise<{ workspaceName: string }>;
   queueRun(workspaceName: string, description: string): Promise<WorkspaceRun>;
   getRun(workspaceName: string, runId: string): Promise<WorkspaceRun>;
-}
-
-export class StubWorkspaceAdapter implements WorkspaceAdapter {
-  async createWorkspace(opts: {
-    workspaceName: string;
-    repo: string;
-    branch: string;
-    workingDirectory: string;
-    autoApply: boolean;
-  }): Promise<{ workspaceName: string }> {
-    return { workspaceName: opts.workspaceName };
-  }
-
-  async queueRun(
-    workspaceName: string,
-    _description: string
-  ): Promise<WorkspaceRun> {
-    return { runId: `stub-run-${workspaceName}`, status: "not_connected" };
-  }
-
-  async getRun(_workspaceName: string, runId: string): Promise<WorkspaceRun> {
-    return { runId, status: "not_connected" };
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -99,14 +76,4 @@ export class TfCloudWorkspaceAdapter implements WorkspaceAdapter {
     const run = await this.client.getRun(runId);
     return { runId: run.id, status: run.status };
   }
-}
-
-export function getWorkspaceAdapter(): WorkspaceAdapter {
-  const client = getTfcClient();
-  if (client) {
-    const token = process.env.TFC_TOKEN!;
-    const org = process.env.TFC_ORG!;
-    return new TfCloudWorkspaceAdapter(token, org);
-  }
-  return new StubWorkspaceAdapter();
 }
