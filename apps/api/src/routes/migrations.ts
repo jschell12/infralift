@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { PROVIDERS } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
+import { InvalidInput, NotFound, handle } from "../lib/errors.js";
 
 export const migrationsRouter = Router();
 
@@ -68,7 +69,7 @@ function toSummary(m: {
   };
 }
 
-migrationsRouter.get("/", async (req, res) => {
+migrationsRouter.get("/", handle(async (req, res) => {
   const { orgId } = req.user!;
   const migrations = await prisma.migration.findMany({
     where: { orgId },
@@ -76,12 +77,12 @@ migrationsRouter.get("/", async (req, res) => {
     orderBy: { createdAt: "desc" },
   });
   res.json(migrations.map(toSummary));
-});
+}));
 
-migrationsRouter.post("/", async (req, res) => {
+migrationsRouter.post("/", handle(async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid request", detail: parsed.error.message });
+    throw new InvalidInput("Invalid request", { detail: parsed.error.message });
   }
   const { orgId } = req.user!;
   const migration = await prisma.migration.create({
@@ -95,9 +96,9 @@ migrationsRouter.post("/", async (req, res) => {
     include: { phases: true },
   });
   res.status(201).json(toSummary(migration));
-});
+}));
 
-migrationsRouter.get("/:id", async (req, res) => {
+migrationsRouter.get("/:id", handle(async (req, res) => {
   // Scoped to the caller's org like its sibling list route. Looking up by id
   // alone was safe while Cloudflare Access admitted one email address; with
   // self-serve signup open it would let any signed-in stranger read another
@@ -106,6 +107,6 @@ migrationsRouter.get("/:id", async (req, res) => {
     where: { id: req.params.id, orgId: req.user!.orgId },
     include: { phases: true },
   });
-  if (!migration) return res.status(404).json({ error: "Not found" });
+  if (!migration) throw new NotFound("Not found");
   res.json(toSummary(migration));
-});
+}));

@@ -1,4 +1,5 @@
-import { Router, type Response } from "express";
+import { Router } from "express";
+import { AppError, Conflict, InvalidBody, InvalidInput, NotFound, Unprocessable, Upstream, handle } from "../lib/errors.js";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
@@ -36,49 +37,46 @@ function workspaceUrl(cred: TfcCredential, name: string): string {
 }
 
 /**
- * The org's TFC connection, decrypted. Always scoped by orgId. Sends the
- * error response itself and returns null when the connection is missing or
- * its host now resolves somewhere private.
+ * The org's TFC connection, decrypted. Always scoped by orgId. NotFound when
+ * the connection is missing, InvalidInput when its host now resolves
+ * somewhere private.
  */
-async function loadTfc(res: Response, orgId: string, connectionId: string) {
+async function loadTfc(orgId: string, connectionId: string) {
   const conn = await prisma.providerConnection.findFirst({
     where: { id: connectionId, orgId, provider: TFC_PROVIDER },
   });
-  if (!conn) {
-    res.status(404).json({ error: "connection not found" });
-    return null;
-  }
+  if (!conn) throw new NotFound("connection not found");
   const cred = tfcCredentialSchema.parse(JSON.parse(decryptToken(conn.encryptedToken)));
   try {
     await assertPublicHost(cred.hostname);
   } catch (err) {
     if (!(err instanceof UnsafeHostError)) throw err;
-    res.status(400).json({ error: err.message });
-    return null;
+    throw new InvalidInput(err.message);
   }
   const client = new TfcClient(cred.token, cred.organization, tfcBaseUrl(cred.hostname));
   return { conn, cred, client };
 }
 
 /**
- * Answer 502 for anything that went wrong talking to the customer's TFC.
- * Never rethrows: Express 4 does not catch a rejected async handler, so a
- * throw here takes the whole API process down for every tenant. Measured on
- * 2026-10-08, when an unexpected `null` body from TFC did exactly that.
+ * Anything that went wrong talking to the customer's TFC becomes a 502
+ * (Upstream). Measured on 2026-10-08: an unexpected `null` body from TFC took
+ * the process down when it escaped a handler, so every TFC call is wrapped.
  */
-function tfcFailure(res: Response, err: unknown) {
+function tfcFailure(err: unknown): never {
+  // An answer this handler decided on (not found, conflict) passes through.
+  if (err instanceof AppError) throw err;
   if (err instanceof TfcClientError) {
     // The customer's own org answered; pass the status class through without
     // the body, which can echo request detail.
-    return res.status(502).json({ error: `Terraform Cloud returned ${err.statusCode} for ${err.method} ${err.path}` });
+    throw new Upstream(`Terraform Cloud returned ${err.statusCode} for ${err.method} ${err.path}`);
   }
   console.error("terraform cloud call failed:", err);
-  return res.status(502).json({ error: "could not complete the request to Terraform Cloud" });
+  throw new Upstream("could not complete the request to Terraform Cloud");
 }
 
 // -- list ----------------------------------------------------------------------
 
-workspacesRouter.get("/", async (req, res) => {
+workspacesRouter.get("/", handle(async (req, res) => {
   const { orgId } = req.user!;
   const workspaces = await prisma.workspace.findMany({
     where: { orgId },
@@ -96,7 +94,7 @@ workspacesRouter.get("/", async (req, res) => {
       lastRunAt: w.lastRunAt?.toISOString() ?? null,
     }))
   );
-});
+}));
 
 // -- connect an HCP Terraform / TFE org ---------------------------------------------
 
@@ -107,10 +105,10 @@ const connectionSchema = z.object({
   token: z.string().min(1),
 });
 
-workspacesRouter.post("/connections", async (req, res) => {
+workspacesRouter.post("/connections", handle(async (req, res) => {
   const parsed = connectionSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
+    throw new InvalidBody(parsed.error.flatten());
   }
   const credParsed = tfcCredentialSchema.safeParse({
     hostname: parsed.data.hostname || undefined,
@@ -118,14 +116,14 @@ workspacesRouter.post("/connections", async (req, res) => {
     token: parsed.data.token,
   });
   if (!credParsed.success) {
-    return res.status(400).json({ error: credParsed.error.flatten() });
+    throw new InvalidBody(credParsed.error.flatten());
   }
   const cred = credParsed.data;
   try {
     await assertPublicHost(cred.hostname);
   } catch (err) {
     if (!(err instanceof UnsafeHostError)) throw err;
-    return res.status(400).json({ error: err.message });
+    throw new InvalidInput(err.message);
   }
   const client = new TfcClient(cred.token, cred.organization, tfcBaseUrl(cred.hostname));
   let valid = false;
@@ -148,7 +146,7 @@ workspacesRouter.post("/connections", async (req, res) => {
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      return res.status(409).json({ error: `a Terraform Cloud connection labelled "${parsed.data.label}" already exists` });
+      throw new Conflict(`a Terraform Cloud connection labelled "${parsed.data.label}" already exists`);
     }
     throw err;
   }
@@ -160,14 +158,13 @@ workspacesRouter.post("/connections", async (req, res) => {
     organization: cred.organization,
     status: conn.status,
   });
-});
+}));
 
 // -- browse the customer's workspaces -------------------------------------------------
 
-workspacesRouter.get("/remote", async (req, res) => {
+workspacesRouter.get("/remote", handle(async (req, res) => {
   const { orgId } = req.user!;
-  const tfc = await loadTfc(res, orgId, String(req.query.connectionId ?? ""));
-  if (!tfc) return;
+  const tfc = await loadTfc(orgId, String(req.query.connectionId ?? ""));
   try {
     const [remote, local] = await Promise.all([
       tfc.client.listWorkspaces(),
@@ -189,9 +186,9 @@ workspacesRouter.get("/remote", async (req, res) => {
       }))
     );
   } catch (err) {
-    return tfcFailure(res, err);
+    tfcFailure(err);
   }
-});
+}));
 
 // -- adopt an existing workspace ------------------------------------------------------
 
@@ -208,20 +205,19 @@ const adoptSchema = z
     message: "give exactly one of projectId or projectName",
   });
 
-workspacesRouter.post("/adopt", async (req, res) => {
+workspacesRouter.post("/adopt", handle(async (req, res) => {
   const parsed = adoptSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
+    throw new InvalidBody(parsed.error.flatten());
   }
   const { orgId } = req.user!;
   const d = parsed.data;
-  const tfc = await loadTfc(res, orgId, d.connectionId);
-  if (!tfc) return;
+  const tfc = await loadTfc(orgId, d.connectionId);
 
   let remote, vars, outputs, ingress;
   try {
     remote = await tfc.client.getWorkspace(d.workspaceName);
-    if (!remote) return res.status(404).json({ error: "workspace not found in Terraform Cloud" });
+    if (!remote) throw new NotFound("workspace not found in Terraform Cloud");
     [vars, outputs, ingress] = await Promise.all([
       tfc.client.listVariables(remote.id),
       tfc.client.listCurrentOutputs(remote.id),
@@ -230,16 +226,14 @@ workspacesRouter.post("/adopt", async (req, res) => {
         : Promise.resolve(null),
     ]);
   } catch (err) {
-    return tfcFailure(res, err);
+    tfcFailure(err);
   }
 
   const existing = await prisma.workspace.findUnique({
     where: { orgId_name: { orgId, name: remote.name } },
   });
   if (existing && existing.kind !== "adopted") {
-    return res.status(409).json({
-      error: `"${remote.name}" is already an infralift ${existing.kind} workspace`,
-    });
+    throw new Conflict(`"${remote.name}" is already an infralift ${existing.kind} workspace`);
   }
 
   // Re-adopting refreshes the snapshot. It must not move the workspace to a
@@ -261,16 +255,14 @@ workspacesRouter.post("/adopt", async (req, res) => {
       existing.tfcWorkspaceId !== remote.id ||
       (existing.projectId !== null && existing.projectId !== targetProjectId);
     if (moved) {
-      return res.status(409).json({
-        error: `"${remote.name}" is already adopted into another project or from another connection`,
-      });
+      throw new Conflict(`"${remote.name}" is already adopted into another project or from another connection`);
     }
   }
 
   let project;
   if (d.projectId) {
     project = await prisma.tfProject.findFirst({ where: { id: d.projectId, orgId } });
-    if (!project) return res.status(404).json({ error: "project not found" });
+    if (!project) throw new NotFound("project not found");
   } else {
     project =
       (await prisma.tfProject.findUnique({
@@ -372,7 +364,7 @@ workspacesRouter.post("/adopt", async (req, res) => {
     },
     template,
   });
-});
+}));
 
 // -- a project's workspace graph ------------------------------------------------------
 
@@ -393,9 +385,9 @@ async function projectGraph(orgId: string, projectId: string) {
   return { project, workspaces, edges };
 }
 
-workspacesRouter.get("/projects/:projectId", async (req, res) => {
+workspacesRouter.get("/projects/:projectId", handle(async (req, res) => {
   const g = await projectGraph(req.user!.orgId, req.params.projectId);
-  if (!g) return res.status(404).json({ error: "project not found" });
+  if (!g) throw new NotFound("project not found");
   const ids = g.workspaces.map((w) => w.id);
   const name = new Map(g.workspaces.map((w) => [w.id, w.name]));
   let order: { apply: string[]; destroy: string[] } | { cycle: string[] } | { inconsistent: string };
@@ -429,7 +421,7 @@ workspacesRouter.get("/projects/:projectId", async (req, res) => {
     })),
     order,
   });
-});
+}));
 
 /** Apply order by name, or null when the stored graph is inconsistent. */
 function safeOrder(
@@ -460,20 +452,19 @@ const extensionSchema = z.object({
     .default([]),
 });
 
-workspacesRouter.post("/projects/:projectId/extensions", async (req, res) => {
+workspacesRouter.post("/projects/:projectId/extensions", handle(async (req, res) => {
   const parsed = extensionSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
+    throw new InvalidBody(parsed.error.flatten());
   }
   const { orgId } = req.user!;
   const d = parsed.data;
   const g = await projectGraph(orgId, req.params.projectId);
-  if (!g) return res.status(404).json({ error: "project not found" });
-  const tfc = await loadTfc(res, orgId, d.connectionId);
-  if (!tfc) return;
+  if (!g) throw new NotFound("project not found");
+  const tfc = await loadTfc(orgId, d.connectionId);
 
   if (await prisma.workspace.findUnique({ where: { orgId_name: { orgId, name: d.name } } })) {
-    return res.status(409).json({ error: `workspace "${d.name}" already exists` });
+    throw new Conflict(`workspace "${d.name}" already exists`);
   }
 
   // Bases must be in this project, and in the same TFC org as the extension:
@@ -496,7 +487,7 @@ workspacesRouter.post("/projects/:projectId/extensions", async (req, res) => {
   if (new Set(d.dependsOn.map((x) => x.workspaceId)).size !== d.dependsOn.length) {
     problems.push("a base workspace is listed more than once");
   }
-  if (problems.length) return res.status(422).json({ error: problems });
+  if (problems.length) throw new Unprocessable(problems);
 
   // Render before touching the customer's org, so a bad name fails here.
   let wiring: string;
@@ -510,7 +501,7 @@ workspacesRouter.post("/projects/:projectId/extensions", async (req, res) => {
       })),
     });
   } catch (err) {
-    if (err instanceof WiringError) return res.status(422).json({ error: [err.message] });
+    if (err instanceof WiringError) throw new Unprocessable([err.message]);
     throw err;
   }
 
@@ -527,9 +518,7 @@ workspacesRouter.post("/projects/:projectId/extensions", async (req, res) => {
       description: marker,
     });
     if (!made.created && made.workspace.description !== marker) {
-      return res.status(409).json({
-        error: `"${d.name}" already exists in your Terraform Cloud organization. Adopt it, or pick another name.`,
-      });
+      throw new Conflict(`"${d.name}" already exists in your Terraform Cloud organization. Adopt it, or pick another name.`);
     }
     remote = made.workspace;
     for (const dep of d.dependsOn) {
@@ -538,7 +527,7 @@ workspacesRouter.post("/projects/:projectId/extensions", async (req, res) => {
       await tfc.client.ensureRunTrigger(remote.id, baseTfcId);
     }
   } catch (err) {
-    return tfcFailure(res, err);
+    tfcFailure(err);
   }
 
   const workspace = await prisma.$transaction(async (tx) => {
@@ -579,28 +568,27 @@ workspacesRouter.post("/projects/:projectId/extensions", async (req, res) => {
     files: [{ path: "deps.tf", body: wiring }],
     applyOrder: safeOrder(ids, edges, name),
   });
-});
+}));
 
 // -- refresh outputs --------------------------------------------------------------
 
 // Output names are what other workspaces can wire to. An extension has none
 // when it is created; after its first apply, refresh them so it can in turn be
 // a base.
-workspacesRouter.post("/:id/outputs/refresh", async (req, res) => {
+workspacesRouter.post("/:id/outputs/refresh", handle(async (req, res) => {
   const { orgId } = req.user!;
   const ws = await prisma.workspace.findFirst({ where: { id: req.params.id, orgId } });
-  if (!ws) return res.status(404).json({ error: "workspace not found" });
+  if (!ws) throw new NotFound("workspace not found");
   if (!ws.connectionId || !ws.tfcWorkspaceId) {
-    return res.status(409).json({ error: "workspace is not linked to a Terraform Cloud workspace" });
+    throw new Conflict("workspace is not linked to a Terraform Cloud workspace");
   }
-  const tfc = await loadTfc(res, orgId, ws.connectionId);
-  if (!tfc) return;
+  const tfc = await loadTfc(orgId, ws.connectionId);
   let outputs;
   try {
     outputs = await tfc.client.listCurrentOutputs(ws.tfcWorkspaceId);
   } catch (err) {
-    return tfcFailure(res, err);
+    tfcFailure(err);
   }
   await prisma.workspace.update({ where: { id: ws.id }, data: { outputs: outputs as object[] } });
   res.json({ id: ws.id, outputs: outputs.map((o) => o.name) });
-});
+}));

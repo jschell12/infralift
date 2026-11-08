@@ -1,5 +1,6 @@
 import { STATUS_CODES } from "node:http";
 import type { ErrorRequestHandler, NextFunction, Request, Response } from "express";
+import { AppError } from "./errors.js";
 
 // ---------------------------------------------------------------------------
 // Express 4 does not catch a rejected async handler. The rejection becomes an
@@ -103,6 +104,9 @@ function clientStatus(err: unknown): number | null {
  */
 export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   if (res.headersSent) return next(err);
+  // A typed request error (lib/errors.ts) answers with its own status and
+  // body wherever it was thrown, wrapped in handle() or not.
+  if (err instanceof AppError) return res.status(err.status).json(err.body());
   const status = clientStatus(err);
   if (status) {
     return res.status(status).json({ error: STATUS_CODES[status] ?? "bad request" });

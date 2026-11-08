@@ -1,12 +1,13 @@
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
+import { InvalidInput, NotFound, handle } from "../lib/errors.js";
 
 export const leadsRouter = Router();
 
 const VALID_STATUSES = ["new", "contacted", "dismissed", "converted"] as const;
 
 // List classified community leads with filtering.
-leadsRouter.get("/", async (req, res) => {
+leadsRouter.get("/", handle(async (req, res) => {
   const classification = req.query.classification
     ? String(req.query.classification)
     : undefined;
@@ -36,10 +37,10 @@ leadsRouter.get("/", async (req, res) => {
   });
 
   res.json(leads);
-});
+}));
 
 // Summary counts by classification and status.
-leadsRouter.get("/summary", async (req, res) => {
+leadsRouter.get("/summary", handle(async (req, res) => {
   const days = req.query.days ? Number(req.query.days) : 7;
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
@@ -68,10 +69,10 @@ leadsRouter.get("/summary", async (req, res) => {
   }
 
   res.json({ ...summary, byStatus });
-});
+}));
 
 // Scanner health status.
-leadsRouter.get("/scanner-status", async (req, res) => {
+leadsRouter.get("/scanner-status", handle(async (req, res) => {
   const now = Date.now();
   const since24h = new Date(now - 24 * 60 * 60 * 1000);
   const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000);
@@ -112,10 +113,10 @@ leadsRouter.get("/scanner-status", async (req, res) => {
     last30d,
     lastScanTime: mostRecent?.scrapedAt ?? null,
   });
-});
+}));
 
 // Full report data for admin dashboard.
-leadsRouter.get("/report", async (req, res) => {
+leadsRouter.get("/report", handle(async (req, res) => {
   const [
     total,
     byClassification,
@@ -165,18 +166,15 @@ leadsRouter.get("/report", async (req, res) => {
     crossTab: crossTab.map((r) => ({ provider: r.provider, classification: r.classification, count: Number(r.n) })),
     topLeads,
   });
-});
+}));
 
 // PATCH /leads/:id - update lead status
-leadsRouter.patch("/:id", async (req, res) => {
+leadsRouter.patch("/:id", handle(async (req, res) => {
   const { id } = req.params;
   const { status, notes } = req.body;
 
   if (status && !VALID_STATUSES.includes(status)) {
-    res.status(400).json({
-      error: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`,
-    });
-    return;
+    throw new InvalidInput(`Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`);
   }
 
   const data: Record<string, string> = {};
@@ -184,8 +182,7 @@ leadsRouter.patch("/:id", async (req, res) => {
   if (notes !== undefined) data.notes = notes;
 
   if (Object.keys(data).length === 0) {
-    res.status(400).json({ error: "No fields to update" });
-    return;
+    throw new InvalidInput("No fields to update");
   }
 
   try {
@@ -200,12 +197,11 @@ leadsRouter.patch("/:id", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     if (message.includes("Record to update not found")) {
-      res.status(404).json({ error: "Lead not found" });
-      return;
+      throw new NotFound("Lead not found");
     }
     throw e;
   }
-});
+}));
 
 // ---------------------------------------------------------------------------
 // Inbound leads (marketing site form)
@@ -222,7 +218,7 @@ const INBOUND_STATUSES = [
 // Kept on a separate path from the community leads above: the two have almost
 // no fields in common, and folding them together would make every count in
 // /leads/summary mean two different things.
-leadsRouter.get("/inbound", async (req, res) => {
+leadsRouter.get("/inbound", handle(async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
   const limit = Math.min(Number(req.query.limit) || 100, 500);
 
@@ -242,14 +238,12 @@ leadsRouter.get("/inbound", async (req, res) => {
     total: leads.length,
     byStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count._all])),
   });
-});
+}));
 
-leadsRouter.patch("/inbound/:id", async (req, res) => {
+leadsRouter.patch("/inbound/:id", handle(async (req, res) => {
   const { status, notes } = req.body ?? {};
   if (status !== undefined && !INBOUND_STATUSES.includes(status)) {
-    return res.status(400).json({
-      error: `status must be one of: ${INBOUND_STATUSES.join(", ")}`,
-    });
+    throw new InvalidInput(`status must be one of: ${INBOUND_STATUSES.join(", ")}`);
   }
   try {
     const lead = await prisma.inboundLead.update({
@@ -262,8 +256,8 @@ leadsRouter.patch("/inbound/:id", async (req, res) => {
     res.json(lead);
   } catch (err) {
     if (err instanceof Error && err.message.includes("Record to update not found")) {
-      return res.status(404).json({ error: "lead not found" });
+      throw new NotFound("lead not found");
     }
     throw err;
   }
-});
+}));
