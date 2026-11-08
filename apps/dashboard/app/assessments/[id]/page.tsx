@@ -12,6 +12,7 @@ import {
   MigrationPlan,
 } from "@infralift/shared";
 import { api, formatCents } from "../../../lib/api";
+import { AdoptCard } from "../../../components/import-panel";
 import {
   Card,
   CardTitle,
@@ -349,6 +350,13 @@ export default function AssessmentReportPage({
           </>
         )}
       </Card>
+
+      {report.status === "completed" && (
+        <Card className="mb-5">
+          <CardTitle>Adopt as it runs</CardTitle>
+          <AdoptCard assessmentId={report.id} provider={report.provider} />
+        </Card>
+      )}
 
       <div id="codegen" />
       <Card className="mb-5">

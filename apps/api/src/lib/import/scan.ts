@@ -53,6 +53,9 @@ export interface RootModule {
   tool: "terraform" | "tofu";
   readiness: Readiness;
   notes: string[];
+  /** Adopted from a cloud account: the check generates the resource code
+   *  (plan -generate-config-out) before holding it to zero changes. */
+  generateConfig?: boolean;
 }
 
 export interface ScanResult {
@@ -103,7 +106,7 @@ const BACKEND_ENV: Partial<Record<BackendKind, string[]>> = {
   azurerm: ["ARM_CLIENT_ID", "ARM_CLIENT_SECRET", "ARM_TENANT_ID", "ARM_SUBSCRIPTION_ID"],
 };
 
-const PROVIDER_ENV: Record<string, string[]> = {
+export const PROVIDER_ENV: Record<string, string[]> = {
   aws: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
   google: ["GOOGLE_CREDENTIALS"],
   "google-beta": ["GOOGLE_CREDENTIALS"],
@@ -115,6 +118,9 @@ const PROVIDER_ENV: Record<string, string[]> = {
   gitlab: ["GITLAB_TOKEN"],
   tfe: ["TFE_TOKEN"],
   neon: ["NEON_API_KEY"],
+  heroku: ["HEROKU_API_KEY"],
+  render: ["RENDER_API_KEY", "RENDER_OWNER_ID"],
+  netlify: ["NETLIFY_TOKEN"],
   vercel: ["VERCEL_API_TOKEN"],
   datadog: ["DD_API_KEY", "DD_APP_KEY"],
   vault: ["VAULT_ADDR", "VAULT_TOKEN"],

@@ -648,7 +648,11 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
       await setStage(jobId, "render", "errored", "import needs a scanned module in a GitHub repository");
       return;
     }
-    const args = (job.argumentsJson ?? {}) as { backendConfigFile?: string | null };
+    const args = (job.argumentsJson ?? {}) as {
+      backendConfigFile?: string | null;
+      /** Adoption from a cloud account: versions/provider/imports for destPath. */
+      adoptFiles?: { path: string; content: string }[];
+    };
     const check = renderImportCheck(root, { backendConfigFile: args.backendConfigFile ?? null });
 
     const token = await getGitToken(project.orgId, "github", project.gitConnectionId);
@@ -682,7 +686,13 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
       repo,
       branch,
       workDir: "",
-      files: [{ fileName: check.path, content: check.content }],
+      files: [
+        { fileName: check.path, content: check.content },
+        ...(args.adoptFiles ?? []).map((f) => ({
+          fileName: project.destPath ? `${project.destPath}/${f.path}` : f.path,
+          content: f.content,
+        })),
+      ],
       message: `infralift: import check for ${label}\n\nRead-only plan against the existing state; applies nothing.`,
     });
     if (result.noop) {
@@ -706,11 +716,19 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
         repo,
         head: branch,
         base: project.destBranch,
-        title: `infralift: import check for ${label}`,
+        title: root.generateConfig
+          ? `infralift: adopt ${root.resources} resources into ${label}`
+          : `infralift: import check for ${label}`,
         body: [
-          `infralift is importing the Terraform in \`${label}\` (${root.resources} resources, state in ${root.backend.kind}).`,
-          "",
-          "This pull request adds one file, a workflow that runs a **read-only** plan against the existing state. It applies nothing and runs with `-lock=false`, so it cannot change your infrastructure or block your own pipeline. infralift never sees your state or your credentials: the plan runs here, with your secrets.",
+          ...(root.generateConfig
+            ? [
+                `infralift is adopting ${root.resources} resources that already run in your account into \`${label}\`, without changing them. This pull request adds import blocks, a provider and a backend for state in ${root.backend.kind === "r2" ? "R2" : "S3"} (\`${root.backend.settings.bucket}\`), plus the check workflow.`,
+                "",
+                "There is no hand-written resource code. The check generates it from what is actually running (`plan -generate-config-out`) and commits it to this branch as `generated.tf`, then holds it to the same rule: the plan may import, but must change and destroy nothing. Merging and applying then only records the resources in state.",
+                "",
+              ]
+            : [`infralift is importing the Terraform in \`${label}\` (${root.resources} resources, state in ${root.backend.kind}).`, ""]),
+          "This pull request adds a workflow that runs a **read-only** plan against the existing state. It applies nothing and runs with `-lock=false`, so it cannot change your infrastructure or block your own pipeline. infralift never sees your state or your credentials: the plan runs here, with your secrets.",
           "",
           "The import is safe to finish when the check passes, which means the plan changes nothing: the code already matches what is running, so taking it over cannot cause downtime. If it fails, the job summary lists each resource that would change.",
           "",
