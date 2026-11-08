@@ -425,6 +425,9 @@ model TfProject {
   // Greenfield: create destRepo from the stack's app template on the next
   // job, then clear this.
   createRepo        Boolean  @default(false)
+  // The org's Terraform Cloud connection the project's workspace lives in
+  // (ProviderConnection, provider "tfc"). Null = no workspace is created.
+  tfcConnectionId   String?
   destRepo          String // owner/repo
   destPath          String   @default("") // work dir inside repo, "" = root
   destBranch        String   @default("main")

@@ -22,6 +22,16 @@ vi.mock("../lib/db.js", () => ({
   },
 }));
 vi.mock("../lib/tf/pipeline.js", () => ({ runJob: h.runJob }));
+vi.mock("../lib/tf/tfc-connection.js", () => {
+  class TfcConnectionError extends Error {}
+  return {
+    TfcConnectionError,
+    loadTfcConnection: vi.fn(async (orgId: string, id: string) => {
+      if (orgId !== "org-a" || id !== "tfc-mine") throw new TfcConnectionError("Terraform Cloud connection not found: pick one under Connections");
+      return { organization: "josh-org", hostname: "app.terraform.io", token: "t" };
+    }),
+  };
+});
 
 const { tfRouter } = await import("./tf.js");
 const { getStack } = await import("../lib/stacks/index.js");
@@ -220,6 +230,40 @@ describe("PUT /stacks/projects/:id/settings", () => {
       kind: "stack",
       argumentsJson: expect.objectContaining({ server_type: "cx33" }),
     });
+  });
+
+  it("takes tfc_organization from the Terraform Cloud connection, not from what was typed", async () => {
+    h.findFirst.mockResolvedValueOnce(project);
+    const out = await call("put", "/stacks/projects/:id/settings", {
+      params: { id: "p1" },
+      body: { arguments: { ...example, backend: "tfc", tfc_organization: "typed-org" }, tfcConnectionId: "tfc-mine" },
+    });
+    expect(out.status).toBe(202);
+    const data = h.projectUpdate.mock.calls[0][0].data;
+    expect(data.tfcConnectionId).toBe("tfc-mine");
+    expect(data.providerConfig.tfc_organization).toBe("josh-org");
+  });
+
+  it("refuses a tfc backend with no connection, or another org's connection", async () => {
+    for (const tfcConnectionId of [undefined, "tfc-theirs"]) {
+      h.findFirst.mockResolvedValueOnce(project);
+      const out = await call("put", "/stacks/projects/:id/settings", {
+        params: { id: "p1" },
+        body: { arguments: { ...example, backend: "tfc", tfc_organization: "x" }, ...(tfcConnectionId ? { tfcConnectionId } : {}) },
+      });
+      expect(out.status, String(tfcConnectionId)).toBe(400);
+    }
+    expect(h.projectUpdate).not.toHaveBeenCalled();
+  });
+
+  it("drops the connection when the backend goes back to R2", async () => {
+    h.findFirst.mockResolvedValueOnce({ ...project, tfcConnectionId: "tfc-mine" });
+    const out = await call("put", "/stacks/projects/:id/settings", {
+      params: { id: "p1" },
+      body: { arguments: { ...example, backend: "r2" } },
+    });
+    expect(out.status).toBe(202);
+    expect(h.projectUpdate.mock.calls[0][0].data.tfcConnectionId).toBeNull();
   });
 
   it("answers 400 and changes nothing for invalid settings", async () => {

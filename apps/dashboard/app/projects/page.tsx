@@ -77,6 +77,7 @@ interface Project {
   destRepo: string;
   destBranch: string;
   destPath: string;
+  tfcConnectionId: string | null;
   providerConfig: Settings;
   importJson: {
     backend: { kind: string };
@@ -126,7 +127,12 @@ const ROADMAP_TARGETS = [
 ];
 
 // The state backend has its own control; the generic settings form skips it.
-const BACKEND_KEYS = new Set(["backend", "tfc_organization", "tfc_workspace"]);
+/** Form-only key for the chosen Terraform Cloud connection. It is sent as
+ *  tfcConnectionId, not as a stack setting; the API fills tfc_organization
+ *  from the connection. */
+const TFC_CONNECTION = "__tfc_connection";
+
+const BACKEND_KEYS = new Set(["backend", "tfc_organization", "tfc_workspace", TFC_CONNECTION]);
 
 const STATUS_TONE: Record<string, Tone> = {
   success: "accent",
@@ -234,6 +240,14 @@ function BackendPicker({
   onChange: (v: Record<string, string>) => void;
 }) {
   const backend = values.backend || "r2";
+  // The org's Terraform Cloud connections (Connections, "Connect Terraform
+  // Cloud"). The workspace goes in the chosen one's organization.
+  const [tfcConns, setTfcConns] = useState<ProviderConnectionSummary[] | null>(null);
+  useEffect(() => {
+    api<ProviderConnectionSummary[]>("/connections")
+      .then((c) => setTfcConns(c.filter((x) => String(x.provider) === "tfc")))
+      .catch(() => setTfcConns([]));
+  }, []);
   const options = [
     {
       key: "r2",
@@ -265,12 +279,26 @@ function BackendPicker({
       {backend === "tfc" && (
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div>
-            <label className={LABEL}>Organization *</label>
-            <input
-              className={INPUT}
-              value={values.tfc_organization ?? ""}
-              onChange={(e) => onChange({ ...values, tfc_organization: e.target.value })}
-            />
+            <label className={LABEL}>Terraform Cloud connection *</label>
+            {tfcConns && tfcConns.length === 0 ? (
+              <div className="text-xs text-muted pt-2">
+                None yet. <a className="text-accent" href="/connections">Connect Terraform Cloud</a> first.
+              </div>
+            ) : (
+              <select
+                className={INPUT}
+                value={values[TFC_CONNECTION] ?? ""}
+                onChange={(e) => onChange({ ...values, [TFC_CONNECTION]: e.target.value })}
+              >
+                <option value="">Pick one</option>
+                {(tfcConns ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                    {c.status !== "valid" ? ` (${c.status})` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div>
             <label className={LABEL}>Workspace</label>
@@ -290,19 +318,23 @@ function BackendPicker({
 /** The one cross-field rule a person is likely to trip over, said plainly
  *  before the API answers with schema language. */
 function backendProblem(values: Record<string, string>): string | null {
-  return values.backend === "tfc" && !values.tfc_organization
-    ? "Terraform Cloud needs the organization the workspace goes in."
+  return values.backend === "tfc" && !values[TFC_CONNECTION]
+    ? "Terraform Cloud needs a connection: the workspace goes in its organization."
     : null;
+}
+
+function tfcConnectionOf(values: Record<string, string>): string | null {
+  return values.backend === "tfc" ? values[TFC_CONNECTION] || null : null;
 }
 
 /** Settings sent for the chosen backend only: switching back to R2 must not
  *  carry a stale Terraform Cloud org along. */
 function withBackend(values: Record<string, string>): Record<string, string> {
   const v: Record<string, string> = { ...values, backend: values.backend || "r2" };
-  if (v.backend !== "tfc") {
-    delete v.tfc_organization;
-    delete v.tfc_workspace;
-  }
+  delete v[TFC_CONNECTION];
+  // Always the connection's organization, filled in by the API.
+  delete v.tfc_organization;
+  if (v.backend !== "tfc") delete v.tfc_workspace;
   return v;
 }
 
@@ -428,7 +460,7 @@ function NewProjectDrawer({
     try {
       const out = await api<{ files: StackFile[] }>(`/tf/stacks/${stack.slug}/preview`, {
         method: "POST",
-        body: JSON.stringify({ arguments: settings }),
+        body: JSON.stringify({ arguments: settings, tfcConnectionId: tfcConnectionOf(values) }),
       });
       setPreview(out.files);
     } catch (e) {
@@ -452,6 +484,7 @@ function NewProjectDrawer({
           gitHost,
           connectionId,
           createRepo: newRepo,
+          tfcConnectionId: tfcConnectionOf(values),
           arguments: settings,
         }),
       });
@@ -735,7 +768,10 @@ function SettingsDrawer({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [values, setValues] = useState(toValues(project.providerConfig));
+  const [values, setValues] = useState({
+    ...toValues(project.providerConfig),
+    ...(project.tfcConnectionId ? { [TFC_CONNECTION]: project.tfcConnectionId } : {}),
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -746,7 +782,10 @@ function SettingsDrawer({
     try {
       await api(`/tf/stacks/projects/${project.id}/settings`, {
         method: "PUT",
-        body: JSON.stringify({ arguments: toSettings(stack.inputSchema, withBackend(values)) }),
+        body: JSON.stringify({
+          arguments: toSettings(stack.inputSchema, withBackend(values)),
+          tfcConnectionId: tfcConnectionOf(values),
+        }),
       });
       onSaved();
     } catch (e) {
