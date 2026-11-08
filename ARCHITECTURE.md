@@ -6,9 +6,9 @@ Decisions that shaped it are recorded in [`docs/adr/`](docs/adr/). The design-pa
 
 ## What infralift does
 
-infralift writes and maintains a customer's infrastructure as code in the customer's own repository. Every change arrives as a pull request they review and merge. It sells on three things:
+infralift writes and maintains a customer's infrastructure as code in the customer's own repository. Stack, import and adoption jobs write to a repository the customer works in, so they arrive as pull requests the customer reviews and merges. Codegen and template jobs commit directly to the branch they target (`TfProject.destBranch`, `main` by default), usually in a repository infralift created for that purpose. It sells on three things:
 
-- **Import with no downtime.** Existing Terraform, or resources built by hand in a cloud console, come under infralift only after a read-only plan proves nothing would change.
+- **Import that changes nothing running.** Existing Terraform, or resources built by hand in a cloud console, come under infralift only after a read-only plan proves no resource would change, so taking them over does not touch what is running.
 - **Cost comparison.** What the infrastructure costs now against the alternatives (planned).
 - **Security.** Customer-owned state, read-only checks, no stored cloud keys where OIDC is possible.
 
@@ -27,7 +27,7 @@ docs/          customer-facing documentation, and docs/adr/ decision records
 e2e/           end-to-end runbooks and a reference app
 ```
 
-The API is where the logic is. Inside `apps/api/src`:
+The API is where the logic is. Inside `apps/api/src` (the schema is beside it, in `apps/api/prisma`):
 
 | Layer | Directory | Responsibility | Talks to |
 | --- | --- | --- | --- |
@@ -35,7 +35,7 @@ The API is where the logic is. Inside `apps/api/src`:
 | Services | `services/` | The rules: what is allowed, in what order, for which org | lib, prisma |
 | Domain modules | `lib/` | Self-contained pieces: job state, delivery to git hosts, import scanning, stack rendering, HCL writing | each other, external APIs |
 | Connectors | `connectors/` | One adapter per cloud provider, turning its API into one inventory shape | provider APIs |
-| Data | `prisma/` | Schema and migrations; `schema.prisma` is the source of truth for the domain | Postgres |
+| Data | `apps/api/prisma/` | Schema and migrations; `schema.prisma` is the source of truth for the domain | Postgres |
 
 A rule belongs in a service. If you are looking for "why was this refused", start in `services/`.
 
@@ -63,10 +63,10 @@ Each is a well-known pattern, used under its usual name.
 | **Discriminated union** | `Project` kinds (above) | Each kind carries only its own fields |
 | **State machine** | [`lib/jobs/state.ts`](apps/api/src/lib/jobs/state.ts): `transition()` over `start` / `fail` / `succeed` | A job's stages can only move forward and end once |
 | **Template method** | [`lib/git/deliver.ts`](apps/api/src/lib/git/deliver.ts): `deliverChangeRequest()` | Every job that opens a PR follows the same steps, written once |
-| **Command + queue** | [`lib/jobs/queue.ts`](apps/api/src/lib/jobs/queue.ts): a `TfJob` row is claimed by one process, swept if left pending, marked interrupted if its process died | Jobs survive restarts and never run twice |
+| **Command + queue** | [`lib/jobs/queue.ts`](apps/api/src/lib/jobs/queue.ts): a `TfJob` row is claimed by one process, swept if left pending, marked interrupted if its process died | Jobs survive restarts and never run twice, as long as one API process runs at a time (see below) |
 | **Builder + serializer** | [`lib/import/check.ts`](apps/api/src/lib/import/check.ts) (a typed workflow object, written by the `yaml` library); [`lib/hcl/write.ts`](apps/api/src/lib/hcl/write.ts) (HCL blocks and attributes, printed as `terraform fmt` would) | Generated files are data; quoting and escaping happen in one place |
 | **Specification** | Stack rules as JSON Schema in each `apps/api/stacks/<slug>/stack.json`; import readiness in `lib/import/scan.ts` | Rules are data, not branches |
-| **Typed errors** | [`lib/errors.ts`](apps/api/src/lib/errors.ts): `InvalidInput` 400, `Unauthorized` 401, `NotFound` 404, `Conflict` 409, `Unprocessable` 422, `TooManyRequests` 429, `Upstream` 502 | Services throw; one place turns errors into responses |
+| **Typed errors** | [`lib/errors.ts`](apps/api/src/lib/errors.ts): `InvalidInput` and `InvalidBody` 400, `Unauthorized` 401, `NotFound` 404, `Conflict` 409, `Unprocessable` 422, `TooManyRequests` 429, `Upstream` 502 | Services throw; one place turns errors into responses |
 | **Shared contract** | [`lib/import/contract.ts`](apps/api/src/lib/import/contract.ts): the messages the import workflow writes and infralift reads back | Writer and reader cannot drift; a test fails if one changes alone |
 
 ## Flows
@@ -82,9 +82,11 @@ Creating a stack project, importing a module, adopting resources, approving a mi
 1. The queue claims the row for this process (`lib/jobs/queue.ts`).
 2. The pipeline runs it (`lib/tf/pipeline.ts`), one runner per job kind: `stack`, `import`, `codegen`, `template`.
 3. Each runner reports progress as state machine events through a `JobRun`; the dashboard polls the row.
-4. Runners that write to a customer's app repository deliver through `deliverChangeRequest()`: reuse this project's open PR or branch, commit once, open the PR. Nothing is pushed to the default branch.
+4. Runners that write to a customer's app repository (stack, import) deliver through `deliverChangeRequest()`: reuse this project's open PR or branch, commit once, open the PR. They never push to the default branch. Codegen and template runners commit directly to the project's `destBranch`.
 
 If the process dies mid-job, the next one to start marks the job `errored` with an "interrupted" message. Jobs are not retried automatically, because they write to customers' repositories.
+
+**One API process at a time.** Recovery treats every job claimed by another process as abandoned. That is true today: the Nomad job runs one copy and a deploy restarts it in place. Running two copies at once would make each one mark the other's live jobs as interrupted; it needs a heartbeat on claimed jobs first.
 
 ### Importing existing Terraform
 
@@ -119,12 +121,12 @@ pnpm --filter @infralift/api test
 
 The API needs `DATABASE_URL` (see `apps/api/.env.example`).
 
-A merge to `main` runs CI on GitHub-hosted runners. The deploy job then runs on a runner on the Framework host (declared in schellout's `scripts/ci/ci-repos.yml`): it builds the `infralift-{api,dashboard,admin}:local` images and restarts the `infralift` Nomad job. The API applies pending Prisma migrations when it starts, and starts the job worker.
+A merge to `main` runs CI on GitHub-hosted runners. The marketing site (`apps/web`) deploys to Cloudflare from that CI run. The deploy job for everything else runs on a runner on the Framework host (declared in schellout's `scripts/ci/ci-repos.yml`): it builds the `infralift-{api,dashboard,admin}:local` images and restarts the `infralift` Nomad job. The API applies pending Prisma migrations when it starts (`prisma migrate deploy` in its Dockerfile), then starts the job worker.
 
 ## Adding things
 
 - **A stack:** a directory under `apps/api/stacks/<slug>/` with `stack.json` and templates. `pnpm --filter @infralift/api validate:stacks` renders every combination and runs `tofu validate`.
-- **A provider connector:** a file in `connectors/` implementing `verify` and `assess`, registered in `connectors/index.ts`.
+- **A provider connector:** add the provider to `PROVIDERS` (and its label) in `packages/shared/src/index.ts`, then a file in `connectors/` implementing `verify` and `assess`, registered in `connectors/index.ts`.
 - **A job kind:** a runner in `lib/tf/pipeline.ts` that reports through a `JobRun`, delivering through `deliverChangeRequest()` if it writes to a customer repository.
 - **An error a route can return:** throw the matching class from `lib/errors.ts`; add a class only for a new status.
 

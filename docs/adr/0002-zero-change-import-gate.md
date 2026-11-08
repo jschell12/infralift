@@ -8,7 +8,7 @@ An existing Terraform module, or a set of resources built by hand, comes under i
 
 ## Why
 
-"Import with no downtime" is a selling point, and the only honest way to promise it is to prove the code already describes what is running before anything is applied. `-lock=false` keeps the check from blocking the customer's own pipeline.
+Importing without changing what is running is a selling point, and the only honest way to promise it is to prove the code already describes what is running before anything is applied. `-lock=false` keeps the check from blocking the customer's own pipeline.
 
 ## Cost
 

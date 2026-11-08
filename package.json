@@ -2,7 +2,7 @@
   "name": "infralift",
   "private": true,
   "version": "0.1.0",
-  "description": "Fixed-fee infrastructure migrations delivered as Terraform. Assess, migrate, and keep the platform.",
+  "description": "Infrastructure as code in your own repository: templates, assessments, and imports that change nothing running, delivered as pull requests.",
   "scripts": {
     "dev": "pnpm --parallel --filter './apps/*' dev",
     "build": "pnpm --filter './packages/*' build && pnpm --filter './apps/*' build",

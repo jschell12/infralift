@@ -14,4 +14,6 @@ Jobs open pull requests, push commits and create workspaces in customers' accoun
 
 ## Cost
 
+It assumes one API process at a time: recovery treats every claim by another process as abandoned. The Nomad job runs one copy and a deploy restarts it in place, so that holds today. Running two copies needs a heartbeat on claimed jobs first.
+
 A restart during a deploy interrupts whatever job was running, and the customer sees it errored and starts it again. Polling every 15 seconds means a job left pending can wait that long to start.

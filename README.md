@@ -1,10 +1,10 @@
 # infralift
 
-infralift writes and maintains your infrastructure as code in your own repository, and every change arrives as a pull request you review and merge. Start from an app template, assess a cloud account you already run, or import Terraform you already have, without touching what is running.
+infralift writes and maintains your infrastructure as code in your own repository. Changes to a repository you work in (stacks, imports, adoptions) arrive as pull requests you review and merge. Start from an app template, assess a cloud account you already run, or import Terraform you already have, without touching what is running.
 
 What it sells on:
 
-- **Import with no downtime.** Existing Terraform, or resources built by hand in a cloud console, come under infralift only after a read-only plan proves nothing would change.
+- **Import that changes nothing running.** Existing Terraform, or resources built by hand in a cloud console, come under infralift only after a read-only plan proves no resource would change, so taking them over does not touch what is running.
 - **Cost comparison** of what you run against the alternatives.
 - **Security.** Your state and cloud credentials stay with you; checks run in your CI.
 
@@ -40,7 +40,7 @@ pnpm --filter @infralift/api validate:stacks
 
 ## Deploying
 
-Merging to `main` deploys. CI runs on GitHub-hosted runners; the deploy job runs on the Framework host, builds the images there and restarts the `infralift` Nomad job. The API applies pending migrations as it starts. See [`ARCHITECTURE.md`](ARCHITECTURE.md#running-and-deploying).
+Merging to `main` deploys. CI runs on GitHub-hosted runners. The marketing site (`apps/web`) deploys to Cloudflare from CI. The API, dashboard and admin deploy from a runner on the Framework host, which builds their images there and restarts the `infralift` Nomad job; the API applies pending migrations as it starts. See [`ARCHITECTURE.md`](ARCHITECTURE.md#running-and-deploying).
 
 ## Connections
 
