@@ -79,6 +79,21 @@ describe("job queue", () => {
     expect(h.runJob).toHaveBeenCalledWith("j1");
   });
 
+  it("marks a job errored when it fails before its first step", async () => {
+    h.rows.push(row({ id: "j1" }));
+    h.runJob.mockRejectedValueOnce(new Error("job row vanished"));
+    await expect(claimAndRun("j1")).rejects.toThrow("job row vanished");
+    expect(h.rows[0]).toMatchObject({ status: "errored", statusMessage: "could not start: job row vanished" });
+  });
+
+  it("recovers jobs from before the queue existed (the migration claims them as pre-0017)", async () => {
+    h.rows.push(row({ id: "old-stuck", stage: "commit", status: "running", claimedAt: new Date(), claimedBy: "pre-0017" }));
+    expect(await recoverInterrupted("new-process")).toBe(1);
+    expect(h.rows[0].status).toBe("errored");
+    // and the sweep does not run it
+    expect(await sweep(5, 0)).toEqual([]);
+  });
+
   it("marks jobs a gone process left unfinished as interrupted, and only those", async () => {
     h.rows.push(
       row({ id: "stuck-running", stage: "commit", status: "running", claimedAt: new Date(), claimedBy: "old" }),

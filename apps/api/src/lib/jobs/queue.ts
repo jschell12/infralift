@@ -17,6 +17,10 @@ import { isTerminal, transition, type JobState, type Stage, type Status } from "
 //             not sit at "running" forever. It is not retried automatically:
 //             a job writes to a customer's repository, and a person decides
 //             whether to run it again.
+//
+// Assumes one API process at a time (the Nomad job runs one copy and a deploy
+// restarts it in place): recovery treats every claim by another process as
+// abandoned. Running two copies at once needs a heartbeat on claimed jobs.
 // ---------------------------------------------------------------------------
 
 /** This process, as recorded in claimedBy. */
@@ -35,10 +39,18 @@ export async function claim(jobId: string, workerId = WORKER_ID): Promise<boolea
   return count === 1;
 }
 
-/** Claims and runs a job; does nothing if it cannot be claimed. */
+/** Claims and runs a job; does nothing if it cannot be claimed. A failure
+ *  before the job's first step (the runners record their own errors after
+ *  that) marks it errored rather than leaving it claimed and pending. */
 export async function claimAndRun(jobId: string): Promise<void> {
   if (!(await claim(jobId))) return;
-  await runJob(jobId);
+  try {
+    await runJob(jobId);
+  } catch (err) {
+    const message = `could not start: ${err instanceof Error ? err.message : String(err)}`.slice(0, 280);
+    await prisma.tfJob.updateMany({ where: { id: jobId, status: "pending" }, data: { status: "errored", statusMessage: message } });
+    throw err;
+  }
 }
 
 /** Marks jobs claimed by other (gone) processes and never finished as errored.
