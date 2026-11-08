@@ -195,7 +195,15 @@ importsRouter.get("/:projectId/check", async (req, res) => {
     // run that made it planned with that code, so its result stands.
     if (pr && !run) {
       const head = await gh.client.getCommit({ repo: project.destRepo, sha: pr.headSha });
-      if (head?.subject === GENERATED_COMMIT_SUBJECT && head.parentSha) {
+      const generated = project.destPath ? `${project.destPath}/generated.tf` : "generated.tf";
+      // Only a commit that is exactly the check's own: its subject and nothing
+      // but generated.tf. Anything else gets no borrowed result.
+      if (
+        head?.subject === GENERATED_COMMIT_SUBJECT &&
+        head.parentSha &&
+        head.files.length === 1 &&
+        head.files[0] === generated
+      ) {
         run = await gh.client.getCheckRun({ repo: project.destRepo, sha: head.parentSha, name: CHECK_JOB_NAME });
       }
     }

@@ -50,6 +50,9 @@ export interface CheckRun {
   url: string;
   completedAt: string | null;
   annotations: { level: string; message: string }[];
+  /** output.title: where a check run created through the API (the import
+   *  check's run for its own generated commit) carries its result. */
+  title: string | null;
 }
 
 export interface GitHostClient {
@@ -66,7 +69,10 @@ export interface GitHostClient {
   /** A pull request's current head and state, by number. */
   getChangeRequest(opts: { repo: string; number: number }): Promise<ChangeRequestState | null>;
   /** A commit's subject line and first parent. */
-  getCommit(opts: { repo: string; sha: string }): Promise<{ subject: string; parentSha: string | null } | null>;
+  getCommit(opts: {
+    repo: string;
+    sha: string;
+  }): Promise<{ subject: string; parentSha: string | null; files: string[] } | null>;
   /** The newest check run called `name` on `sha`, with its annotations. */
   getCheckRun(opts: { repo: string; sha: string; name: string }): Promise<CheckRun | null>;
   /** New repository holding a copy of `template` (a GitHub "owner/repo"). */
@@ -176,8 +182,16 @@ function githubClient(token: string): GitHostClient {
       const res = await gh("GET", `/repos/${repo}/commits/${sha}`);
       if (res.status === 404) return null;
       if (!res.ok) throw new GitCommitError(`GitHub commit lookup failed (${res.status}) for ${repo}@${sha}`);
-      const c = (await res.json()) as { commit: { message: string }; parents: { sha: string }[] };
-      return { subject: c.commit.message.split("\n")[0], parentSha: c.parents[0]?.sha ?? null };
+      const c = (await res.json()) as {
+        commit: { message: string };
+        parents: { sha: string }[];
+        files?: { filename: string }[];
+      };
+      return {
+        subject: c.commit.message.split("\n")[0],
+        parentSha: c.parents[0]?.sha ?? null,
+        files: (c.files ?? []).map((f) => f.filename),
+      };
     },
 
     async getCheckRun({ repo, sha, name }) {
@@ -194,7 +208,7 @@ function githubClient(token: string): GitHostClient {
           html_url: string;
           started_at: string | null;
           completed_at: string | null;
-          output: { annotations_count: number };
+          output: { annotations_count: number; title: string | null };
         }[];
       };
       const run = [...body.check_runs].sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))[0];
@@ -215,6 +229,7 @@ function githubClient(token: string): GitHostClient {
         url: run.html_url,
         completedAt: run.completed_at,
         annotations,
+        title: run.output.title ?? null,
       };
     },
 
