@@ -21,6 +21,7 @@ import {
 import { buildMigrationOptions } from "../lib/options.js";
 import { buildReportExtras } from "../lib/report-extras.js";
 import { buildMigrationPlan } from "../lib/migration-plan.js";
+import { InvalidInput, NotFound, Upstream, handle } from "../lib/errors.js";
 
 export const assessmentsRouter = Router();
 
@@ -102,7 +103,7 @@ async function persistAssessmentResult(
 }
 
 // List assessments for the authenticated user's org.
-assessmentsRouter.get("/", async (req, res) => {
+assessmentsRouter.get("/", handle(async (req, res) => {
   const { orgId } = req.user!;
   const assessments = await prisma.assessment.findMany({
     where: { orgId },
@@ -111,26 +112,26 @@ assessmentsRouter.get("/", async (req, res) => {
   });
   const summaries = await Promise.all(assessments.map((a) => summarize(a.id)));
   res.json(summaries.filter(Boolean));
-});
+}));
 
 // Run an assessment against a connection. Synchronous for now — connector
 // calls are read-only and complete in seconds for small accounts.
-assessmentsRouter.post("/run", async (req, res) => {
+assessmentsRouter.post("/run", handle(async (req, res) => {
   const parsed = runSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid request", detail: parsed.error.message });
+    throw new InvalidInput("Invalid request", { detail: parsed.error.message });
   }
 
   const connection = await prisma.providerConnection.findUnique({
     where: { id: parsed.data.connectionId },
   });
   if (!connection || connection.orgId !== req.user!.orgId) {
-    return res.status(404).json({ error: "Connection not found" });
+    throw new NotFound("Connection not found");
   }
   // Connections also hold destinations that are not assessment sources, such
   // as a customer's Terraform Cloud org ("tfc"), which has no connector.
   if (!(PROVIDERS as readonly string[]).includes(connection.provider)) {
-    return res.status(400).json({ error: `${connection.provider} connections cannot be assessed` });
+    throw new InvalidInput(`${connection.provider} connections cannot be assessed`);
   }
 
   const assessment = await prisma.assessment.create({
@@ -159,15 +160,11 @@ assessmentsRouter.post("/run", async (req, res) => {
         error: err instanceof Error ? err.message : String(err),
       },
     });
-    return res.status(502).json({
-      error: "Assessment failed",
-      detail: err instanceof Error ? err.message : String(err),
-      assessmentId: assessment.id,
-    });
+    throw new Upstream("Assessment failed", { detail: err instanceof Error ? err.message : String(err), assessmentId: assessment.id });
   }
 
   res.status(201).json(await summarize(assessment.id));
-});
+}));
 
 /**
  * Assess from a snapshot the customer collected themselves.
@@ -177,7 +174,7 @@ assessmentsRouter.post("/run", async (req, res) => {
  * path takes the JSON that packages/collectors writes instead. Same analyzers,
  * same tables, no credential ever held.
  */
-assessmentsRouter.post("/from-bundle", async (req, res) => {
+assessmentsRouter.post("/from-bundle", handle(async (req, res) => {
   const { orgId } = req.user!;
 
   let parsedBundle;
@@ -185,7 +182,7 @@ assessmentsRouter.post("/from-bundle", async (req, res) => {
     parsedBundle = parseBundle(req.body?.snapshot ?? req.body);
   } catch (err) {
     if (err instanceof BundleError) {
-      return res.status(400).json({ error: err.message, detail: err.detail });
+      throw new InvalidInput(err.message, { detail: err.detail });
     }
     throw err;
   }
@@ -231,19 +228,19 @@ assessmentsRouter.post("/from-bundle", async (req, res) => {
     collectedAt: parsedBundle.collectedAt.toISOString(),
     ageDays: bundleAgeDays(parsedBundle),
   });
-});
+}));
 
 // Migration options: rank target providers against the assessed workload.
-assessmentsRouter.get("/:id/options", async (req, res) => {
+assessmentsRouter.get("/:id/options", handle(async (req, res) => {
   const assessment = await prisma.assessment.findUnique({
     where: { id: req.params.id },
     include: { inventory: true },
   });
   if (!assessment || assessment.orgId !== req.user!.orgId) {
-    return res.status(404).json({ error: "Not found" });
+    throw new NotFound("Not found");
   }
   if (assessment.status !== "completed") {
-    return res.status(400).json({ error: "Assessment not completed" });
+    throw new InvalidInput("Assessment not completed");
   }
 
   const report = await buildMigrationOptions({
@@ -261,10 +258,10 @@ assessmentsRouter.get("/:id/options", async (req, res) => {
     })),
   });
   res.json(report);
-});
+}));
 
 // Full report: summary + inventory + findings.
-assessmentsRouter.get("/:id", async (req, res) => {
+assessmentsRouter.get("/:id", handle(async (req, res) => {
   // Ownership first. summarize() looks the assessment up by id alone, which
   // was safe while Cloudflare Access admitted exactly one email address and
   // stopped being safe the moment signup opened to any Google or GitHub
@@ -275,10 +272,10 @@ assessmentsRouter.get("/:id", async (req, res) => {
     where: { id: req.params.id, orgId: req.user!.orgId },
     select: { id: true },
   });
-  if (!owned) return res.status(404).json({ error: "Not found" });
+  if (!owned) throw new NotFound("Not found");
 
   const summary = await summarize(req.params.id);
-  if (!summary) return res.status(404).json({ error: "Not found" });
+  if (!summary) throw new NotFound("Not found");
 
   const [inventory, findings] = await Promise.all([
     prisma.inventoryItem.findMany({ where: { assessmentId: req.params.id } }),
@@ -366,4 +363,4 @@ assessmentsRouter.get("/:id", async (req, res) => {
       resourceRef: f.resourceRef ?? undefined,
     })),
   });
-});
+}));

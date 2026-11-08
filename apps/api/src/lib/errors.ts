@@ -8,6 +8,7 @@ import type { Request, Response } from "express";
 // and anything else is left to the app's errorHandler (a 500, logged).
 //
 //   InvalidInput  400  the request asks for something that cannot be done
+//   Unauthorized  401  the credentials presented are not valid
 //   NotFound      404  no such thing in the caller's org
 //   Conflict      409  it exists already, or its state forbids this
 //   Unprocessable 422  values fail a template's schema
@@ -36,6 +37,12 @@ export class AppError extends Error {
 export class InvalidInput extends AppError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(400, message, details);
+  }
+}
+
+export class Unauthorized extends AppError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(401, message, details);
   }
 }
 

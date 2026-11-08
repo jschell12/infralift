@@ -145,3 +145,29 @@ describe("errorHandler", () => {
     expect(logged.length).toBe(1);
   });
 });
+
+describe("errorHandler and typed request errors", () => {
+  it("answers an AppError with its own status and body", async () => {
+    const { errorHandler: handler } = await import("./async-errors.js");
+    const { Conflict, Upstream } = await import("./errors.js");
+    for (const [err, status, body] of [
+      [new Conflict("taken", { readiness: "blocked" }), 409, { error: "taken", readiness: "blocked" }],
+      [new Upstream("tfc said 500"), 502, { error: "tfc said 500" }],
+    ] as const) {
+      const out = { status: 0, body: undefined as unknown };
+      const res = {
+        headersSent: false,
+        status(c: number) {
+          out.status = c;
+          return this;
+        },
+        json(b: unknown) {
+          out.body = b;
+          return this;
+        },
+      };
+      handler(err, { method: "GET", path: "/x" } as never, res as never, (() => {}) as never);
+      expect([out.status, out.body]).toEqual([status, body]);
+    }
+  });
+});
