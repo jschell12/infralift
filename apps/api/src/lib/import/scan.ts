@@ -16,47 +16,9 @@ export interface RepoFile {
   content: string;
 }
 
-export type BackendKind = "s3" | "r2" | "gcs" | "azurerm" | "tfc" | "local" | "other";
-
-export interface Backend {
-  kind: BackendKind;
-  /** The block's own type: s3, gcs, remote, cloud, ... ; null = none declared. */
-  type: string | null;
-  /** String settings from the block (bucket, key, region, prefix, ...). */
-  settings: Record<string, string>;
-  /** Settings come partly from -backend-config at init time. */
-  partial: boolean;
-  /** Candidate -backend-config files found beside the module. */
-  configFiles: string[];
-}
-
-export interface ScannedProvider {
-  name: string;
-  source: string;
-  version: string | null;
-}
-
-export type Readiness = "ready" | "adopt-tfc" | "blocked";
-
-export interface RootModule {
-  path: string;
-  backend: Backend;
-  providers: ScannedProvider[];
-  resources: number;
-  dataSources: number;
-  moduleCalls: number;
-  resourceTypes: Record<string, number>;
-  /** Input variables with no default and no value in an auto-loaded tfvars file. */
-  requiredVariables: string[];
-  /** Environment variables the plan check needs for the backend and providers. */
-  credentials: string[];
-  tool: "terraform" | "tofu";
-  readiness: Readiness;
-  notes: string[];
-  /** Adopted from a cloud account: the check generates the resource code
-   *  (plan -generate-config-out) before holding it to zero changes. */
-  generateConfig?: boolean;
-}
+// The scan's output types are shared with the dashboard (@infralift/shared).
+export type { Backend, BackendKind, Readiness, RootModule, ScannedProvider } from "@infralift/shared";
+import type { Backend, BackendKind, Readiness, RootModule, ScannedProvider } from "@infralift/shared";
 
 export interface ScanResult {
   roots: RootModule[];

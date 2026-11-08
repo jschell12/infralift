@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ProviderConnectionSummary } from "@infralift/shared";
+import type { ImportCheckResult, ProviderConnectionSummary } from "@infralift/shared";
 import { api } from "../lib/api";
 import { Chip, INPUT, LABEL, MONO, Note, PrimaryButton, type Tone } from "./ui";
 
@@ -295,15 +295,6 @@ function RootCard({
 }
 
 // -- the import check's result on an imported project's card ---------------------
-
-export interface ImportCheckResult {
-  state: "no-pr" | "waiting" | "running" | "passed" | "changes" | "needs-setup" | "error" | "failed";
-  message: string;
-  prUrl: string | null;
-  prState: "open" | "closed" | "merged" | null;
-  checkUrl: string | null;
-  checkedAt: string;
-}
 
 const CHECK_LOOK: Record<ImportCheckResult["state"], { tone: Tone; text: string }> = {
   "no-pr": { tone: "faint", text: "No pull request yet" },

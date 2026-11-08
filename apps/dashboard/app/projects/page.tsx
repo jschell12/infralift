@@ -5,12 +5,16 @@ import {
   isGitHost,
   PROVIDER_LABELS,
   type GitHost,
+  type CodegenProject,
+  type ImportedProject,
   type MigrationSummary,
+  type Project,
   type ProviderConnectionSummary,
+  type StackProject,
 } from "@infralift/shared";
 import { api } from "../../lib/api";
 import { AssessPanel } from "../../components/assess-panel";
-import { ImportCheckStatus, ImportPanel, type ImportCheckResult } from "../../components/import-panel";
+import { ImportCheckStatus, ImportPanel } from "../../components/import-panel";
 import { MigrationCard } from "../../components/migration-card";
 import {
   CARD,
@@ -66,26 +70,10 @@ interface Stack {
   example: Settings;
 }
 
-interface Project {
-  id: string;
-  name: string;
-  source: string;
-  stackSlug: string | null;
-  gitHost: GitHost;
-  assessmentId: string | null;
-  migrationTarget: string | null;
-  destRepo: string;
-  destBranch: string;
-  destPath: string;
-  tfcConnectionId: string | null;
-  providerConfig: Settings;
-  importJson: {
-    backend: { kind: string };
-    resources: number;
-    tool: "terraform" | "tofu";
-  } | null;
-  importCheckJson: ImportCheckResult | null;
-}
+// Projects come from the API as one type per kind (@infralift/shared). This
+// page lists the kinds it manages; template projects belong to /terraform.
+type ListedProject = CodegenProject | StackProject | ImportedProject;
+const isListed = (p: Project): p is ListedProject => p.kind === "stack" || p.kind === "codegen" || p.kind === "imported";
 
 interface Job {
   id: string;
@@ -159,7 +147,7 @@ function toSettings(schema: InputSchema, values: Record<string, string>): Settin
   return out;
 }
 
-function toValues(settings: Settings | undefined): Record<string, string> {
+function toValues(settings: Record<string, unknown> | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(settings ?? {})) out[k] = String(v);
   return out;
@@ -763,7 +751,7 @@ function SettingsDrawer({
   onClose,
   onSaved,
 }: {
-  project: Project;
+  project: StackProject;
   stack: Stack;
   onClose: () => void;
   onSaved: () => void;
@@ -823,11 +811,11 @@ function SettingsDrawer({
 
 export default function ProjectsPage() {
   const [stacks, setStacks] = useState<Stack[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ListedProject[]>([]);
   const [jobs, setJobs] = useState<Record<string, Job[]>>({});
   const [migrations, setMigrations] = useState<MigrationSummary[]>([]);
   const [creating, setCreating] = useState<null | { start: Start; highlight: string | null }>(null);
-  const [editing, setEditing] = useState<Project | null>(null);
+  const [editing, setEditing] = useState<StackProject | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -837,7 +825,7 @@ export default function ProjectsPage() {
       api<MigrationSummary[]>("/migrations"),
     ]);
     // Template projects belong to the older /terraform page.
-    const mine = p.filter((x) => ["stack", "codegen", "imported"].includes(x.source));
+    const mine = p.filter(isListed);
     setStacks(s);
     setProjects(mine);
     setMigrations(m);
@@ -904,7 +892,7 @@ export default function ProjectsPage() {
       )}
 
       {projects.map((p) => {
-        if (p.source === "codegen") {
+        if (p.kind === "codegen") {
           const list = jobs[p.id] ?? [];
           const latest = list[0];
           const from = String(p.providerConfig.source ?? "");
@@ -945,7 +933,7 @@ export default function ProjectsPage() {
             </div>
           );
         }
-        if (p.source === "imported") {
+        if (p.kind === "imported") {
           const list = jobs[p.id] ?? [];
           const latest = list[0];
           const pr = list.find((j) => j.prUrl)?.prUrl;
@@ -984,7 +972,8 @@ export default function ProjectsPage() {
             </div>
           );
         }
-        const stack = p.stackSlug ? stackBySlug.get(p.stackSlug) : undefined;
+        // Only stack projects are left.
+        const stack = stackBySlug.get(p.stackSlug);
         const list = jobs[p.id] ?? [];
         const latest = list[0];
         const pr = list.find((j) => j.prUrl)?.prUrl;

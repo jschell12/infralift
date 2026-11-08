@@ -2,7 +2,7 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import { GIT_HOSTS, isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
 import { z } from "zod";
-import type { Provider, ResourceInventoryItem } from "@infralift/shared";
+import type { Project, Provider, ResourceInventoryItem } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
 import { runJob } from "../lib/tf/pipeline.js";
 import {
@@ -15,6 +15,7 @@ import { getTfcClient } from "../lib/tf/tfc-client.js";
 import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
 import { requireAdmin, isAdmin } from "../lib/cf-auth.js";
 import { toCodegenSample } from "../lib/tf/sample.js";
+import { PROJECT_ROW_INCLUDE, ProjectShapeError, toProjectView } from "../lib/projects/view.js";
 import { TfcConnectionError, loadTfcConnection } from "../lib/tf/tfc-connection.js";
 import {
   deliveryFor,
@@ -163,19 +164,21 @@ tfRouter.post("/templates/:slug/versions/:tag/preview", async (req, res) => {
 
 tfRouter.get("/projects", async (req, res) => {
   const { orgId } = req.user!;
-  const projects = await prisma.tfProject.findMany({
+  const rows = await prisma.tfProject.findMany({
     where: { orgId },
-    include: {
-      templateVersion: {
-        select: { releaseTag: true, template: { select: { slug: true } } },
-      },
-      renderings: {
-        select: { id: true, fileName: true, commitSha: true, createdAt: true },
-        orderBy: { createdAt: "desc" },
-      },
-    },
+    include: PROJECT_ROW_INCLUDE,
     orderBy: { name: "asc" },
   });
+  // One bad row must not take the list down; it is logged by id instead.
+  const projects: Project[] = [];
+  for (const row of rows) {
+    try {
+      projects.push(toProjectView(row));
+    } catch (err) {
+      if (!(err instanceof ProjectShapeError)) throw err;
+      console.error(err.message);
+    }
+  }
   res.json(projects);
 });
 
