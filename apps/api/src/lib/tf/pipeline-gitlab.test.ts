@@ -27,9 +27,6 @@ const h = vi.hoisted(() => {
 
 vi.mock("../db.js", () => ({ prisma: h.prisma }));
 vi.mock("../crypto.js", () => ({ decryptToken: () => "token" }));
-vi.mock("./workspace.js", () => ({
-  getWorkspaceAdapter: () => ({ createWorkspace: vi.fn(), queueRun: vi.fn() }),
-}));
 
 const { runJob } = await import("./pipeline.js");
 const { getStack } = await import("../stacks/index.js");
