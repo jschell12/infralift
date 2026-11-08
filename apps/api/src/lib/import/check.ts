@@ -16,6 +16,12 @@ import type { RootModule } from "./scan.js";
 /** The check job's name, which GitHub uses as the check run's name. */
 export const CHECK_JOB_NAME = "Plan changes nothing";
 
+/** Subject of the commit the check makes when it generates resource code.
+ *  GitHub does not run workflows for a commit pushed with the job's own
+ *  token, so the result reader looks past this commit to the run that made
+ *  it (lib/import/result.ts). */
+export const GENERATED_COMMIT_SUBJECT = "infralift: generated code for imported resources";
+
 export interface CheckFile {
   path: string;
   content: string;
@@ -117,6 +123,7 @@ export function renderImportCheck(
   const tf = root.tool;
   const env = checkEnv(root);
   const groups = checkGroups(root);
+  const gen = root.generateConfig === true;
   const has = (c: CredentialGroup["cloud"]) => groups.some((g) => g.cloud === c);
   const label = root.path || "repository root";
   for (const p of [root.path, opts.backendConfigFile ?? ""]) {
@@ -219,7 +226,8 @@ export function renderImportCheck(
     "  workflow_dispatch: {}",
     "",
     "permissions:",
-    "  contents: read",
+    // Generating code commits it back to the pull request's branch.
+    gen ? "  contents: write" : "  contents: read",
     // Lets a sign-in step request an OIDC token. Unused with stored keys.
     ...(groups.length ? ["  id-token: write"] : []),
     "",
@@ -244,6 +252,8 @@ export function renderImportCheck(
       : []),
     "    steps:",
     "      - uses: actions/checkout@v4",
+    // The branch itself, not the merge ref, so a generated commit lands on it.
+    ...(gen ? ["        with:", "          ref: ${{ github.head_ref || github.ref_name }}"] : []),
     ...setup,
     ...oidcSteps,
     "",
@@ -255,6 +265,27 @@ export function renderImportCheck(
     "      - name: Init",
     ...withCreds(),
     `        run: ${tf} init -input=false${backendConfig}`,
+    ...(gen
+      ? [
+          "",
+          // Once generated.tf is committed it is the customer's code: the
+          // check never regenerates over it.
+          "      - name: Generate code for the imported resources",
+          "        id: gen",
+          `        if: hashFiles(${yamlString(`${root.path ? `${root.path}/` : ""}generated.tf`).replace(/"/g, "'")}) == ''`,
+          ...withCreds(),
+          "        run: |",
+          "          set +e",
+          `          ${tf} plan -input=false -lock=false -no-color -generate-config-out=generated.tf > generate.log 2>&1`,
+          "          set -e",
+          '          if [ ! -s generated.tf ]; then',
+          "            tail -n 80 generate.log",
+          '            echo "::error::The plan failed before it could compare anything. Nothing was changed."',
+          "            exit 1",
+          "          fi",
+          `          echo "generated $(grep -c '^resource ' generated.tf) resource blocks"`,
+        ]
+      : []),
     "",
     "      - name: Plan (read-only, no lock)",
     ...withCreds(),
@@ -273,6 +304,7 @@ export function renderImportCheck(
     '          changes=$(jq "$changing | length" plan.json)',
     "          total=$(jq '[.resource_changes[]? | select(.mode == \"managed\")] | length' plan.json)",
     "          drift=$(jq '[.resource_drift[]?] | length' plan.json)",
+    "          imports=$(jq '[.resource_changes[]? | select(.change.importing)] | length' plan.json)",
     "          {",
     '            echo "## infralift import check: $MODULE_LABEL"',
     '            echo ""',
@@ -284,6 +316,10 @@ export function renderImportCheck(
     '              echo "| Action | Resource |"',
     '              echo "| --- | --- |"',
     '              jq -r "$changing | .[] | \\"| \\(.change.actions | join(\\", \\")) | \\`\\(.address)\\` |\\"" plan.json',
+    "            fi",
+    '            if [ "$imports" -gt 0 ]; then',
+    '              echo ""',
+    '              echo "$imports resource(s) will be imported into state on apply. Importing changes nothing that is running."',
     "            fi",
     '            if [ "$drift" -gt 0 ]; then',
     '              echo ""',
@@ -299,6 +335,23 @@ export function renderImportCheck(
     '            echo "::error::$changes of $total resources would change."',
     "            exit 1",
     "          fi",
+    ...(gen
+      ? [
+          "",
+          // Committed whether or not the plan passed: a failing plan is fixed
+          // by editing this code, so the customer needs it in the branch.
+          "      - name: Commit the generated code",
+          "        if: always() && steps.gen.outcome == 'success'",
+          "        env:",
+          "          BRANCH: ${{ github.head_ref || github.ref_name }}",
+          "        run: |",
+          '          git config user.name "infralift"',
+          '          git config user.email "infralift@users.noreply.github.com"',
+          "          git add generated.tf",
+          `          git commit -m ${yamlString(GENERATED_COMMIT_SUBJECT)} -m "Generated by plan -generate-config-out from the resources as they run. Edit freely; the check never regenerates over it."`,
+          '          git push origin "HEAD:$BRANCH"',
+        ]
+      : []),
     "",
   ];
   return { path: file, content: lines.join("\n") };

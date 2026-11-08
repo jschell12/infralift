@@ -65,6 +65,8 @@ export interface GitHostClient {
   readFile(opts: { repo: string; path: string; ref: string }): Promise<string | null>;
   /** A pull request's current head and state, by number. */
   getChangeRequest(opts: { repo: string; number: number }): Promise<ChangeRequestState | null>;
+  /** A commit's subject line and first parent. */
+  getCommit(opts: { repo: string; sha: string }): Promise<{ subject: string; parentSha: string | null } | null>;
   /** The newest check run called `name` on `sha`, with its annotations. */
   getCheckRun(opts: { repo: string; sha: string; name: string }): Promise<CheckRun | null>;
   /** New repository holding a copy of `template` (a GitHub "owner/repo"). */
@@ -168,6 +170,14 @@ function githubClient(token: string): GitHostClient {
         headSha: pr.head.sha,
         state: pr.merged_at ? "merged" : pr.state === "open" ? "open" : "closed",
       };
+    },
+
+    async getCommit({ repo, sha }) {
+      const res = await gh("GET", `/repos/${repo}/commits/${sha}`);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new GitCommitError(`GitHub commit lookup failed (${res.status}) for ${repo}@${sha}`);
+      const c = (await res.json()) as { commit: { message: string }; parents: { sha: string }[] };
+      return { subject: c.commit.message.split("\n")[0], parentSha: c.parents[0]?.sha ?? null };
     },
 
     async getCheckRun({ repo, sha, name }) {
@@ -339,6 +349,9 @@ function gitlabClient(token: string): GitHostClient {
       throw new GitCommitError("reading a merge request's checks is not built for GitLab yet");
     },
     async getCheckRun() {
+      throw new GitCommitError("reading a merge request's checks is not built for GitLab yet");
+    },
+    async getCommit() {
       throw new GitCommitError("reading a merge request's checks is not built for GitLab yet");
     },
 

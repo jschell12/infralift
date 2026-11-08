@@ -8,7 +8,16 @@ import { GitCommitError } from "../lib/tf/git.js";
 import { runJob } from "../lib/tf/pipeline.js";
 import { readRepoForScan } from "../lib/import/read.js";
 import { scanRepo } from "../lib/import/scan.js";
-import { CHECK_JOB_NAME, checkEnv, checkSetupLines, checkWorkflowPath } from "../lib/import/check.js";
+import {
+  CHECK_JOB_NAME,
+  GENERATED_COMMIT_SUBJECT,
+  checkEnv,
+  checkSetupLines,
+  checkWorkflowPath,
+  isSafePath,
+} from "../lib/import/check.js";
+import { AdoptInputError, planAdoption, renderAdoption } from "../lib/import/adopt.js";
+import { PROVIDERS, type Provider, type ResourceInventoryItem } from "@infralift/shared";
 import { classifyCheck } from "../lib/import/result.js";
 
 // Importing an existing Terraform repository. GitHub only for now; GitLab
@@ -17,6 +26,10 @@ import { classifyCheck } from "../lib/import/result.js";
 //   POST /tf/imports/scan  read the repository, list its root modules
 //   POST /tf/imports       import one root module: a project, plus a pull
 //                          request adding the read-only plan check
+//   POST /tf/imports/from-assessment
+//                          adopt resources built by hand in a connected cloud
+//                          account, as they are: import blocks plus a check
+//                          that generates their code and must change nothing
 //   GET  /tf/imports/:projectId/check
 //                          what that check said, read back from GitHub
 
@@ -176,7 +189,16 @@ importsRouter.get("/:projectId/check", async (req, res) => {
   let result;
   try {
     const pr = Number.isInteger(number) ? await gh.client.getChangeRequest({ repo: project.destRepo, number }) : null;
-    const run = pr ? await gh.client.getCheckRun({ repo: project.destRepo, sha: pr.headSha, name: CHECK_JOB_NAME }) : null;
+    let run = pr ? await gh.client.getCheckRun({ repo: project.destRepo, sha: pr.headSha, name: CHECK_JOB_NAME }) : null;
+    // The check's own generated-code commit never gets a run of its own
+    // (GitHub does not trigger workflows for the job token's pushes); the
+    // run that made it planned with that code, so its result stands.
+    if (pr && !run) {
+      const head = await gh.client.getCommit({ repo: project.destRepo, sha: pr.headSha });
+      if (head?.subject === GENERATED_COMMIT_SUBJECT && head.parentSha) {
+        run = await gh.client.getCheckRun({ repo: project.destRepo, sha: head.parentSha, name: CHECK_JOB_NAME });
+      }
+    }
     result = classifyCheck(pr, run);
   } catch (err) {
     if (!(err instanceof GitCommitError)) throw err;
@@ -188,4 +210,107 @@ importsRouter.get("/:projectId/check", async (req, res) => {
     data: { importCheckJson: result as unknown as Prisma.InputJsonValue },
   });
   res.json(result);
+});
+
+const adoptSchema = z.object({
+  assessmentId: z.string().min(1),
+  repo: repoField,
+  ref: z.string().min(1).optional(),
+  connectionId: z.string().min(1).optional(),
+  name: importSchema.shape.name,
+  /** Where the adopted code goes in the repository. */
+  path: z.string().max(200).refine(isSafePath, "letters, digits, dot, dash, underscore and slash"),
+  backend: z.object({
+    kind: z.enum(["s3", "r2"]),
+    bucket: z.string(),
+    key: z.string(),
+    region: z.string().optional(),
+    accountId: z.string().optional(),
+  }),
+});
+
+importsRouter.post("/from-assessment", async (req, res) => {
+  const parsed = adoptSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const d = parsed.data;
+  const { orgId } = req.user!;
+  const assessment = await prisma.assessment.findFirst({
+    where: { id: d.assessmentId, orgId, status: "completed" },
+    include: { inventory: true },
+  });
+  if (!assessment) return res.status(404).json({ error: "completed assessment not found" });
+  if (!(PROVIDERS as readonly string[]).includes(assessment.provider)) {
+    return res.status(400).json({ error: `unknown provider ${assessment.provider}` });
+  }
+  const provider = assessment.provider as Provider;
+  const inventory: ResourceInventoryItem[] = assessment.inventory.map((i) => ({
+    provider,
+    type: i.type,
+    externalId: i.externalId,
+    name: i.name,
+    region: i.region ?? undefined,
+    monthlyCostCents: i.monthlyCostCents ?? undefined,
+    metadata: (i.metadata ?? undefined) as Record<string, unknown> | undefined,
+  }));
+  const path = d.path.replace(/^\/+|\/+$/g, "");
+  const plan = planAdoption(provider, inventory);
+  let rendered;
+  try {
+    rendered = renderAdoption({ provider, plan, backend: d.backend, path, label: path || "the repository root" });
+  } catch (err) {
+    if (err instanceof AdoptInputError) return res.status(400).json({ error: err.message, skipped: plan.skipped });
+    throw err;
+  }
+
+  const gh = await githubFor(res, orgId, d.connectionId);
+  if (!gh) return;
+  let ref: string;
+  try {
+    ref = d.ref || (await gh.client.defaultBranch(d.repo));
+    // Adoption writes new files; it must not land on top of Terraform that
+    // is already there (that is the repo import's job).
+    for (const f of rendered.files) {
+      const p = path ? `${path}/${f.path}` : f.path;
+      if (await gh.client.fileExists({ repo: d.repo, path: p, branch: ref })) {
+        return res.status(409).json({ error: `${p} already exists in ${d.repo}; pick another path` });
+      }
+    }
+  } catch (err) {
+    return githubFailure(res, err);
+  }
+
+  let project;
+  try {
+    project = await prisma.tfProject.create({
+      data: {
+        orgId,
+        name: d.name,
+        source: "imported",
+        assessmentId: assessment.id,
+        gitHost: "github",
+        gitConnectionId: gh.conn.id,
+        destRepo: d.repo,
+        destBranch: ref,
+        destPath: path,
+        providerConfig: {},
+        importJson: rendered.root as unknown as Prisma.InputJsonValue,
+      },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return res.status(409).json({ error: `a project named ${d.name} already exists` });
+    }
+    throw err;
+  }
+  const job = await prisma.tfJob.create({
+    data: {
+      projectId: project.id,
+      kind: "import",
+      argumentsJson: { backendConfigFile: null, adoptFiles: rendered.files },
+    },
+  });
+  void runJob(job.id).catch((err) => {
+    console.error(`tf job ${job.id} failed:`, err);
+  });
+  res.status(202).json({ project, job, adopted: plan.imports.length, skipped: plan.skipped });
 });

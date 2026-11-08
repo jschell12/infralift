@@ -765,6 +765,20 @@ const IMPORT_MAPPERS: Partial<Record<Provider, ImportMapper>> = {
   gcp: gcpImportMapper,
 };
 
+/** The import block codegen would write for one inventory item, or null when
+ *  it has no mapping. Shared with adoption (lib/import/adopt.ts). */
+export function importBlockFor(
+  provider: Provider,
+  item: ResourceInventoryItem
+): { to: string; id: string } | null {
+  return IMPORT_MAPPERS[provider]?.(item) ?? null;
+}
+
+/** Registry source and version constraint for a provider's Terraform provider. */
+export function providerSource(provider: Provider): { name: string; source: string; version: string } | null {
+  return PROVIDER_SOURCES[provider] ?? null;
+}
+
 function gcpImportMapper(
   item: ResourceInventoryItem
 ): { to: string; id: string } | null {

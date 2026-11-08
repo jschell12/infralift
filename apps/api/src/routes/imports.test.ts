@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 
 const h = vi.hoisted(() => ({
   connFindFirst: vi.fn(),
+  assessmentFindFirst: vi.fn(),
   projectFindFirst: vi.fn(),
   projectUpdate: vi.fn(),
   jobFindFirst: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock("../lib/db.js", () => ({
   prisma: {
     providerConnection: { findFirst: h.connFindFirst },
     tfProject: { create: h.projectCreate, findFirst: h.projectFindFirst, update: h.projectUpdate },
+    assessment: { findFirst: h.assessmentFindFirst },
     tfJob: { create: h.jobCreate, findFirst: h.jobFindFirst },
   },
 }));
@@ -168,7 +170,11 @@ describe("POST /tf/imports", () => {
 });
 
 describe("GET /tf/imports/:projectId/check", () => {
-  function fakeChecks(opts: { conclusion: string; message: string; level: string } | null, prStatus = 200) {
+  function fakeChecks(
+    opts: { conclusion: string; message: string; level: string } | null,
+    prStatus = 200,
+    gen?: { parentRun: { conclusion: string; message: string; level: string } }
+  ) {
     const json = (body: unknown, code = 200) => new Response(JSON.stringify(body), { status: code });
     const calls: string[] = [];
     vi.stubGlobal(
@@ -180,6 +186,19 @@ describe("GET /tf/imports/:projectId/check", () => {
           return prStatus === 200
             ? json({ html_url: "https://github.com/acme/infra/pull/4", state: "open", merged_at: null, head: { sha: "head1" } })
             : json({ message: "no" }, prStatus);
+        if (path === "/repos/acme/infra/commits/head1")
+          return json({
+            commit: { message: gen ? "infralift: generated code for imported resources\n\nbody" : "fix the bucket" },
+            parents: [{ sha: "parent1" }],
+          });
+        if (path.startsWith("/repos/acme/infra/commits/parent1/check-runs"))
+          return json({
+            check_runs: gen
+              ? [{ id: 8, status: "completed", conclusion: gen.parentRun.conclusion, html_url: "https://github.com/acme/infra/runs/8", started_at: "2026-11-08T00:00:00Z", completed_at: "2026-11-08T00:01:00Z", output: { annotations_count: 1 } }]
+              : [],
+          });
+        if (path.startsWith("/repos/acme/infra/check-runs/8/annotations"))
+          return json([{ annotation_level: gen!.parentRun.level, message: gen!.parentRun.message }]);
         if (path.startsWith("/repos/acme/infra/commits/head1/check-runs"))
           return json({
             check_runs: opts
@@ -209,6 +228,12 @@ describe("GET /tf/imports/:projectId/check", () => {
     expect(h.projectUpdate.mock.calls[0][0].data.importCheckJson.state).toBe("changes");
   });
 
+  it("takes the result from the run that made the generated-code commit", async () => {
+    fakeChecks(null, 200, { parentRun: { conclusion: "success", level: "notice", message: "No changes: all 3 resources match the code." } });
+    const out = await call("/:projectId/check", {}, "get", { projectId: "p1" });
+    expect(out.body).toMatchObject({ state: "passed", message: "No changes: all 3 resources match the code." });
+  });
+
   it("waits when the check has not run", async () => {
     fakeChecks(null);
     expect((await call("/:projectId/check", {}, "get", { projectId: "p1" })).body.state).toBe("waiting");
@@ -226,5 +251,70 @@ describe("GET /tf/imports/:projectId/check", () => {
   it("404s another org's project", async () => {
     h.projectFindFirst.mockResolvedValue(null);
     expect((await call("/:projectId/check", {}, "get", { projectId: "p1" })).status).toBe(404);
+  });
+});
+
+describe("POST /tf/imports/from-assessment", () => {
+  const backend = { kind: "r2", bucket: "acme-state", key: "do/terraform.tfstate", accountId: "0123456789abcdef0123456789abcdef" };
+  const inventory = [
+    { type: "digitalocean:droplet", externalId: "123", name: "web-1", region: "nyc3", monthlyCostCents: 600, metadata: null },
+    { type: "digitalocean:database", externalId: "db-uuid", name: "main", region: null, monthlyCostCents: 1500, metadata: null },
+    { type: "digitalocean:app", externalId: "app-uuid", name: "site", region: null, monthlyCostCents: 500, metadata: null },
+  ];
+
+  beforeEach(() => {
+    h.assessmentFindFirst.mockResolvedValue({ id: "as1", provider: "digitalocean", inventory });
+    const json = (body: unknown, code = 200) => new Response(JSON.stringify(body), { status: code });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const path = url.replace("https://api.github.com", "");
+        if (path === "/repos/acme/infra") return json({ default_branch: "main" });
+        if (path.startsWith("/repos/acme/infra/contents/")) return json({}, 404);
+        return json({ message: `unhandled ${path}` }, 500);
+      })
+    );
+  });
+
+  it("stores an adoption that generates its code, and queues the import job with the files", async () => {
+    const out = await call("/from-assessment", { assessmentId: "as1", repo: "acme/infra", name: "acme-do", path: "infra/do", backend });
+    expect(out.status).toBe(202);
+    expect(h.assessmentFindFirst.mock.calls[0][0].where).toEqual({ id: "as1", orgId: "org-a", status: "completed" });
+    expect(out.body).toMatchObject({ adopted: 2 });
+    expect((out.body.skipped as { type: string }[]).map((s) => s.type)).toEqual(["digitalocean:app"]);
+    const data = h.projectCreate.mock.calls[0][0].data;
+    expect(data).toMatchObject({ source: "imported", assessmentId: "as1", destPath: "infra/do", destBranch: "main" });
+    expect(data.importJson.generateConfig).toBe(true);
+    expect(data.importJson.credentials).toEqual(["DIGITALOCEAN_TOKEN", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]);
+    const files = h.jobCreate.mock.calls[0][0].data.argumentsJson.adoptFiles as { path: string; content: string }[];
+    expect(files.map((f) => f.path)).toEqual(["versions.tf", "provider.tf", "imports.tf"]);
+    expect(files[2].content).toContain('to = digitalocean_droplet.web_1');
+    expect(files[2].content).toContain('id = "123"');
+  });
+
+  it("refuses to write over existing files", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.endsWith("/repos/acme/infra")
+          ? new Response(JSON.stringify({ default_branch: "main" }))
+          : new Response(JSON.stringify({ sha: "x" }))
+      )
+    );
+    const out = await call("/from-assessment", { assessmentId: "as1", repo: "acme/infra", name: "acme-do", path: "infra/do", backend });
+    expect(out.status).toBe(409);
+    expect(h.projectCreate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a bad backend and an unsafe path before touching GitHub", async () => {
+    const bad = await call("/from-assessment", { assessmentId: "as1", repo: "acme/infra", name: "acme-do", path: "infra/do", backend: { ...backend, bucket: "Bad Bucket" } });
+    expect(bad.status).toBe(400);
+    const unsafe = await call("/from-assessment", { assessmentId: "as1", repo: "acme/infra", name: "acme-do", path: "infra/$(x)", backend });
+    expect(unsafe.status).toBe(400);
+  });
+
+  it("404s another org's assessment", async () => {
+    h.assessmentFindFirst.mockResolvedValue(null);
+    expect((await call("/from-assessment", { assessmentId: "as1", repo: "acme/infra", name: "acme-do", path: "x", backend })).status).toBe(404);
   });
 });

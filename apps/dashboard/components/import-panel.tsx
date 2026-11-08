@@ -363,3 +363,87 @@ export function ImportCheckStatus({ projectId, last }: { projectId: string; last
     </div>
   );
 }
+
+// -- adopt a connected account's resources as they run ---------------------------
+
+/** On an assessment: adopt what it found, unchanged, into a repository. The
+ *  check generates the resource code and must change nothing. */
+export function AdoptCard({ assessmentId, provider }: { assessmentId: string; provider: string }) {
+  const [repo, setRepo] = useState("");
+  const [path, setPath] = useState(`infra/${provider}`);
+  const [name, setName] = useState(suggestName(provider, "adopted"));
+  const [kind, setKind] = useState<"r2" | "s3">("r2");
+  const [bucket, setBucket] = useState("");
+  const [key, setKey] = useState(`${provider}/terraform.tfstate`);
+  const [region, setRegion] = useState("us-east-1");
+  const [accountId, setAccountId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [skipped, setSkipped] = useState<{ type: string; name: string; reason: string }[]>([]);
+
+  async function adopt() {
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await api<{ adopted: number; skipped: typeof skipped }>("/tf/imports/from-assessment", {
+        method: "POST",
+        body: JSON.stringify({
+          assessmentId,
+          repo: repo.trim(),
+          path: path.trim(),
+          name: name.trim(),
+          backend: kind === "r2" ? { kind, bucket, key, accountId } : { kind, bucket, key, region },
+        }),
+      });
+      setSkipped(out.skipped);
+      window.location.href = "/projects";
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const field = (label: string, value: string, set: (v: string) => void, placeholder = "") => (
+    <div>
+      <label className={LABEL}>{label}</label>
+      <input className={INPUT} value={value} placeholder={placeholder} onChange={(e) => set(e.target.value)} />
+    </div>
+  );
+
+  return (
+    <div>
+      <p className="mb-4 text-[13px] leading-relaxed text-muted">
+        Put what this assessment found under Terraform without changing any of it. infralift opens a pull request
+        with import blocks only; the check generates the resource code from what is running and passes when the plan
+        imports and changes nothing. State goes in a bucket you own.
+      </p>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        {field("Repository", repo, setRepo, "owner/name")}
+        {field("Directory", path, setPath)}
+        {field("Project name", name, setName)}
+        <div>
+          <label className={LABEL}>State bucket</label>
+          <select className={INPUT} value={kind} onChange={(e) => setKind(e.target.value as "r2" | "s3")}>
+            <option value="r2">Cloudflare R2</option>
+            <option value="s3">AWS S3</option>
+          </select>
+        </div>
+        {field("Bucket", bucket, setBucket, "acme-terraform-state")}
+        {field("State key", key, setKey)}
+        {kind === "r2"
+          ? field("Cloudflare account id", accountId, setAccountId, "32 hex characters")
+          : field("Region", region, setRegion)}
+      </div>
+      <PrimaryButton onClick={adopt} disabled={busy || !repo || !bucket || !name}>
+        {busy ? "Opening pull request…" : "Adopt as it runs"}
+      </PrimaryButton>
+      {error && <div className="text-danger text-sm mt-3">{error}</div>}
+      {skipped.length > 0 && (
+        <div className="text-xs text-warn mt-3">
+          Not adopted yet: {skipped.map((s) => `${s.name} (${s.type})`).join(", ")}
+        </div>
+      )}
+    </div>
+  );
+}
