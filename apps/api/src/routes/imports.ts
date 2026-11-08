@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { decryptToken } from "../lib/crypto.js";
 import { gitHostClient } from "../lib/git/hosts.js";
-import { GitCommitError } from "../lib/tf/git.js";
+import { GitCommitError } from "../lib/git/errors.js";
 import { runJob } from "../lib/tf/pipeline.js";
 import { readRepoForScan } from "../lib/import/read.js";
 import { scanRepo } from "../lib/import/scan.js";

@@ -7,7 +7,7 @@ import {
   fileExists,
   GitCommitError,
   openPullRequest,
-} from "./git.js";
+} from "./github.js";
 
 // A GitHub stand-in that records calls and answers the handful of endpoints
 // the git data API walk touches. The sequence (ref -> commit -> blobs -> tree
