@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Project, TemplateProject } from "@infralift/shared";
 import { api } from "../../lib/api";
 import { Drawer } from "../../components/ui";
 
@@ -34,20 +35,8 @@ interface TfTemplate {
   versions: TemplateVersion[];
 }
 
-interface TfProject {
-  id: string;
-  name: string;
-  destRepo: string;
-  destPath: string;
-  destBranch: string;
-  templateVersion: { releaseTag: string; template: { slug: string } };
-  renderings: {
-    id: string;
-    fileName: string;
-    commitSha: string | null;
-    createdAt: string;
-  }[];
-}
+// Template projects only; the API returns every kind (@infralift/shared).
+type TfProject = TemplateProject;
 
 interface TfJob {
   id: string;
@@ -172,7 +161,7 @@ export default function TerraformPage() {
   }, []);
 
   const loadProjects = useCallback(async () => {
-    const rows = await api<TfProject[]>(`/tf/projects`);
+    const rows = (await api<Project[]>(`/tf/projects`)).filter((p): p is TfProject => p.kind === "template");
     setProjects(rows);
     setSelectedProjectId((cur) => cur || rows[0]?.id || "");
   }, []);

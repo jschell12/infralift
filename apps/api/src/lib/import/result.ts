@@ -5,33 +5,9 @@ import { READ } from "./contract.js";
 // annotation per outcome (lib/import/check.ts), and this turns the check run
 // and those annotations into a state the dashboard can show.
 
-export type ImportCheckState =
-  /** No pull request recorded yet: the import job has not opened it. */
-  | "no-pr"
-  /** Opened, but no run of the check yet (Actions disabled, or queued behind others). */
-  | "waiting"
-  | "running"
-  /** The plan changed nothing: safe to take over. */
-  | "passed"
-  /** The plan would change resources. */
-  | "changes"
-  /** Credentials or variables are not set. */
-  | "needs-setup"
-  /** The plan errored before it could compare. */
-  | "error"
-  /** Cancelled, timed out, or failed in a way the check did not explain. */
-  | "failed";
-
-export interface ImportCheckResult {
-  state: ImportCheckState;
-  /** One line for the dashboard, from the check's own annotation when there is one. */
-  message: string;
-  prUrl: string | null;
-  prState: ChangeRequestState["state"] | null;
-  checkUrl: string | null;
-  headSha: string | null;
-  checkedAt: string;
-}
+// The result types are shared with the dashboard (@infralift/shared).
+export type { ImportCheckResult, ImportCheckState } from "@infralift/shared";
+import type { ImportCheckResult } from "@infralift/shared";
 
 export function classifyCheck(
   pr: ChangeRequestState | null,
