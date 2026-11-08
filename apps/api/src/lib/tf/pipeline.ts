@@ -715,7 +715,7 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
           "The import is safe to finish when the check passes, which means the plan changes nothing: the code already matches what is running, so taking it over cannot cause downtime. If it fails, the job summary lists each resource that would change.",
           "",
           env.length
-            ? `Set these before the check can run (Settings, Secrets and variables, Actions):\n\n${setup.map((l) => `- ${l}`).join("\n")}\n\nOIDC is the better choice where a cloud offers it: CI signs in as a role for each run and no key is stored. Either way, give the credentials read-only roles. A plan runs provider code and data sources with whatever the secrets allow, so read-only on state is not read-only on the account unless the roles are.`
+            ? `Set these before the check can run (Settings, Secrets and variables, Actions):\n\n${setup.map((l) => `- ${l}`).join("\n")}\n\nOIDC is the better choice where a cloud offers it: CI signs in as a role for each run and no key is stored. This check runs on pull requests, so the role's trust policy (AWS) or federated credential (Azure, Google Cloud) must allow pull-request runs from this repository, not only \`main\`; on AWS that is the subject \`repo:${repo}:pull_request\`. Either way, give the credentials read-only roles. A plan runs provider code and data sources with whatever the secrets allow, so read-only on state is not read-only on the account unless the roles are.`
             : "The check needs no secrets.",
           ...(root.notes.length ? ["", "Notes from the scan:", "", ...root.notes.map((n) => `- ${n}`)] : []),
         ].join("\n"),

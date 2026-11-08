@@ -416,6 +416,8 @@ model TfProject {
   // Set for imported projects: the scan of the root module at destPath
   // (lib/import/scan.ts RootModule). The job adds a read-only plan check.
   importJson        Json?
+  // Last result of that check, read back from GitHub (lib/import/result.ts).
+  importCheckJson   Json?
   // Where destRepo lives (github | gitlab), and which of the org's
   // connections to use there. Null connection = the org's first one.
   gitHost           String   @default("github")

@@ -10,7 +10,7 @@ import {
 } from "@infralift/shared";
 import { api } from "../../lib/api";
 import { AssessPanel } from "../../components/assess-panel";
-import { ImportPanel } from "../../components/import-panel";
+import { ImportCheckStatus, ImportPanel, type ImportCheckResult } from "../../components/import-panel";
 import { MigrationCard } from "../../components/migration-card";
 import {
   CARD,
@@ -83,6 +83,7 @@ interface Project {
     resources: number;
     tool: "terraform" | "tofu";
   } | null;
+  importCheckJson: ImportCheckResult | null;
 }
 
 interface Job {
@@ -926,20 +927,20 @@ export default function ProjectsPage() {
                 <a href={`https://github.com/${p.destRepo}`}>{p.destRepo}</a>@{p.destBranch}
                 {p.destPath && ` · ${p.destPath}`}
               </div>
-              {latest ? (
-                <div className="flex items-center gap-2 text-sm">
+              {/* Once the pull request exists, the check is what matters; the
+                  job row stays only while it is running or if it failed. */}
+              {latest && (!pr || latest.status !== "success") && (
+                <div className="flex items-center gap-2 text-sm mb-2">
                   <Chip tone={STATUS_TONE[latest.status] ?? "muted"}>
                     {latest.stage} · {latest.status}
                   </Chip>
                   <span className="text-muted truncate">{latest.statusMessage}</span>
-                  {pr && (
-                    <a className="ml-auto shrink-0 whitespace-nowrap text-accent text-sm font-semibold" href={pr}>
-                      View import check
-                    </a>
-                  )}
                 </div>
+              )}
+              {pr ? (
+                <ImportCheckStatus projectId={p.id} last={p.importCheckJson} />
               ) : (
-                <div className="text-sm text-faint">No jobs yet.</div>
+                !latest && <div className="text-sm text-faint">No jobs yet.</div>
               )}
             </div>
           );
