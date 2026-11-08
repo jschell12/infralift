@@ -215,6 +215,8 @@ assessmentsRouter.post("/from-bundle", handle(async (req, res) => {
         error: err instanceof Error ? err.message : String(err),
       },
     });
+    // Sent by hand on purpose: a failed bundle assessment is our fault (500),
+    // and the body carries the assessment id the dashboard links to.
     return res.status(500).json({
       error: "Could not read that snapshot",
       detail: err instanceof Error ? err.message : String(err),

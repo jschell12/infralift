@@ -88,7 +88,8 @@ export function handle(fn: (req: Request, res: Response) => Promise<unknown>) {
     try {
       await fn(req, res);
     } catch (err) {
-      if (!(err instanceof AppError)) throw err;
+      // A response already sent cannot be replaced; let Express close it.
+      if (!(err instanceof AppError) || res.headersSent) throw err;
       res.status(err.status).json(err.body());
     }
   };
