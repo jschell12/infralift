@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import {
   checkEnv,
   checkGroups,
@@ -35,7 +36,7 @@ describe("renderImportCheck", () => {
     expect(content).not.toMatch(/\bapply\b(?! nothing)(?!\.)/);
     expect(content).not.toContain("-auto-approve");
     expect(content).toContain("permissions:\n  contents: read");
-    expect(content).toContain('working-directory: "infra/prod"');
+    expect(parse(content).jobs.plan.defaults.run["working-directory"]).toBe("infra/prod");
     // The outcome annotations infralift reads back (lib/import/result.ts).
     expect(content).toContain('msg="No changes: all $total resources match the code."');
     expect(content).toContain('msg="$changes of $total resources would change."');
@@ -63,9 +64,10 @@ describe("renderImportCheck", () => {
     expect(path).toBe(".github/workflows/infralift-import-root.yml");
     expect(content).toContain("opentofu/setup-opentofu@v1");
     expect(content).toContain('tofu init -input=false -backend-config="$BACKEND_CONFIG"');
-    expect(content).toContain('BACKEND_CONFIG: "prod.tfbackend"');
-    expect(content).toContain('working-directory: "."');
-    expect(content).toContain('- "**/*.tf"');
+    const wf = parse(content);
+    expect(wf.jobs.plan.env.BACKEND_CONFIG).toBe("prod.tfbackend");
+    expect(wf.jobs.plan.defaults.run["working-directory"]).toBe(".");
+    expect(wf.on.pull_request.paths).toContain("**/*.tf");
   });
 
   it("gives a nested module's config file relative to the module", () => {
@@ -73,8 +75,8 @@ describe("renderImportCheck", () => {
       { path: "envs/prod/main.tf", content: 'terraform {\n  backend "s3" {}\n}\nresource "aws_s3_bucket" "b" {}\n' },
       { path: "envs/prod/backend.hcl", content: 'bucket = "x"\n' },
     ]);
-    expect(renderImportCheck(nested, { backendConfigFile: "envs/prod/backend.hcl" }).content).toContain(
-      'BACKEND_CONFIG: "backend.hcl"'
+    expect(parse(renderImportCheck(nested, { backendConfigFile: "envs/prod/backend.hcl" }).content).jobs.plan.env.BACKEND_CONFIG).toBe(
+      "backend.hcl"
     );
   });
 });
@@ -99,7 +101,7 @@ describe("paths never reach the shell as code", () => {
 
   it("names the module in the summary through an env var", () => {
     const { content } = renderImportCheck(PROD);
-    expect(content).toContain('MODULE_LABEL: "infra/prod"');
+    expect(parse(content).jobs.plan.env.MODULE_LABEL).toBe("infra/prod");
     expect(content).toContain('echo "## infralift import check: $MODULE_LABEL"');
   });
 

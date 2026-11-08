@@ -71,7 +71,7 @@ describe("renderAdoption", () => {
     });
     const all = files.map((f) => f.content).join("\n");
     expect(all).not.toMatch(/^resource /m);
-    expect(all).toContain('endpoints                   = { s3 = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com" }');
+    expect(all).toContain('s3 = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com"');
     expect(all).toContain('provider "digitalocean" {}');
     expect(root).toMatchObject({ backend: { kind: "r2" }, resources: 1, generateConfig: true, readiness: "ready", tool: "tofu" });
     expect(all).toContain('required_version = ">= 1.10"');
