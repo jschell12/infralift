@@ -1,9 +1,13 @@
-// GitHub commit adapter (REST contents API). Idempotent: committing content
-// identical to what is already on the branch is a no-op.
+// GitHub's half of the GitHostClient adapter (lib/git/hosts.ts): the REST
+// calls behind it. Callers use gitHostClient("github", token), not these
+// functions directly. Committing content identical to what is already on the
+// branch is a no-op.
+
+import { GitCommitError } from "./errors.js";
+export { GitCommitError } from "./errors.js";
 
 const GITHUB_API = "https://api.github.com";
 
-export class GitCommitError extends Error {}
 
 interface ExistingFile {
   sha: string;

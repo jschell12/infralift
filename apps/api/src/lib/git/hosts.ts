@@ -4,11 +4,12 @@ import {
   commitFiles as githubCommitFiles,
   createBranch as githubCreateBranch,
   deleteBranch as githubDeleteBranch,
+  ensureRepo as githubEnsureRepo,
   fileExists as githubFileExists,
   findOpenPullRequest,
   GitCommitError,
   openPullRequest,
-} from "../tf/git.js";
+} from "./github.js";
 import { GITLAB_API } from "../../connectors/gitlab.js";
 
 // ---------------------------------------------------------------------------
@@ -75,6 +76,13 @@ export interface GitHostClient {
   }): Promise<{ subject: string; parentSha: string | null; files: string[] } | null>;
   /** The newest check run called `name` on `sha`, with its annotations. */
   getCheckRun(opts: { repo: string; sha: string; name: string }): Promise<CheckRun | null>;
+  /** The repository, created empty (with an initial commit) if it does not
+   *  exist. `created` says which. */
+  ensureRepo(opts: {
+    repo: string;
+    description?: string;
+    private?: boolean;
+  }): Promise<{ repo: string; defaultBranch: string; created: boolean }>;
   /** New repository holding a copy of `template` (a GitHub "owner/repo"). */
   createFromTemplate(opts: { template: string; repo: string; private: boolean }): Promise<CreatedRepo>;
   fileExists(opts: { repo: string; path: string; branch: string }): Promise<boolean>;
@@ -267,6 +275,7 @@ function githubClient(token: string): GitHostClient {
       throw new GitCommitError(`${created.full_name} was created but its first commit never appeared`);
     },
 
+    ensureRepo: (o) => githubEnsureRepo({ token, ...o }),
     fileExists: (o) => githubFileExists({ token, ...o }),
     createBranch: async (o) => {
       await githubCreateBranch({ token, ...o });
@@ -359,6 +368,10 @@ function gitlabClient(token: string): GitHostClient {
       return res.text();
     },
 
+    // Codegen repositories are GitHub-only today.
+    async ensureRepo() {
+      throw new GitCommitError("creating an empty repository is not built for GitLab yet");
+    },
     // Import checks are GitHub Actions workflows; GitLab follows later.
     async getChangeRequest() {
       throw new GitCommitError("reading a merge request's checks is not built for GitLab yet");
