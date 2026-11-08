@@ -93,6 +93,67 @@ const SCOPE_HELP: Record<Provider, string> = {
 
 const COLS = "grid-cols-[1fr_1fr_90px]";
 
+/** HCP Terraform / TFE: where a project's workspace lives when it uses a
+ *  Terraform Cloud backend. Stored by /workspaces/connections as a "tfc"
+ *  connection; a project picks one in its backend settings. */
+function TfcConnectCard({ onAdded }: { onAdded: () => void }) {
+  const [label, setLabel] = useState("");
+  const [organization, setOrganization] = useState("");
+  const [hostname, setHostname] = useState("");
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [added, setAdded] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    setAdded(null);
+    try {
+      const out = await api<{ status: string; organization: string }>("/workspaces/connections", {
+        method: "POST",
+        body: JSON.stringify({ label, organization, hostname: hostname || undefined, token }),
+      });
+      setAdded(out.status === "valid" ? `Connected to ${out.organization}.` : `Saved, but ${out.organization} could not be read with that token.`);
+      setLabel("");
+      setToken("");
+      onAdded();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardTitle>Connect Terraform Cloud</CardTitle>
+      <p className="mb-4 text-[13px] text-muted">
+        For projects that keep state in HCP Terraform or Terraform Enterprise. infralift creates each project&apos;s
+        workspace in this organization, and the generated code points at it.
+      </p>
+      <form onSubmit={submit}>
+        <label className={LABEL}>Label</label>
+        <input className={`${INPUT} mb-4`} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. platform" required />
+        <label className={LABEL}>Organization</label>
+        <input className={`${INPUT} mb-4`} value={organization} onChange={(e) => setOrganization(e.target.value)} required />
+        <label className={LABEL}>Hostname (Terraform Enterprise only)</label>
+        <input className={`${INPUT} mb-4`} value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="app.terraform.io" />
+        <label className={LABEL}>Team or user API token</label>
+        <input className={`${INPUT} mb-3.5 font-mono`} type="password" value={token} onChange={(e) => setToken(e.target.value)} required />
+        <div className="mb-5 rounded-lg border border-border bg-bg p-3 font-mono text-xs leading-relaxed text-muted">
+          A team token with &quot;Manage workspaces&quot; on the organization is enough. infralift creates workspaces and
+          queues plans; it never applies.
+        </div>
+        <PrimaryButton disabled={busy}>{busy ? "Verifying..." : "Connect & verify"}</PrimaryButton>
+        {added && <div className="mt-2 text-sm text-accent">{added}</div>}
+        {error && <div className="mt-2 text-sm text-danger">{error}</div>}
+      </form>
+    </Card>
+  );
+}
+
 export default function ConnectionsPage() {
   const [connections, setConnections] = useState<ProviderConnectionSummary[]>([]);
   const [provider, setProvider] = useState<Provider>("vercel");
@@ -234,7 +295,7 @@ export default function ConnectionsPage() {
               </TableHead>
               {connections.map((c) => (
                 <TableRow key={c.id} cols={COLS}>
-                  <span>{PROVIDER_LABELS[c.provider]}</span>
+                  <span>{PROVIDER_LABELS[c.provider] ?? (String(c.provider) === "tfc" ? "Terraform Cloud" : c.provider)}</span>
                   <span className="text-muted">{c.label}</span>
                   <Chip
                     tone={
@@ -259,6 +320,7 @@ export default function ConnectionsPage() {
             </div>
           )}
         </Card>
+        <TfcConnectCard onAdded={() => void load()} />
       </div>
     </>
   );

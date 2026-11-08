@@ -11,6 +11,7 @@ const h = vi.hoisted(() => {
     stages: [] as { stage: string; status: string; statusMessage: string }[],
     jobUpdates: [] as Record<string, unknown>[],
     workspaces: [] as Record<string, unknown>[],
+    tfcLookups: [] as { orgId: string; connectionId: string }[],
   };
   const prisma = {
     tfJob: {
@@ -37,7 +38,12 @@ const h = vi.hoisted(() => {
 
 vi.mock("../db.js", () => ({ prisma: h.prisma }));
 vi.mock("../crypto.js", () => ({ decryptToken: () => "token" }));
-vi.mock("./workspace.js", () => ({ getWorkspaceAdapter: () => h.adapter }));
+vi.mock("./tfc-connection.js", () => ({
+  tfcAdapterFor: vi.fn(async (orgId: string, connectionId: string) => {
+    h.state.tfcLookups.push({ orgId, connectionId });
+    return { adapter: h.adapter, cred: { organization: "acme", hostname: "app.terraform.io", token: "t" } };
+  }),
+}));
 
 const { runJob, stackBranchName, isStackBranch } = await import("./pipeline.js");
 const { REPO_READY } = await import("../git/hosts.js");
@@ -195,8 +201,9 @@ describe("stack job", () => {
     expect(tree.find((t) => t.path === "deploy/box/bin/deploy.sh")!.mode).toBe("100755");
   });
 
-  it("creates a Terraform Cloud workspace on deploy/infra for the tfc backend", async () => {
-    stackJob({ ...example, backend: "tfc", tfc_organization: "acme" });
+  it("creates the workspace in the project's own Terraform Cloud connection", async () => {
+    h.state.tfcLookups = [];
+    stackJob({ ...example, backend: "tfc", tfc_organization: "acme" }, "app-foundry-hetzner", { tfcConnectionId: "tfc-1" });
     fakeGitHub();
     await runJob("job_abcdefgh12345678");
     expect(h.state.workspaces).toEqual([
@@ -209,6 +216,17 @@ describe("stack job", () => {
       }),
     ]);
     expect(h.adapter.queueRun).not.toHaveBeenCalled();
+    expect(h.state.tfcLookups).toEqual([{ orgId: "o1", connectionId: "tfc-1" }]);
+  });
+
+  it("creates no workspace anywhere when a tfc project has no connection", async () => {
+    h.state.workspaces = [];
+    stackJob({ ...example, backend: "tfc", tfc_organization: "acme" });
+    fakeGitHub();
+    await runJob("job_abcdefgh12345678");
+    expect(h.state.workspaces).toEqual([]);
+    expect(h.state.stages.at(-1)).toMatchObject({ stage: "workspace", status: "errored" });
+    expect(h.state.stages.at(-1)?.statusMessage).toMatch(/no Terraform Cloud connection is set/);
   });
 
   it("opens no pull request when the repo already matches, and removes its branch", async () => {

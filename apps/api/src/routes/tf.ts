@@ -15,6 +15,7 @@ import { getTfcClient } from "../lib/tf/tfc-client.js";
 import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
 import { requireAdmin, isAdmin } from "../lib/cf-auth.js";
 import { toCodegenSample } from "../lib/tf/sample.js";
+import { TfcConnectionError, loadTfcConnection } from "../lib/tf/tfc-connection.js";
 import {
   deliveryFor,
   getStack,
@@ -631,15 +632,20 @@ tfRouter.get("/stacks", (_req, res) => {
 
 const stackArgs = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
 
-tfRouter.post("/stacks/:slug/preview", (req, res) => {
+tfRouter.post("/stacks/:slug/preview", async (req, res) => {
   const stack = getStack(req.params.slug);
   if (!stack) return res.status(404).json({ error: "stack not found" });
-  const parsed = z.object({ arguments: stackArgs }).safeParse(req.body);
+  const parsed = z
+    .object({ arguments: stackArgs, tfcConnectionId: z.string().min(1).nullish() })
+    .safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
+  // Rendered with the connection's organization, as the project will be.
+  const tfc = await withTfcConnection(req.user!.orgId, parsed.data.arguments, parsed.data.tfcConnectionId);
+  if ("error" in tfc) return res.status(400).json({ error: tfc.error });
   try {
-    const files = renderStack(stack, parsed.data.arguments);
+    const files = renderStack(stack, tfc.args);
     res.json({ files });
   } catch (err) {
     if (err instanceof TfInputValidationError) {
@@ -648,6 +654,29 @@ tfRouter.post("/stacks/:slug/preview", (req, res) => {
     throw err;
   }
 });
+
+/**
+ * A Terraform Cloud backend needs one of the org's TFC connections: the
+ * workspace is created there, and tfc_organization is taken from it so the
+ * generated cloud {} block names the same organization. Any other backend
+ * clears the connection. Returns the arguments to render and the connection
+ * id to store, or an error message.
+ */
+async function withTfcConnection(
+  orgId: string,
+  args: TfArguments,
+  connectionId: string | null | undefined
+): Promise<{ args: TfArguments; tfcConnectionId: string | null } | { error: string }> {
+  if (args.backend !== "tfc") return { args, tfcConnectionId: null };
+  if (!connectionId) return { error: "a Terraform Cloud backend needs a Terraform Cloud connection: add one under Connections" };
+  try {
+    const cred = await loadTfcConnection(orgId, connectionId);
+    return { args: { ...args, tfc_organization: cred.organization }, tfcConnectionId: connectionId };
+  } catch (err) {
+    if (err instanceof TfcConnectionError) return { error: err.message };
+    throw err;
+  }
+}
 
 const stackProjectSchema = z.object({
   // Same shape the stack's `name` setting needs, since the dashboard derives
@@ -663,6 +692,8 @@ const stackProjectSchema = z.object({
   connectionId: z.string().min(1).optional(),
   /** Greenfield: create destRepo from the stack's app template first. */
   createRepo: z.boolean().default(false),
+  /** The org's Terraform Cloud connection, for backend "tfc". */
+  tfcConnectionId: z.string().min(1).nullish(),
   arguments: stackArgs,
 });
 
@@ -695,6 +726,9 @@ tfRouter.post("/stacks/:slug/projects", async (req, res) => {
   if (delivery.gitHost === "gitlab") derived.gitlab_project = d.destRepo;
   else if (d.arguments.github_repository === undefined) derived.github_repository = repoName;
   d.arguments = { ...d.arguments, ...derived };
+  const tfc = await withTfcConnection(req.user!.orgId, d.arguments, d.tfcConnectionId);
+  if ("error" in tfc) return res.status(400).json({ error: tfc.error });
+  d.arguments = tfc.args;
   const connection = await prisma.providerConnection.findFirst({
     where: {
       orgId: req.user!.orgId,
@@ -731,6 +765,7 @@ tfRouter.post("/stacks/:slug/projects", async (req, res) => {
         gitHost: d.gitHost,
         gitConnectionId: connection.id,
         createRepo: d.createRepo,
+        tfcConnectionId: tfc.tfcConnectionId,
         destRepo: d.destRepo,
         destBranch: d.destBranch,
         providerConfig: settings,
@@ -755,7 +790,9 @@ tfRouter.post("/stacks/:slug/projects", async (req, res) => {
 // same as creating it. The body carries the complete settings, not a patch:
 // what the dashboard shows is what gets rendered.
 tfRouter.put("/stacks/projects/:id/settings", async (req, res) => {
-  const parsed = z.object({ arguments: stackArgs }).safeParse(req.body);
+  const parsed = z
+    .object({ arguments: stackArgs, tfcConnectionId: z.string().min(1).nullish() })
+    .safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
@@ -785,6 +822,14 @@ tfRouter.put("/stacks/projects/:id/settings", async (req, res) => {
     delivery: delivery.slug,
     ...(host === "gitlab" ? { gitlab_project: project.destRepo } : {}),
   };
+  // Unnamed, the project keeps the connection it has.
+  const tfc = await withTfcConnection(
+    req.user!.orgId,
+    parsed.data.arguments,
+    parsed.data.tfcConnectionId === undefined ? project.tfcConnectionId : parsed.data.tfcConnectionId
+  );
+  if ("error" in tfc) return res.status(400).json({ error: tfc.error });
+  parsed.data.arguments = tfc.args;
   let settings: TfArguments;
   try {
     settings = resolveStackInputs(stack, parsed.data.arguments);
@@ -797,7 +842,7 @@ tfRouter.put("/stacks/projects/:id/settings", async (req, res) => {
   }
   const updated = await prisma.tfProject.update({
     where: { id: project.id },
-    data: { providerConfig: settings },
+    data: { providerConfig: settings, tfcConnectionId: tfc.tfcConnectionId },
   });
   const job = await prisma.tfJob.create({
     data: { projectId: project.id, kind: "stack", argumentsJson: settings },

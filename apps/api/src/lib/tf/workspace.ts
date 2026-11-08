@@ -54,8 +54,8 @@ export class TfCloudError extends Error {}
 export class TfCloudWorkspaceAdapter implements WorkspaceAdapter {
   private client: TfcClient;
 
-  constructor(token: string, org: string) {
-    this.client = new TfcClient(token, org);
+  constructor(token: string, org: string, base?: string) {
+    this.client = new TfcClient(token, org, base);
   }
 
   // Idempotent: a 422 name-taken response resolves to the existing workspace.

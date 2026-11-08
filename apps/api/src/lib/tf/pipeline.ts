@@ -14,7 +14,7 @@ import { commitFile, commitFiles, ensureRepo } from "./git.js";
 import { deliveryFor, getStack, renderStack } from "../stacks/index.js";
 import { gitHostClient, type GitHostClient, type HostFile } from "../git/hosts.js";
 import { isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
-import { getWorkspaceAdapter } from "./workspace.js";
+import { tfcAdapterFor } from "./tfc-connection.js";
 import { generateHcl } from "./codegen.js";
 import { checkEnv, checkSetupLines, renderImportCheck } from "../import/check.js";
 import type { RootModule } from "../import/scan.js";
@@ -142,32 +142,29 @@ export async function runJob(jobId: string): Promise<void> {
 
     // -- workspace ---------------------------------------------------------
     await setStage(jobId, "workspace", "running");
-    const workspaceName = `${project.name}-${providerCfg.region ?? "default"}`;
-    const adapter = getWorkspaceAdapter();
-    await adapter.createWorkspace({
-      workspaceName,
-      repo: project.destRepo,
-      branch: project.destBranch,
-      workingDirectory: project.destPath,
-      autoApply: false,
-    });
-    const run = await adapter.queueRun(
-      workspaceName,
-      `infralift job ${jobId}`
-    );
-    await prisma.tfJob.update({
-      where: { id: jobId },
-      data: { workspaceName },
-    });
+    // Only in the customer's own Terraform Cloud, through their connection.
+    let workspaceNote = "no Terraform Cloud connection; no workspace";
+    if (project.tfcConnectionId) {
+      const workspaceName = `${project.name}-${providerCfg.region ?? "default"}`;
+      const { adapter, cred } = await tfcAdapterFor(project.orgId, project.tfcConnectionId);
+      await adapter.createWorkspace({
+        workspaceName,
+        repo: project.destRepo,
+        branch: project.destBranch,
+        workingDirectory: project.destPath,
+        autoApply: false,
+      });
+      const run = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
+      await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
+      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}`;
+    }
 
     // -- complete ----------------------------------------------------------
     await setStage(
       jobId,
       "complete",
       "success",
-      fileResult.noop
-        ? `up to date; workspace run ${run.status}`
-        : `committed ${commitSha ?? "?"}; workspace run ${run.status}`
+      fileResult.noop ? `up to date; ${workspaceNote}` : `committed ${commitSha ?? "?"}; ${workspaceNote}`
     );
   } catch (err) {
     const msg =
@@ -322,20 +319,22 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
 
     // -- workspace ---------------------------------------------------------
     await setStage(jobId, "workspace", "running");
-    const workspaceName = project.name;
-    const adapter = getWorkspaceAdapter();
-    await adapter.createWorkspace({
-      workspaceName,
-      repo: repo.repo,
-      branch,
-      workingDirectory: project.destPath,
-      autoApply: false,
-    });
-    const run = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
-    await prisma.tfJob.update({
-      where: { id: jobId },
-      data: { workspaceName },
-    });
+    // Only in the customer's own Terraform Cloud, through their connection.
+    let workspaceNote = "no Terraform Cloud connection; no workspace";
+    if (project.tfcConnectionId) {
+      const workspaceName = project.name;
+      const { adapter, cred } = await tfcAdapterFor(project.orgId, project.tfcConnectionId);
+      await adapter.createWorkspace({
+        workspaceName,
+        repo: repo.repo,
+        branch,
+        workingDirectory: project.destPath,
+        autoApply: false,
+      });
+      const run = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
+      await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
+      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}`;
+    }
 
     // -- complete ----------------------------------------------------------
     const what = result.noop
@@ -345,7 +344,7 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
       jobId,
       "complete",
       "success",
-      `${repo.created ? "created " + repo.repo + "; " : ""}${what}; workspace run ${run.status}`
+      `${repo.created ? "created " + repo.repo + "; " : ""}${what}; ${workspaceNote}`
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -597,8 +596,20 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
     await setStage(jobId, "workspace", "running");
     let workspaceNote = "state in R2; no workspace";
     if (args.backend === "tfc") {
+      // The generated cloud {} block names the connection's organization
+      // (the API derives tfc_organization from it), so the workspace lands in
+      // the org the code points at.
+      if (!project.tfcConnectionId) {
+        await setStage(
+          jobId,
+          "workspace",
+          "errored",
+          `opened ${cr.url}, but no Terraform Cloud connection is set: pick one in the project's settings`
+        );
+        return;
+      }
       const workspaceName = String(args.tfc_workspace ?? args.name);
-      const adapter = getWorkspaceAdapter();
+      const { adapter } = await tfcAdapterFor(project.orgId, project.tfcConnectionId);
       await adapter.createWorkspace({
         workspaceName,
         repo,
