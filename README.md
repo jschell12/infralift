@@ -1,36 +1,47 @@
 # infralift
 
-Fixed-fee infrastructure migrations delivered as Terraform: assess, migrate, and keep the platform.
+infralift writes and maintains your infrastructure as code in your own repository. Changes to a repository you work in (stacks, imports, adoptions) arrive as pull requests you review and merge. Start from an app template, assess a cloud account you already run, or import Terraform you already have, without touching what is running.
 
-**The offer:** connect a read-only token for your current provider (Vercel, Heroku, AWS, Cloudflare). We assess your stack, produce a migration report with cost projections, then execute a fixed-fee migration onto Cloudflare or a VPS. Every deliverable is Terraform in a repo you own, with state in Terraform Cloud. After the migration, the dashboard keeps working: IaC standards enforcement, drift visibility, and workspace management.
+What it sells on:
+
+- **Import that changes nothing running.** Existing Terraform, or resources built by hand in a cloud console, come under infralift only after a read-only plan proves no resource would change, so taking them over does not touch what is running.
+- **Cost comparison** of what you run against the alternatives.
+- **Security.** Your state and cloud credentials stay with you; checks run in your CI.
+
+## Where to read next
+
+- [`ARCHITECTURE.md`](ARCHITECTURE.md): how the code is organized, the design patterns it uses and where, and how a request and a job flow through it.
+- [`docs/adr/`](docs/adr/): the decisions behind it.
+- [`docs/`](docs/README.md): customer-facing documentation.
+- [`e2e/`](e2e/README.md): end-to-end runbooks.
 
 ## Structure
 
 | Package | Purpose |
-|---|---|
-| `apps/web` | Marketing site (Next.js): offer, pricing, assessment CTA |
-| `apps/dashboard` | Customer dashboard (Next.js): token intake, assessment reports, migration status, workspaces |
-| `apps/api` | Backend (Express + Prisma + Postgres): auth, assessment engine, provider connectors |
-| `packages/shared` | Shared TypeScript types |
-| `docs/` | Customer-facing documentation: [access granting, assessment report, migration process, security model](docs/README.md) |
+| --- | --- |
+| `apps/web` | Marketing site and the public cost estimator (Next.js on a Cloudflare Worker) |
+| `apps/dashboard` | The customer app (Next.js): projects, connections, assessments, imports |
+| `apps/admin` | Internal tools (Next.js) |
+| `apps/api` | The backend (Express, Prisma, Postgres): routes, services, jobs, connectors, stacks |
+| `packages/shared` | Types shared by the API and the apps |
+| `packages/collectors` | Snapshot scripts a customer can run instead of granting a token |
 
 ## Development
 
 ```bash
 pnpm install
 pnpm db:generate
-pnpm dev        # runs web (:3000), dashboard (:3001), api (:4000)
-pnpm build
+pnpm dev                              # web :3000, dashboard :3001, api :4000
+pnpm --filter @infralift/api test
+pnpm --filter @infralift/api validate:stacks
 ```
 
-`apps/api` needs a Postgres `DATABASE_URL` (see `apps/api/.env.example`).
+`apps/api` needs a Postgres `DATABASE_URL` (see `apps/api/.env.example`). Credentials for local work come from scredmgr, never from files in the repository.
 
-## Provider connectors
+## Deploying
 
-Assessments run against read-only credentials only:
+Merging to `main` deploys. CI runs on GitHub-hosted runners. The marketing site (`apps/web`) deploys to Cloudflare from CI. The API, dashboard and admin deploy from a runner on the Framework host, which builds their images there and restarts the `infralift` Nomad job; the API applies pending migrations as it starts. See [`ARCHITECTURE.md`](ARCHITECTURE.md#running-and-deploying).
 
-- Vercel: API token (read-only scope) for projects, domains, env var names, usage
-- Cloudflare: API token for Workers, Pages, R2, DNS zones
-- Heroku: API key for apps, dynos, add-ons
-- AWS: `ReadOnlyAccess` IAM role for Cost Explorer + resource inventory
-- Firebase / GCP: Viewer service account JSON key for Hosting sites, Cloud Functions, Firestore databases
+## Connections
+
+Assessments use read-only credentials. Supported providers include Vercel, Cloudflare, Heroku, AWS, Google Cloud and Firebase, Azure, DigitalOcean, Netlify, Render, Railway and Fly.io. GitHub and GitLab connections are where infralift opens pull requests; a Terraform Cloud connection is where a project's workspace lives.
