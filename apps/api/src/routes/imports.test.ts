@@ -6,6 +6,9 @@ import { Prisma } from "@prisma/client";
 
 const h = vi.hoisted(() => ({
   connFindFirst: vi.fn(),
+  projectFindFirst: vi.fn(),
+  projectUpdate: vi.fn(),
+  jobFindFirst: vi.fn(),
   projectCreate: vi.fn(),
   jobCreate: vi.fn(),
   runJob: vi.fn(async () => {}),
@@ -14,8 +17,8 @@ const h = vi.hoisted(() => ({
 vi.mock("../lib/db.js", () => ({
   prisma: {
     providerConnection: { findFirst: h.connFindFirst },
-    tfProject: { create: h.projectCreate },
-    tfJob: { create: h.jobCreate },
+    tfProject: { create: h.projectCreate, findFirst: h.projectFindFirst, update: h.projectUpdate },
+    tfJob: { create: h.jobCreate, findFirst: h.jobFindFirst },
   },
 }));
 vi.mock("../lib/crypto.js", () => ({ decryptToken: () => "token" }));
@@ -54,12 +57,12 @@ function fakeGitHub(status = 200) {
 
 type Handler = (req: unknown, res: unknown) => unknown;
 
-async function call(path: string, body: Record<string, unknown>) {
+async function call(path: string, body: Record<string, unknown>, method = "post", params: Record<string, string> = {}) {
   const layer = (
     importsRouter as unknown as {
       stack: { route?: { path: string; methods: Record<string, boolean>; stack: { handle: Handler }[] } }[];
     }
-  ).stack.find((l) => l.route?.path === path && l.route?.methods.post);
+  ).stack.find((l) => l.route?.path === path && l.route?.methods[method]);
   const out = { status: 200, body: undefined as unknown as Record<string, unknown> };
   const res = {
     status(code: number) {
@@ -71,7 +74,7 @@ async function call(path: string, body: Record<string, unknown>) {
       return this;
     },
   };
-  await layer!.route!.stack.at(-1)!.handle({ user: { orgId: "org-a" }, params: {}, query: {}, body }, res);
+  await layer!.route!.stack.at(-1)!.handle({ user: { orgId: "org-a" }, params, query: {}, body }, res);
   return out;
 }
 
@@ -161,5 +164,67 @@ describe("POST /tf/imports", () => {
       new Prisma.PrismaClientKnownRequestError("dup", { code: "P2002", clientVersion: "6" })
     );
     expect((await call("/", { repo: "acme/infra", path: "envs/prod", name: "acme-prod" })).status).toBe(409);
+  });
+});
+
+describe("GET /tf/imports/:projectId/check", () => {
+  function fakeChecks(opts: { conclusion: string; message: string; level: string } | null, prStatus = 200) {
+    const json = (body: unknown, code = 200) => new Response(JSON.stringify(body), { status: code });
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const path = url.replace("https://api.github.com", "");
+        calls.push(path);
+        if (path === "/repos/acme/infra/pulls/4")
+          return prStatus === 200
+            ? json({ html_url: "https://github.com/acme/infra/pull/4", state: "open", merged_at: null, head: { sha: "head1" } })
+            : json({ message: "no" }, prStatus);
+        if (path.startsWith("/repos/acme/infra/commits/head1/check-runs"))
+          return json({
+            check_runs: opts
+              ? [{ id: 7, status: "completed", conclusion: opts.conclusion, html_url: "https://github.com/acme/infra/runs/7", started_at: "2026-11-08T00:00:00Z", completed_at: "2026-11-08T00:01:00Z", output: { annotations_count: 1 } }]
+              : [],
+          });
+        if (path.startsWith("/repos/acme/infra/check-runs/7/annotations"))
+          return json([{ annotation_level: opts!.level, message: opts!.message }]);
+        return json({ message: `unhandled ${path}` }, 500);
+      })
+    );
+    return calls;
+  }
+
+  beforeEach(() => {
+    h.projectFindFirst.mockResolvedValue({ id: "p1", destRepo: "acme/infra", gitConnectionId: "conn-1", importCheckJson: null });
+    h.jobFindFirst.mockResolvedValue({ prUrl: "https://github.com/acme/infra/pull/4" });
+  });
+
+  it("reads the check on the PR's current head and stores the result", async () => {
+    const calls = fakeChecks({ conclusion: "failure", level: "failure", message: "2 of 9 resources would change." });
+    const out = await call("/:projectId/check", {}, "get", { projectId: "p1" });
+    expect(out.status).toBe(200);
+    expect(out.body).toMatchObject({ state: "changes", message: "2 of 9 resources would change.", headSha: "head1" });
+    expect(h.projectFindFirst.mock.calls[0][0].where).toEqual({ id: "p1", orgId: "org-a", source: "imported" });
+    expect(calls.some((c) => c.includes("check_name=Plan%20changes%20nothing"))).toBe(true);
+    expect(h.projectUpdate.mock.calls[0][0].data.importCheckJson.state).toBe("changes");
+  });
+
+  it("waits when the check has not run", async () => {
+    fakeChecks(null);
+    expect((await call("/:projectId/check", {}, "get", { projectId: "p1" })).body.state).toBe("waiting");
+  });
+
+  it("answers 502 with the last result when GitHub refuses", async () => {
+    fakeChecks(null, 403);
+    h.projectFindFirst.mockResolvedValue({ id: "p1", destRepo: "acme/infra", gitConnectionId: "conn-1", importCheckJson: { state: "passed" } });
+    const out = await call("/:projectId/check", {}, "get", { projectId: "p1" });
+    expect(out.status).toBe(502);
+    expect(out.body.last).toEqual({ state: "passed" });
+    expect(h.projectUpdate).not.toHaveBeenCalled();
+  });
+
+  it("404s another org's project", async () => {
+    h.projectFindFirst.mockResolvedValue(null);
+    expect((await call("/:projectId/check", {}, "get", { projectId: "p1" })).status).toBe(404);
   });
 });

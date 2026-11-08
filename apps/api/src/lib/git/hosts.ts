@@ -37,6 +37,21 @@ export interface ChangeRequest {
   branch: string;
 }
 
+export interface ChangeRequestState {
+  url: string;
+  headSha: string;
+  state: "open" | "closed" | "merged";
+}
+
+export interface CheckRun {
+  status: "queued" | "in_progress" | "completed" | string;
+  /** success | failure | cancelled | timed_out | ... ; null until completed */
+  conclusion: string | null;
+  url: string;
+  completedAt: string | null;
+  annotations: { level: string; message: string }[];
+}
+
 export interface GitHostClient {
   host: GitHost;
   /** What the host calls the thing a stack job opens. */
@@ -48,6 +63,10 @@ export interface GitHostClient {
   listFiles(opts: { repo: string; ref: string }): Promise<{ paths: string[]; truncated: boolean }>;
   /** A file's text on `ref`, or null when it does not exist. */
   readFile(opts: { repo: string; path: string; ref: string }): Promise<string | null>;
+  /** A pull request's current head and state, by number. */
+  getChangeRequest(opts: { repo: string; number: number }): Promise<ChangeRequestState | null>;
+  /** The newest check run called `name` on `sha`, with its annotations. */
+  getCheckRun(opts: { repo: string; sha: string; name: string }): Promise<CheckRun | null>;
   /** New repository holding a copy of `template` (a GitHub "owner/repo"). */
   createFromTemplate(opts: { template: string; repo: string; private: boolean }): Promise<CreatedRepo>;
   fileExists(opts: { repo: string; path: string; branch: string }): Promise<boolean>;
@@ -137,6 +156,56 @@ function githubClient(token: string): GitHostClient {
       if (res.status === 404) return null;
       if (!res.ok) throw new GitCommitError(`GitHub file read failed (${res.status}) for ${repo}/${path}`);
       return res.text();
+    },
+
+    async getChangeRequest({ repo, number }) {
+      const res = await gh("GET", `/repos/${repo}/pulls/${number}`);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new GitCommitError(`GitHub pull request lookup failed (${res.status}) for ${repo}#${number}`);
+      const pr = (await res.json()) as { html_url: string; state: string; merged_at: string | null; head: { sha: string } };
+      return {
+        url: pr.html_url,
+        headSha: pr.head.sha,
+        state: pr.merged_at ? "merged" : pr.state === "open" ? "open" : "closed",
+      };
+    },
+
+    async getCheckRun({ repo, sha, name }) {
+      const res = await gh(
+        "GET",
+        `/repos/${repo}/commits/${sha}/check-runs?check_name=${encodeURIComponent(name)}&filter=latest&per_page=10`
+      );
+      if (!res.ok) throw new GitCommitError(`GitHub check-run lookup failed (${res.status}) for ${repo}@${sha}`);
+      const body = (await res.json()) as {
+        check_runs: {
+          id: number;
+          status: string;
+          conclusion: string | null;
+          html_url: string;
+          started_at: string | null;
+          completed_at: string | null;
+          output: { annotations_count: number };
+        }[];
+      };
+      const run = [...body.check_runs].sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))[0];
+      if (!run) return null;
+      let annotations: CheckRun["annotations"] = [];
+      if (run.output.annotations_count > 0) {
+        const a = await gh("GET", `/repos/${repo}/check-runs/${run.id}/annotations?per_page=50`);
+        if (a.ok) {
+          annotations = ((await a.json()) as { annotation_level: string; message: string }[]).map((x) => ({
+            level: x.annotation_level,
+            message: x.message,
+          }));
+        }
+      }
+      return {
+        status: run.status,
+        conclusion: run.conclusion,
+        url: run.html_url,
+        completedAt: run.completed_at,
+        annotations,
+      };
     },
 
     async createFromTemplate({ template, repo, private: isPrivate }) {
@@ -263,6 +332,14 @@ function gitlabClient(token: string): GitHostClient {
       if (res.status === 404) return null;
       if (!res.ok) return fail(`file read for ${repo}/${path}`, res);
       return res.text();
+    },
+
+    // Import checks are GitHub Actions workflows; GitLab follows later.
+    async getChangeRequest() {
+      throw new GitCommitError("reading a merge request's checks is not built for GitLab yet");
+    },
+    async getCheckRun() {
+      throw new GitCommitError("reading a merge request's checks is not built for GitLab yet");
     },
 
     async createFromTemplate({ template, repo, private: isPrivate }) {

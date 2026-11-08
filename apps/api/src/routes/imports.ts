@@ -8,7 +8,8 @@ import { GitCommitError } from "../lib/tf/git.js";
 import { runJob } from "../lib/tf/pipeline.js";
 import { readRepoForScan } from "../lib/import/read.js";
 import { scanRepo } from "../lib/import/scan.js";
-import { checkEnv, checkSetupLines, checkWorkflowPath } from "../lib/import/check.js";
+import { CHECK_JOB_NAME, checkEnv, checkSetupLines, checkWorkflowPath } from "../lib/import/check.js";
+import { classifyCheck } from "../lib/import/result.js";
 
 // Importing an existing Terraform repository. GitHub only for now; GitLab
 // follows once this path is proven.
@@ -16,6 +17,8 @@ import { checkEnv, checkSetupLines, checkWorkflowPath } from "../lib/import/chec
 //   POST /tf/imports/scan  read the repository, list its root modules
 //   POST /tf/imports       import one root module: a project, plus a pull
 //                          request adding the read-only plan check
+//   GET  /tf/imports/:projectId/check
+//                          what that check said, read back from GitHub
 
 export const importsRouter = Router();
 
@@ -154,4 +157,35 @@ importsRouter.post("/", async (req, res) => {
     console.error(`tf job ${job.id} failed:`, err);
   });
   res.status(202).json({ project, job });
+});
+
+importsRouter.get("/:projectId/check", async (req, res) => {
+  const { orgId } = req.user!;
+  const project = await prisma.tfProject.findFirst({
+    where: { id: req.params.projectId, orgId, source: "imported" },
+  });
+  if (!project) return res.status(404).json({ error: "imported project not found" });
+  const gh = await githubFor(res, orgId, project.gitConnectionId ?? undefined);
+  if (!gh) return;
+
+  const job = await prisma.tfJob.findFirst({
+    where: { projectId: project.id, kind: "import", prUrl: { not: null } },
+    orderBy: { createdAt: "desc" },
+  });
+  const number = Number(/\/pull\/(\d+)$/.exec(job?.prUrl ?? "")?.[1] ?? NaN);
+  let result;
+  try {
+    const pr = Number.isInteger(number) ? await gh.client.getChangeRequest({ repo: project.destRepo, number }) : null;
+    const run = pr ? await gh.client.getCheckRun({ repo: project.destRepo, sha: pr.headSha, name: CHECK_JOB_NAME }) : null;
+    result = classifyCheck(pr, run);
+  } catch (err) {
+    if (!(err instanceof GitCommitError)) throw err;
+    // GitHub is unreachable or refused: answer with the last known result.
+    return res.status(502).json({ error: err.message, last: project.importCheckJson ?? null });
+  }
+  await prisma.tfProject.update({
+    where: { id: project.id },
+    data: { importCheckJson: result as unknown as Prisma.InputJsonValue },
+  });
+  res.json(result);
 });

@@ -36,7 +36,10 @@ describe("renderImportCheck", () => {
     expect(content).not.toContain("-auto-approve");
     expect(content).toContain("permissions:\n  contents: read");
     expect(content).toContain('working-directory: "infra/prod"');
-    expect(content.trimEnd().endsWith('[ "$changes" -eq 0 ]')).toBe(true);
+    // The outcome annotations infralift reads back (lib/import/result.ts).
+    expect(content).toContain('echo "::notice::No changes: all $total resources match the code."');
+    expect(content).toContain('echo "::error::$changes of $total resources would change."');
+    expect(content).toContain("    name: Plan changes nothing");
   });
 
   it("passes each credential and unset variable through from a secret", () => {
@@ -140,7 +143,13 @@ describe("credentials: stored keys or OIDC", () => {
     expect(checkGroups(multi).map((g) => g.cloud)).toEqual(["gcp", "azure"]);
     expect(content).toContain("uses: google-github-actions/auth@v2");
     expect(content).toContain("ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID || vars.INFRALIFT_AZURE_CLIENT_ID }}");
-    expect(content).toContain("ARM_USE_OIDC: ${{ vars.INFRALIFT_AZURE_CLIENT_ID != '' && secrets.ARM_CLIENT_SECRET == '' }}");
+    // Same condition as the credentials check: all three variables.
+    expect(content).toContain(
+      "ARM_USE_OIDC: ${{ vars.INFRALIFT_AZURE_CLIENT_ID != '' && vars.INFRALIFT_AZURE_TENANT_ID != '' && vars.INFRALIFT_AZURE_SUBSCRIPTION_ID != '' && secrets.ARM_CLIENT_SECRET == '' }}"
+    );
+    expect(content).toContain(
+      "if: vars.INFRALIFT_GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.INFRALIFT_GCP_SERVICE_ACCOUNT != ''"
+    );
     expect(checkSetupLines(multi).join("\n")).toMatch(/Azure: secrets .* or for OIDC with no stored key, repository variables/);
   });
 

@@ -293,3 +293,73 @@ function RootCard({
     </div>
   );
 }
+
+// -- the import check's result on an imported project's card ---------------------
+
+export interface ImportCheckResult {
+  state: "no-pr" | "waiting" | "running" | "passed" | "changes" | "needs-setup" | "error" | "failed";
+  message: string;
+  prUrl: string | null;
+  prState: "open" | "closed" | "merged" | null;
+  checkUrl: string | null;
+  checkedAt: string;
+}
+
+const CHECK_LOOK: Record<ImportCheckResult["state"], { tone: Tone; text: string }> = {
+  "no-pr": { tone: "faint", text: "No pull request yet" },
+  waiting: { tone: "muted", text: "Check not started" },
+  running: { tone: "info", text: "Plan running" },
+  passed: { tone: "accent", text: "Safe to take over" },
+  changes: { tone: "warn", text: "Would change resources" },
+  "needs-setup": { tone: "warn", text: "Needs credentials" },
+  error: { tone: "danger", text: "Plan failed" },
+  failed: { tone: "danger", text: "Check failed" },
+};
+
+/** Reads the check from GitHub on mount and on demand; shows the last stored
+ *  result until then, so the card is never blank. */
+export function ImportCheckStatus({ projectId, last }: { projectId: string; last: ImportCheckResult | null }) {
+  const [result, setResult] = useState<ImportCheckResult | null>(last);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function refresh() {
+    setBusy(true);
+    setError(null);
+    try {
+      setResult(await api<ImportCheckResult>(`/tf/imports/${projectId}/check`));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  const look = result ? CHECK_LOOK[result.state] : null;
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      {look ? <Chip tone={look.tone}>{look.text}</Chip> : <Chip tone="faint">Checking…</Chip>}
+      <span className="text-muted truncate">{error ?? result?.message}</span>
+      <div className="ml-auto flex shrink-0 items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          disabled={busy}
+          className="text-xs font-semibold text-muted hover:text-text disabled:opacity-50"
+        >
+          {busy ? "Checking…" : "Re-check"}
+        </button>
+        {(result?.checkUrl ?? result?.prUrl) && (
+          <a className="whitespace-nowrap text-accent text-sm font-semibold" href={result!.checkUrl ?? result!.prUrl!}>
+            {result?.checkUrl ? "View check" : "View pull request"}
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}

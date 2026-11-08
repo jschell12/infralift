@@ -13,6 +13,9 @@ import type { RootModule } from "./scan.js";
 // what is running.
 // ---------------------------------------------------------------------------
 
+/** The check job's name, which GitHub uses as the check run's name. */
+export const CHECK_JOB_NAME = "Plan changes nothing";
+
 export interface CheckFile {
   path: string;
   content: string;
@@ -146,7 +149,7 @@ export function renderImportCheck(
     else credEnv.push(`          ${e.env}: \${{ secrets.${e.secret} }}`);
   }
   if (has("aws")) credEnv.push("          AWS_SESSION_TOKEN: ${{ steps.aws.outputs.aws-session-token }}");
-  if (has("azure")) credEnv.push("          ARM_USE_OIDC: ${{ vars.INFRALIFT_AZURE_CLIENT_ID != '' && secrets.ARM_CLIENT_SECRET == '' }}");
+  if (has("azure")) credEnv.push("          ARM_USE_OIDC: ${{ vars.INFRALIFT_AZURE_CLIENT_ID != '' && vars.INFRALIFT_AZURE_TENANT_ID != '' && vars.INFRALIFT_AZURE_SUBSCRIPTION_ID != '' && secrets.ARM_CLIENT_SECRET == '' }}");
   const withCreds = (extra: string[] = []) => (credEnv.length || extra.length ? ["        env:", ...extra, ...credEnv] : []);
 
   const oidcSteps: string[] = [];
@@ -167,7 +170,7 @@ export function renderImportCheck(
     oidcSteps.push(
       "",
       "      - name: Sign in to Google Cloud with OIDC",
-      "        if: vars.INFRALIFT_GCP_WORKLOAD_IDENTITY_PROVIDER != ''",
+      "        if: vars.INFRALIFT_GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.INFRALIFT_GCP_SERVICE_ACCOUNT != ''",
       "        uses: google-github-actions/auth@v2",
       "        with:",
       "          workload_identity_provider: ${{ vars.INFRALIFT_GCP_WORKLOAD_IDENTITY_PROVIDER }}",
@@ -197,7 +200,7 @@ export function renderImportCheck(
   }
   checkLines.push(
     '          if [ -n "$missing" ]; then',
-    '            echo "::error::Add these repository secrets, then re-run:$missing.$hint"',
+    '            echo "::error::Missing credentials. Add these repository secrets, then re-run:$missing.$hint"',
     "            exit 1",
     "          fi"
   );
@@ -226,7 +229,7 @@ export function renderImportCheck(
     "",
     "jobs:",
     "  plan:",
-    "    name: Plan changes nothing",
+    `    name: ${CHECK_JOB_NAME}`,
     "    runs-on: ubuntu-latest",
     "    timeout-minutes: 30",
     "    defaults:",
@@ -287,8 +290,15 @@ export function renderImportCheck(
     '              echo "$drift resource(s) were changed outside Terraform since the last apply."',
     "            fi",
     '          } >> "$GITHUB_STEP_SUMMARY"',
-    '          echo "$changes of $total resources would change"',
-    '          [ "$changes" -eq 0 ]',
+    // One annotation per outcome: infralift reads these back from the check
+    // run to show the result, so their wording is part of the contract
+    // (lib/import/result.ts).
+    '          if [ "$changes" -eq 0 ]; then',
+    '            echo "::notice::No changes: all $total resources match the code."',
+    "          else",
+    '            echo "::error::$changes of $total resources would change."',
+    "            exit 1",
+    "          fi",
     "",
   ];
   return { path: file, content: lines.join("\n") };
