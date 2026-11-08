@@ -37,8 +37,10 @@ describe("renderImportCheck", () => {
     expect(content).toContain("permissions:\n  contents: read");
     expect(content).toContain('working-directory: "infra/prod"');
     // The outcome annotations infralift reads back (lib/import/result.ts).
-    expect(content).toContain('echo "::notice::No changes: all $total resources match the code."');
-    expect(content).toContain('echo "::error::$changes of $total resources would change."');
+    expect(content).toContain('msg="No changes: all $total resources match the code."');
+    expect(content).toContain('msg="$changes of $total resources would change."');
+    expect(content).toContain('echo "::notice::$msg"');
+    expect(content).toContain('echo "::error::$msg"');
     expect(content).toContain("    name: Plan changes nothing");
   });
 

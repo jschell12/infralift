@@ -42,6 +42,22 @@ describe("planAdoption", () => {
   });
 });
 
+describe("renderAdoption: names from the provider", () => {
+  it("keeps a name with a newline on its comment line", () => {
+    const plan = planAdoption("digitalocean", [item("digitalocean:droplet", "9", "web\nresource \"x\" \"y\" {}")]);
+    const { files } = renderAdoption({
+      provider: "digitalocean",
+      plan,
+      backend: { kind: "s3", bucket: "acme-state", key: "k", region: "us-east-1" },
+      path: "",
+      label: "",
+    });
+    const imports = files.find((f) => f.path === "imports.tf")!.content;
+    expect(imports).not.toMatch(/^resource /m);
+    expect(imports).toContain('# digitalocean:droplet: web resource "x" "y" {}');
+  });
+});
+
 describe("renderAdoption", () => {
   const plan = planAdoption("digitalocean", [item("digitalocean:droplet", "123", "web")]);
 
@@ -58,6 +74,7 @@ describe("renderAdoption", () => {
     expect(all).toContain('endpoints                   = { s3 = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com" }');
     expect(all).toContain('provider "digitalocean" {}');
     expect(root).toMatchObject({ backend: { kind: "r2" }, resources: 1, generateConfig: true, readiness: "ready", tool: "tofu" });
+    expect(all).toContain('required_version = ">= 1.10"');
   });
 
   it("feeds a check that generates code, commits it, and may push only to its branch", () => {
@@ -70,14 +87,24 @@ describe("renderAdoption", () => {
     });
     const { content } = renderImportCheck(root);
     expect(content).toContain("  contents: write");
-    expect(content).toContain("ref: ${{ github.head_ref || github.ref_name }}");
+    expect(content).toContain("  checks: write");
+    // Forks check out the merge ref and never commit.
+    expect(content).toContain("ref: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref || '' }}");
+    expect(content).toContain(
+      "if: always() && steps.gen.outcome == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)"
+    );
+    // The generated commit gets this check's result recorded on it.
+    expect(content).toContain('gh api "repos/$GITHUB_REPOSITORY/check-runs" -f name="Plan changes nothing" -f head_sha="$(git rev-parse HEAD)"');
+    expect(content).toContain("GATE: ${{ steps.gate.outcome }}");
     expect(content).toContain("if: hashFiles('infra/do/generated.tf') == ''");
     expect(content).toContain("plan -input=false -lock=false -no-color -generate-config-out=generated.tf");
     expect(content).toContain("if: always() && steps.gen.outcome == 'success'");
     expect(content).toContain('git commit -m "infralift: generated code for imported resources"');
     expect(content).toContain('git push origin "HEAD:$BRANCH"');
     // The repo-scan check stays read-only on contents.
-    expect(renderImportCheck({ ...root, generateConfig: false }).content).toContain("  contents: read");
+    const plain = renderImportCheck({ ...root, generateConfig: false }).content;
+    expect(plain).toContain("  contents: read");
+    expect(plain).not.toContain("checks: write");
   });
 
   it("refuses bad backend settings and an empty adoption", () => {

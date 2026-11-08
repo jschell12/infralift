@@ -57,8 +57,14 @@ export function classifyCheck(
   }
   if (run.status !== "completed") return { ...base, state: "running", message: "The read-only plan is running." };
 
-  const errors = run.annotations.filter((a) => a.level === "failure").map((a) => a.message);
-  const notices = run.annotations.filter((a) => a.level === "notice").map((a) => a.message);
+  let errors = run.annotations.filter((a) => a.level === "failure").map((a) => a.message);
+  let notices = run.annotations.filter((a) => a.level === "notice").map((a) => a.message);
+  // A run the check created for its own generated commit has no annotations;
+  // its result is the title.
+  if (!run.annotations.length && run.title) {
+    if (run.conclusion === "success") notices = [run.title];
+    else errors = [run.title];
+  }
   if (run.conclusion === "success") {
     return { ...base, state: "passed", message: notices.find((m) => m.startsWith("No changes")) ?? "No changes." };
   }

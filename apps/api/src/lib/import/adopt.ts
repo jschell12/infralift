@@ -55,6 +55,11 @@ const ADOPT_ONLY: Partial<Record<Provider, (item: ResourceInventoryItem) => { to
   },
 };
 
+/** A name from the provider, for a one-line HCL comment. */
+function commentSafe(name: string): string {
+  return name.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 200);
+}
+
 /** Same rule codegen uses for resource names. */
 function tfName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, "_").replace(/^[0-9]/, "_$&");
@@ -150,7 +155,8 @@ export function renderAdoption(opts: {
       content: [
         `# Managed by infralift.`,
         `terraform {`,
-        `  required_version = ">= 1.6"`,
+        // use_lockfile (S3-native state locking) arrived in 1.10 of both.
+        `  required_version = ">= 1.10"`,
         `  required_providers {`,
         `    ${src.name} = {`,
         `      source  = "${src.source}"`,
@@ -181,7 +187,7 @@ export function renderAdoption(opts: {
         `# workflow (plan -generate-config-out=generated.tf), and committed beside`,
         `# this file. Applying imports into state; it changes nothing.`,
         ``,
-        ...plan.imports.flatMap((i) => [`# ${i.type}: ${i.name}`, `import {`, `  to = ${i.to}`, `  id = "${i.id}"`, `}`, ``]),
+        ...plan.imports.flatMap((i) => [`# ${i.type}: ${commentSafe(i.name)}`, `import {`, `  to = ${i.to}`, `  id = "${i.id}"`, `}`, ``]),
       ].join("\n"),
     },
   ];

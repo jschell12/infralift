@@ -9,6 +9,7 @@ const run = (over: Partial<CheckRun>): CheckRun => ({
   url: "https://github.com/acme/infra/runs/1",
   completedAt: "2026-11-08T00:00:00Z",
   annotations: [],
+  title: null,
   ...over,
 });
 const at = new Date("2026-11-08T12:00:00Z");
@@ -37,6 +38,14 @@ describe("classifyCheck", () => {
       expect(r.state, state).toBe(state);
       expect(r.message).toMatch(msg);
     }
+  });
+
+  it("reads the result from the title of a run the check created itself", () => {
+    expect(classifyCheck(pr, run({ title: "No changes: all 4 resources match the code." }), at)).toMatchObject({
+      state: "passed",
+      message: "No changes: all 4 resources match the code.",
+    });
+    expect(classifyCheck(pr, run({ conclusion: "failure", title: "1 of 4 resources would change." }), at).state).toBe("changes");
   });
 
   it("waits while there is no run, and says so differently once the PR is closed", () => {

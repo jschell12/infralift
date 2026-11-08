@@ -173,7 +173,7 @@ describe("GET /tf/imports/:projectId/check", () => {
   function fakeChecks(
     opts: { conclusion: string; message: string; level: string } | null,
     prStatus = 200,
-    gen?: { parentRun: { conclusion: string; message: string; level: string } }
+    gen?: { parentRun: { conclusion: string; message: string; level: string }; files?: { filename: string }[] }
   ) {
     const json = (body: unknown, code = 200) => new Response(JSON.stringify(body), { status: code });
     const calls: string[] = [];
@@ -190,6 +190,7 @@ describe("GET /tf/imports/:projectId/check", () => {
           return json({
             commit: { message: gen ? "infralift: generated code for imported resources\n\nbody" : "fix the bucket" },
             parents: [{ sha: "parent1" }],
+            files: gen?.files ?? [{ filename: "infra/generated.tf" }],
           });
         if (path.startsWith("/repos/acme/infra/commits/parent1/check-runs"))
           return json({
@@ -214,7 +215,7 @@ describe("GET /tf/imports/:projectId/check", () => {
   }
 
   beforeEach(() => {
-    h.projectFindFirst.mockResolvedValue({ id: "p1", destRepo: "acme/infra", gitConnectionId: "conn-1", importCheckJson: null });
+    h.projectFindFirst.mockResolvedValue({ id: "p1", destRepo: "acme/infra", destPath: "infra", gitConnectionId: "conn-1", importCheckJson: null });
     h.jobFindFirst.mockResolvedValue({ prUrl: "https://github.com/acme/infra/pull/4" });
   });
 
@@ -232,6 +233,14 @@ describe("GET /tf/imports/:projectId/check", () => {
     fakeChecks(null, 200, { parentRun: { conclusion: "success", level: "notice", message: "No changes: all 3 resources match the code." } });
     const out = await call("/:projectId/check", {}, "get", { projectId: "p1" });
     expect(out.body).toMatchObject({ state: "passed", message: "No changes: all 3 resources match the code." });
+  });
+
+  it("borrows no result for a commit that touches more than generated.tf", async () => {
+    fakeChecks(null, 200, {
+      parentRun: { conclusion: "success", level: "notice", message: "No changes: all 3 resources match the code." },
+      files: [{ filename: "infra/generated.tf" }, { filename: "infra/main.tf" }],
+    });
+    expect((await call("/:projectId/check", {}, "get", { projectId: "p1" })).body.state).toBe("waiting");
   });
 
   it("waits when the check has not run", async () => {
