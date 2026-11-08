@@ -1,6 +1,7 @@
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { importBlockFor, providerSource } from "../tf/codegen.js";
 import { PROVIDER_ENV, type RootModule } from "./scan.js";
+import { attr, blank, block, comment, expr, file as hcl } from "../hcl/write.js";
 
 // ---------------------------------------------------------------------------
 // Adopt resources that were built by hand in a cloud console, as they are.
@@ -126,69 +127,70 @@ export function renderAdoption(opts: {
   if (!src) throw new AdoptInputError(`${provider} has no Terraform provider`);
   if (!plan.imports.length) throw new AdoptInputError("nothing in this account can be imported yet");
 
-  const backendLines =
+  // R2 speaks the S3 API; these settings make the s3 backend accept it.
+  const backendBody =
     backend.kind === "r2"
       ? [
-          `    bucket                      = "${backend.bucket}"`,
-          `    key                         = "${backend.key}"`,
-          `    region                      = "auto"`,
-          `    endpoints                   = { s3 = "https://${backend.accountId}.r2.cloudflarestorage.com" }`,
-          `    skip_credentials_validation = true`,
-          `    skip_region_validation      = true`,
-          `    skip_requesting_account_id  = true`,
-          `    skip_metadata_api_check     = true`,
-          `    skip_s3_checksum            = true`,
-          `    use_path_style              = true`,
-          `    use_lockfile                = true`,
+          attr("bucket", backend.bucket),
+          attr("key", backend.key),
+          attr("region", "auto"),
+          attr("skip_credentials_validation", true),
+          attr("skip_region_validation", true),
+          attr("skip_requesting_account_id", true),
+          attr("skip_metadata_api_check", true),
+          attr("skip_s3_checksum", true),
+          attr("use_path_style", true),
+          attr("use_lockfile", true),
+          attr("endpoints", { s3: `https://${backend.accountId}.r2.cloudflarestorage.com` }),
         ]
       : [
-          `    bucket       = "${backend.bucket}"`,
-          `    key          = "${backend.key}"`,
-          `    region       = "${backend.region}"`,
-          `    encrypt      = true`,
-          `    use_lockfile = true`,
+          attr("bucket", backend.bucket),
+          attr("key", backend.key),
+          attr("region", backend.region!),
+          attr("encrypt", true),
+          attr("use_lockfile", true),
         ];
 
   const files = [
     {
       path: "versions.tf",
-      content: [
-        `# Managed by infralift.`,
-        `terraform {`,
-        // use_lockfile (S3-native state locking) arrived in 1.10 of both.
-        `  required_version = ">= 1.10"`,
-        `  required_providers {`,
-        `    ${src.name} = {`,
-        `      source  = "${src.source}"`,
-        `      version = "${src.version}"`,
-        `    }`,
-        `  }`,
-        `  backend "s3" {`,
-        ...backendLines,
-        `  }`,
-        `}`,
-        ``,
-      ].join("\n"),
+      content: hcl([
+        comment("Managed by infralift."),
+        block("terraform", [], [
+          // use_lockfile (S3-native state locking) arrived in 1.10 of both.
+          attr("required_version", ">= 1.10"),
+          block("required_providers", [], [attr(src.name, { source: src.source, version: src.version })]),
+          block("backend", ["s3"], backendBody),
+        ]),
+      ]),
     },
     {
       path: "provider.tf",
-      content: [
-        `# Managed by infralift. Credentials come from the environment, never from`,
-        `# this file: ${providerCredentials(provider).join(", ") || "see the provider's docs"}.`,
-        `provider "${src.name}" {}`,
-        ``,
-      ].join("\n"),
+      content: hcl([
+        comment(
+          `Managed by infralift. Credentials come from the environment, never from\nthis file: ${providerCredentials(provider).join(", ") || "see the provider's docs"}.`
+        ),
+        block("provider", [src.name], []),
+      ]),
     },
     {
       path: "imports.tf",
-      content: [
-        `# Managed by infralift. Each block adopts one resource that already exists.`,
-        `# The resource code is generated from what is running, by the import check`,
-        `# workflow (plan -generate-config-out=generated.tf), and committed beside`,
-        `# this file. Applying imports into state; it changes nothing.`,
-        ``,
-        ...plan.imports.flatMap((i) => [`# ${i.type}: ${commentSafe(i.name)}`, `import {`, `  to = ${i.to}`, `  id = "${i.id}"`, `}`, ``]),
-      ].join("\n"),
+      content: hcl([
+        comment(
+          [
+            "Managed by infralift. Each block adopts one resource that already exists.",
+            "The resource code is generated from what is running, by the import check",
+            "workflow (plan -generate-config-out=generated.tf), and committed beside",
+            "this file. Applying imports into state; it changes nothing.",
+          ].join("\n")
+        ),
+        ...plan.imports.flatMap((i) => [
+          blank,
+          comment(`${i.type}: ${commentSafe(i.name)}`),
+          // `to` is a resource address, an expression; `id` is a string.
+          block("import", [], [attr("to", expr(i.to)), attr("id", i.id)]),
+        ]),
+      ]),
     },
   ];
 

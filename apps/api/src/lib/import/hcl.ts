@@ -173,6 +173,9 @@ class Parser {
       } else if (c === '"') {
         this.i++;
         return;
+      } else if ((c === "$" || c === "%") && s[this.i + 1] === c && s[this.i + 2] === "{") {
+        // "$${" and "%%{" are escapes for a literal "${" or "%{".
+        this.i += 3;
       } else if ((c === "$" || c === "%") && s[this.i + 1] === "{") {
         this.i += 2;
         this.skipTemplate();
@@ -219,10 +222,12 @@ class Parser {
   }
 }
 
+/** The value of a string with no interpolation. "$${" and "%%{" are
+ *  escapes for a literal "${" and "%{". */
 function stringLiteral(raw: string): { str?: string } {
-  if (!/^"(?:[^"\\$%]|\\.|\$(?!\{)|%(?!\{))*"$/.test(raw)) return {};
+  if (!/^"(?:[^"\\$%]|\\.|\$\$\{|%%\{|\$(?!\{)|%(?!\{))*"$/.test(raw)) return {};
   try {
-    return { str: JSON.parse(raw) as string };
+    return { str: (JSON.parse(raw) as string).replace(/\$\$\{/g, () => "${").replace(/%%\{/g, () => "%{") };
   } catch {
     return {};
   }
