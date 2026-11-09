@@ -88,6 +88,10 @@ jobs:
     # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are set. Without the
     # gate a missing secret turns main red on every merge.
     if: github.ref == 'refs/heads/main' && vars.WEB_DEPLOY_ENABLED == 'true'
+    # CLOUDFLARE_API_TOKEN lives in the web-production environment, which only
+    # main may use, so a branch carrying an edited copy of this file cannot
+    # read it. The if: above guards only the copy of this file on main.
+    environment: web-production
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-web
