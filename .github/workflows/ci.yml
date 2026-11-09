@@ -146,12 +146,17 @@ jobs:
   # Actions: write. That repository holds nothing but the deploy workflow. If
   # the token leaked, someone could start (or force-restart), cancel, re-run or
   # disable that workflow and read or delete its runs and logs; they could not
-  # push code or read secrets. The secret is available only here, on a push to
-  # main of this repository, never to pull requests or forks.
+  # push code or read secrets. Re-running an old deploy run deploys main's
+  # current head, not that run's commit; its one input is force.
+  #
+  # The secret lives in the deploy-trigger environment, which only main may
+  # use, so a branch carrying an edited copy of this file cannot read it, nor
+  # can a fork. The job's if: guards only the copy of this file on main.
   trigger-deploy:
     name: Start the deploy
     needs: [check, stacks]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'jschell12/infralift'
+    environment: deploy-trigger
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
