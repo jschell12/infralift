@@ -24,6 +24,8 @@ vi.mock("../lib/db.js", () => ({
   },
 }));
 
+// Admins come only from ADMIN_EMAILS; set before cf-auth is loaded.
+process.env.ADMIN_EMAILS = "owner@example.com";
 const { tfRouter, resetCodegenRateLimit } = await import("./tf.js");
 
 type Handler = (req: unknown, res: unknown) => unknown;
@@ -108,7 +110,7 @@ const CUSTOMER = {
   email: "stranger@example.com",
   name: null,
 };
-const OWNER = { ...CUSTOMER, email: "jschell12@gmail.com" };
+const OWNER = { ...CUSTOMER, email: "owner@example.com" };
 
 beforeEach(() => {
   resetCodegenRateLimit();

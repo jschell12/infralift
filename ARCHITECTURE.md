@@ -105,6 +105,8 @@ A project with a Terraform Cloud backend names one of the org's TFC connections 
 
 ## Security model
 
+- This repository is public. Nothing in it can reach the production host: CI runs on GitHub-hosted runners, and deploys are pulled by a private repository ([ADR 0007](docs/adr/0007-public-repo-private-deploy.md)). Pull requests from forks never run on infrastructure we own.
+
 - Customer credentials are stored encrypted (`lib/crypto.ts`) and scoped to their org. A query that forgets the org is a bug; route tests check isolation.
 - infralift never reads a customer's Terraform state and never holds the cloud credentials an import check uses. Those run in the customer's CI.
 - Strings that reach generated YAML, HCL or shell are validated or escaped in one place: `isSafePath` and `isSafeEnvName` (`lib/import/check.ts`), and `quote()` (`lib/hcl/write.ts`). Values reach shell scripts only through environment variables.
@@ -121,7 +123,7 @@ pnpm --filter @infralift/api test
 
 The API needs `DATABASE_URL` (see `apps/api/.env.example`).
 
-A merge to `main` runs CI on GitHub-hosted runners. The marketing site (`apps/web`) deploys to Cloudflare from that CI run. The deploy job for everything else runs on a runner on the Framework host (declared in schellout's `scripts/ci/ci-repos.yml`): it builds the `infralift-{api,dashboard,admin}:local` images and restarts the `infralift` Nomad job. The API applies pending Prisma migrations when it starts (`prisma migrate deploy` in its Dockerfile), then starts the job worker.
+A merge to `main` runs CI on GitHub-hosted runners. The marketing site (`apps/web`) deploys to Cloudflare from that CI run. The API, dashboard and admin are not deployed from this repository: it is public, and a public repository must not have a self-hosted runner. A workflow in a private repository polls `main`, waits until this repository's CI has passed on a commit, builds the `infralift-{api,dashboard,admin}:local` images on the production host and restarts the `infralift` Nomad job ([ADR 0007](docs/adr/0007-public-repo-private-deploy.md)). A merge reaches production within about ten minutes. The API applies pending Prisma migrations when it starts (`prisma migrate deploy` in its Dockerfile), then starts the job worker.
 
 ## Adding things
 

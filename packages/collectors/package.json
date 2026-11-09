@@ -1,6 +1,7 @@
 {
   "name": "@infralift/collectors",
   "version": "1.0.0",
+  "license": "BUSL-1.1",
   "type": "module",
   "private": true,
   "description": "Standalone, dependency-free inventory collectors a customer can read and run themselves.",

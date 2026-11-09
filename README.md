@@ -40,8 +40,12 @@ pnpm --filter @infralift/api validate:stacks
 
 ## Deploying
 
-Merging to `main` deploys. CI runs on GitHub-hosted runners. The marketing site (`apps/web`) deploys to Cloudflare from CI. The API, dashboard and admin deploy from a runner on the Framework host, which builds their images there and restarts the `infralift` Nomad job; the API applies pending migrations as it starts. See [`ARCHITECTURE.md`](ARCHITECTURE.md#running-and-deploying).
+Merging to `main` deploys. CI runs on GitHub-hosted runners. The marketing site (`apps/web`) deploys to Cloudflare from CI. The API, dashboard and admin deploy from a private repository that polls `main`, waits for CI to pass, builds the images on the production host and restarts the `infralift` Nomad job; the API applies pending migrations as it starts. See [`ARCHITECTURE.md`](ARCHITECTURE.md#running-and-deploying).
 
 ## Connections
 
 Assessments use read-only credentials. Supported providers include Vercel, Cloudflare, Heroku, AWS, Google Cloud and Firebase, Azure, DigitalOcean, Netlify, Render, Railway and Fly.io. GitHub and GitLab connections are where infralift opens pull requests; a Terraform Cloud connection is where a project's workspace lives.
+
+## License
+
+[Business Source License 1.1](LICENSE). You can read, modify and run infralift, including in production to manage your own organization's infrastructure. You cannot offer it, or a derivative of it, to others as a hosted or managed service. Each version converts to the Apache License 2.0 four years after it is published.
