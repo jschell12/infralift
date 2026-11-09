@@ -142,9 +142,12 @@ jobs:
   # ARCHITECTURE.md, "Running and deploying"). This job only tells it to
   # start now rather than at its next 10-minute check.
   #
-  # The token can start and cancel workflows in that one repository and do
-  # nothing else (fine-grained, Actions: write). It is available only here:
-  # on a push to main of this repository, never to pull requests or forks.
+  # The token is fine-grained, scoped to jschell12/infralift-deploy only, with
+  # Actions: write. That repository holds nothing but the deploy workflow. If
+  # the token leaked, someone could start (or force-restart), cancel, re-run or
+  # disable that workflow and read or delete its runs and logs; they could not
+  # push code or read secrets. The secret is available only here, on a push to
+  # main of this repository, never to pull requests or forks.
   trigger-deploy:
     name: Start the deploy
     needs: [check, stacks]
@@ -154,11 +157,13 @@ jobs:
     steps:
       - name: Start the private deploy workflow
         env:
-          GH_TOKEN: ${{ secrets.SCHELLOUT_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.DEPLOY_DISPATCH_TOKEN }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
             echo "::notice::No dispatch token; the deploy starts at its next scheduled check."
             exit 0
           fi
-          gh workflow run deploy-infralift.yml --repo jschell12/schellout
-          echo "deploy started for $GITHUB_SHA"
+          gh workflow run deploy.yml --repo jschell12/infralift-deploy --ref main
+          # The deploy picks main's current head, which may be newer than this
+          # commit if another merge landed meanwhile.
+          echo "deploy requested after CI passed on $GITHUB_SHA"
