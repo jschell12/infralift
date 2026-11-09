@@ -138,5 +138,27 @@ jobs:
   # Deploys of the API, dashboard and admin do not run from this repository.
   # It is public, and a public repository must not have a self-hosted runner
   # (a fork's pull request could run its own workflow there). A private
-  # repository polls main, waits for the jobs above to pass on a commit, and
-  # deploys it (see ARCHITECTURE.md, "Running and deploying").
+  # repository deploys main once the jobs above pass on a commit (see
+  # ARCHITECTURE.md, "Running and deploying"). This job only tells it to
+  # start now rather than at its next 10-minute check.
+  #
+  # The token can start and cancel workflows in that one repository and do
+  # nothing else (fine-grained, Actions: write). It is available only here:
+  # on a push to main of this repository, never to pull requests or forks.
+  trigger-deploy:
+    name: Start the deploy
+    needs: [check, stacks]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'jschell12/infralift'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Start the private deploy workflow
+        env:
+          GH_TOKEN: ${{ secrets.SCHELLOUT_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::No dispatch token; the deploy starts at its next scheduled check."
+            exit 0
+          fi
+          gh workflow run deploy-infralift.yml --repo jschell12/schellout
+          echo "deploy started for $GITHUB_SHA"

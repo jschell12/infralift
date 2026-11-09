@@ -40,7 +40,7 @@ pnpm --filter @infralift/api validate:stacks
 
 ## Deploying
 
-Merging to `main` deploys. CI runs on GitHub-hosted runners. The marketing site (`apps/web`) deploys to Cloudflare from CI. The API, dashboard and admin deploy from a private repository that polls `main`, waits for CI to pass, builds the images on the production host and restarts the `infralift` Nomad job; the API applies pending migrations as it starts. See [`ARCHITECTURE.md`](ARCHITECTURE.md#running-and-deploying).
+Merging to `main` deploys. CI runs on GitHub-hosted runners. The marketing site (`apps/web`) deploys to Cloudflare from CI. The API, dashboard and admin deploy from a private repository, started by CI once it passes on `main` (and checked every 10 minutes as a backstop), builds the images on the production host and restarts the `infralift` Nomad job; the API applies pending migrations as it starts. See [`ARCHITECTURE.md`](ARCHITECTURE.md#running-and-deploying).
 
 ## Connections
 
