@@ -7,13 +7,16 @@
 // iat, exp, and identity provider details.
 //
 // In development (no CF Access), the middleware falls through if
-// CF_ACCESS_TEAM_DOMAIN is not set, using a dev-mode fallback.
+// CF_ACCESS_TEAM_DOMAIN is not set, using a dev-mode fallback. In production
+// (NODE_ENV=production) a missing team domain or audience refuses every
+// request instead: the fallback signs everyone in, and an unchecked audience
+// accepts a token issued for any Access application on the team.
 
 import type { Request, Response, NextFunction } from "express";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { prisma } from "./db.js";
 
-const CF_TEAM_DOMAIN = process.env.CF_ACCESS_TEAM_DOMAIN; // e.g. "jschell12.cloudflareaccess.com"
+const CF_TEAM_DOMAIN = process.env.CF_ACCESS_TEAM_DOMAIN; // e.g. "<team>.cloudflareaccess.com"
 const CF_AUD = process.env.CF_ACCESS_AUD; // Application Audience (AUD) tag from Access app
 
 // Cache the JWKS fetcher so we don't create a new one per request.
@@ -58,6 +61,11 @@ const ADMIN_EMAILS = new Set(
  * In dev mode (no CF_ACCESS_TEAM_DOMAIN), creates/uses a dev user.
  */
 export async function cfAuth(req: Request, res: Response, next: NextFunction) {
+  // Production never falls back: fail closed if Access is not configured.
+  if (process.env.NODE_ENV === "production" && (!CF_TEAM_DOMAIN || !CF_AUD)) {
+    console.error("cfAuth: CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD must be set in production; refusing requests");
+    return res.status(503).json({ error: "authentication is not configured" });
+  }
   // Dev mode: no Cloudflare Access configured
   if (!CF_TEAM_DOMAIN) {
     req.user = await getOrCreateUser("dev@infralift.dev", "Dev User");

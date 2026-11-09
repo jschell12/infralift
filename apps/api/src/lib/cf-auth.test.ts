@@ -33,3 +33,33 @@ describe("parseCookies", () => {
     ]);
   });
 });
+
+describe("cfAuth without Access configured", () => {
+  it("refuses every request in production instead of signing in a dev user", async () => {
+    const { cfAuth } = await import("./cf-auth.js");
+    const prev = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const out = { status: 0, body: undefined as unknown, nextCalled: false };
+    const res = {
+      status(c: number) {
+        out.status = c;
+        return this;
+      },
+      json(b: unknown) {
+        out.body = b;
+        return this;
+      },
+    };
+    const err = console.error;
+    console.error = () => {};
+    try {
+      await cfAuth({ headers: {} } as never, res as never, (() => {
+        out.nextCalled = true;
+      }) as never);
+    } finally {
+      process.env.NODE_ENV = prev;
+      console.error = err;
+    }
+    expect(out).toMatchObject({ status: 503, nextCalled: false });
+  });
+});
