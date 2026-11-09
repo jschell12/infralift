@@ -7,7 +7,7 @@
 #   - NEON_DATABASE_URL set (Neon connection string from dashboard)
 #
 # Usage:
-#   export HOMELAB_DATABASE_URL="postgresql://infralift:pass@10.0.0.2:5432/infralift"
+#   export HOMELAB_DATABASE_URL="postgresql://infralift:pass@db.internal:5432/infralift"
 #   export NEON_DATABASE_URL="postgresql://user:pass@ep-xxx.us-east-1.aws.neon.tech/infralift?sslmode=require"
 #   bash scripts/migrate-to-neon.sh
 

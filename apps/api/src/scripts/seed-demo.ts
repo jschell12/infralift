@@ -1,8 +1,8 @@
 // Seed (or remove) the Northwind demo assessments for an org.
 //
-//   node dist/scripts/seed-demo.js --email jschell12@gmail.com
+//   node dist/scripts/seed-demo.js --email you@example.com
 //   node dist/scripts/seed-demo.js --org <orgId> --provider heroku
-//   node dist/scripts/seed-demo.js --email jschell12@gmail.com --remove
+//   node dist/scripts/seed-demo.js --email you@example.com --remove
 //
 // Re-runnable: each run replaces the previous demo assessment for the org.
 // Demo data is identified by the connection label below — nothing else in the

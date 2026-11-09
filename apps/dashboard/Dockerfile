@@ -18,6 +18,10 @@ COPY apps/dashboard apps/dashboard/
 COPY tsconfig.base.json ./
 
 RUN pnpm --filter @infralift/shared build
+# Where /api is proxied to. Read by next.config.ts at build time and baked
+# into the rewrites, so it is a build argument, not a runtime variable.
+ARG API_BACKEND_URL
+ENV API_BACKEND_URL=$API_BACKEND_URL
 RUN pnpm --filter @infralift/dashboard build
 
 # --- Runtime ---

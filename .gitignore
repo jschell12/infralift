@@ -13,3 +13,6 @@ prisma/*.db
 
 # Next static export
 out/
+
+# Session log: kept locally, not published (this repository is public).
+STATUS.md

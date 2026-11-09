@@ -44,9 +44,10 @@ declare global {
   }
 }
 
-// Admin emails that can access the admin app and internal routes.
+// Admin emails that can access the admin app and internal routes, from the
+// ADMIN_EMAILS environment variable (comma-separated). Unset means no admins.
 const ADMIN_EMAILS = new Set(
-  (process.env.ADMIN_EMAILS ?? "jschell12@gmail.com")
+  (process.env.ADMIN_EMAILS ?? "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)

@@ -131,45 +131,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec wrangler deploy
 
-  deploy:
-    name: Deploy to Framework
-    needs: [check, stacks]
-    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
-    # Runs on the Framework itself, on the runner schellout's github-runner
-    # role registers for this repo (scripts/ci/ci-repos.yml: infralift). It
-    # builds the :local images on the Framework's Docker daemon and restarts
-    # the Nomad job that runs them, so no step crosses the LAN. The old
-    # mac-mini runner only relayed these steps over ssh, and lost LAN access
-    # to macOS Local Network Privacy after the mini rebooted on 2026-11-06.
-    runs-on: [self-hosted, homelab-linux]
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: false
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      # NOMAD_ADDR comes from the runner's systemd unit and NOMAD_TOKEN from
-      # the runner user's own ~/.agentsecrets, never from GitHub. Checked
-      # before the build so a missing credential fails in seconds.
-      - name: Check Nomad is reachable
-        run: |
-          if [ -f "$HOME/.agentsecrets" ]; then . "$HOME/.agentsecrets"; fi
-          export NOMAD_ADDR="${NOMAD_ADDR:-http://127.0.0.1:4646}"
-          if [ -z "${NOMAD_TOKEN:-}" ]; then
-            echo "::error::NOMAD_TOKEN not found in ~/.agentsecrets on this runner"
-            exit 1
-          fi
-          export NOMAD_TOKEN
-          nomad job status -short infralift >/dev/null
-          echo "nomad reachable at $NOMAD_ADDR"
-
-      - name: Build images
-        run: make build
-
-      - name: Restart the infralift job
-        run: |
-          if [ -f "$HOME/.agentsecrets" ]; then . "$HOME/.agentsecrets"; fi
-          export NOMAD_ADDR="${NOMAD_ADDR:-http://127.0.0.1:4646}" NOMAD_TOKEN
-          nomad job restart -yes -on-error=fail infralift
+  # Deploys of the API, dashboard and admin do not run from this repository.
+  # It is public, and a public repository must not have a self-hosted runner
+  # (a fork's pull request could run its own workflow there). A private
+  # repository polls main, waits for the jobs above to pass on a commit, and
+  # deploys it (see ARCHITECTURE.md, "Running and deploying").

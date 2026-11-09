@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
-const API_BACKEND = process.env.API_BACKEND_URL ?? "http://10.0.0.2:30380";
+// Where /api is proxied to, fixed at build time (the Dockerfile's
+// API_BACKEND_URL build argument). Defaults to the local dev API.
+const API_BACKEND = process.env.API_BACKEND_URL || "http://localhost:4000";
 
 const nextConfig: NextConfig = {
   output: "standalone",
