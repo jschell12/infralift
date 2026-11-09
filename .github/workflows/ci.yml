@@ -138,5 +138,37 @@ jobs:
   # Deploys of the API, dashboard and admin do not run from this repository.
   # It is public, and a public repository must not have a self-hosted runner
   # (a fork's pull request could run its own workflow there). A private
-  # repository polls main, waits for the jobs above to pass on a commit, and
-  # deploys it (see ARCHITECTURE.md, "Running and deploying").
+  # repository deploys main once the jobs above pass on a commit (see
+  # ARCHITECTURE.md, "Running and deploying"). This job only tells it to
+  # start now rather than at its next 10-minute check.
+  #
+  # The token is fine-grained, scoped to jschell12/infralift-deploy only, with
+  # Actions: write. That repository holds nothing but the deploy workflow. If
+  # the token leaked, someone could start (or force-restart), cancel, re-run or
+  # disable that workflow and read or delete its runs and logs; they could not
+  # push code or read secrets. Re-running an old deploy run deploys main's
+  # current head, not that run's commit; its one input is force.
+  #
+  # The secret lives in the deploy-trigger environment, which only main may
+  # use, so a branch carrying an edited copy of this file cannot read it, nor
+  # can a fork. The job's if: guards only the copy of this file on main.
+  trigger-deploy:
+    name: Start the deploy
+    needs: [check, stacks]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'jschell12/infralift'
+    environment: deploy-trigger
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Start the private deploy workflow
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOY_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::No dispatch token; the deploy starts at its next scheduled check."
+            exit 0
+          fi
+          gh workflow run deploy.yml --repo jschell12/infralift-deploy --ref main
+          # The deploy picks main's current head, which may be newer than this
+          # commit if another merge landed meanwhile.
+          echo "deploy requested after CI passed on $GITHUB_SHA"
