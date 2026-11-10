@@ -21,12 +21,20 @@ import {
 import { buildMigrationOptions } from "../lib/options.js";
 import { buildReportExtras } from "../lib/report-extras.js";
 import { buildMigrationPlan } from "../lib/migration-plan.js";
-import { InvalidInput, NotFound, Upstream, handle } from "../lib/errors.js";
+import { InvalidInput, NotFound, Upstream, handle, parseBody } from "../lib/errors.js";
+import { setReportedSpend } from "../services/assessments.js";
 
 export const assessmentsRouter = Router();
 
 const runSchema = z.object({
   connectionId: z.string().min(1),
+});
+
+// The customer's monthly bill in dollars, as read off an invoice; null clears
+// it. Capped like the public estimator's field, so a stray keystroke cannot
+// store a number no comparison should be made against.
+const spendSchema = z.object({
+  monthlyUsd: z.number().min(0).max(10_000_000).nullable(),
 });
 
 async function summarize(assessmentId: string) {
@@ -249,6 +257,7 @@ assessmentsRouter.get("/:id/options", handle(async (req, res) => {
     id: assessment.id,
     provider: assessment.provider,
     estimatedMonthlyCostCents: assessment.estimatedMonthlyCostCents,
+    reportedMonthlySpendCents: assessment.reportedMonthlySpendCents,
     inventory: assessment.inventory.map((i) => ({
       provider: i.provider as Provider,
       type: i.type,
@@ -262,6 +271,13 @@ assessmentsRouter.get("/:id/options", handle(async (req, res) => {
   res.json(report);
 }));
 
+// The customer's own monthly bill, which the comparison uses in place of the
+// inventory priced at list rates.
+assessmentsRouter.patch("/:id/spend", handle(async (req, res) => {
+  const { monthlyUsd } = parseBody(spendSchema, req.body);
+  res.json(await setReportedSpend(req.user!.orgId, req.params.id, monthlyUsd));
+}));
+
 // Full report: summary + inventory + findings.
 assessmentsRouter.get("/:id", handle(async (req, res) => {
   // Ownership first. summarize() looks the assessment up by id alone, which
@@ -272,7 +288,7 @@ assessmentsRouter.get("/:id", handle(async (req, res) => {
   // matching /:id/options, so the response does not confirm the id exists.
   const owned = await prisma.assessment.findFirst({
     where: { id: req.params.id, orgId: req.user!.orgId },
-    select: { id: true },
+    select: { id: true, reportedMonthlySpendCents: true },
   });
   if (!owned) throw new NotFound("Not found");
 
@@ -300,6 +316,7 @@ assessmentsRouter.get("/:id", handle(async (req, res) => {
         id: summary.id,
         provider: summary.provider,
         estimatedMonthlyCostCents: summary.estimatedMonthlyCostCents,
+        reportedMonthlySpendCents: owned.reportedMonthlySpendCents,
         inventory: inventory.map((i) => ({
           provider: i.provider as Provider,
           type: i.type,

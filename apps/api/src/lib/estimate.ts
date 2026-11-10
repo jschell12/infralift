@@ -21,8 +21,11 @@
 //    the first competent reader, so the ops line is computed here and is not
 //    optional in the response.
 
-import type { OptionSizing } from "@infralift/shared";
+import type { OpsBurden, OptionSizing } from "@infralift/shared";
+import { compareTarget } from "./compare.js";
 import { planTarget, sizeTarget, type WorkloadFootprint } from "./sizing.js";
+
+export type { OpsBurden };
 
 // ---------------------------------------------------------------------------
 // Input
@@ -99,13 +102,6 @@ const HETZNER_HOURS_PER_EXTRA_INSTANCE = 0.5;
 // limits, cold paths, rewriting anything that assumed a filesystem), and that
 // belongs in the migration scope, not the monthly line.
 const CLOUDFLARE_BASE_HOURS = 0.5;
-
-export interface OpsBurden {
-  hoursPerMonth: number;
-  monthlyCents: number;
-  hourlyRateUsd: number;
-  note: string;
-}
 
 export function opsBurden(
   slug: string,
@@ -244,9 +240,14 @@ export function estimate(input: EstimateInput): EstimateResult {
     if (!sizing) continue;
 
     const ops = opsBurden(slug, footprint, rate);
-    const gross =
-      spendCents === null ? null : spendCents - sizing.monthlyCents;
-    const net = gross === null ? null : gross - ops.monthlyCents;
+    // The same comparison the options page makes. There is no inventory here
+    // to measure an exit toll from, so it is zero rather than guessed.
+    const compared = compareTarget({
+      currentMonthlyCents: spendCents,
+      targetMonthlyCents: sizing.monthlyCents,
+      ops,
+      exitTollCents: 0,
+    });
     const fit = fitFor(slug, input);
 
     targets.push({
@@ -257,9 +258,9 @@ export function estimate(input: EstimateInput): EstimateResult {
       ops,
       eligible: fit.eligible,
       ineligibleReason: fit.reason,
-      grossMonthlySavingsCents: gross,
-      netMonthlySavingsCents: net,
-      netAnnualSavingsCents: net === null ? null : net * 12,
+      grossMonthlySavingsCents: compared.grossMonthlySavingsCents,
+      netMonthlySavingsCents: compared.netMonthlySavingsCents,
+      netAnnualSavingsCents: compared.netAnnualSavingsCents,
     });
   }
 

@@ -8,13 +8,16 @@
 
 import type {
   CompanionSuggestion,
+  CurrentSpend,
   InferredNeed,
   MigrationOption,
   MigrationOptionsReport,
   Provider,
   ResourceInventoryItem,
 } from "@infralift/shared";
+import { compareTarget } from "./compare.js";
 import { prisma } from "./db.js";
+import { DEFAULT_HOURLY_RATE_USD, opsBurden } from "./estimate.js";
 import { computeExitToll } from "./exit-toll.js";
 import { recommend, type RecommendInput } from "./recommend.js";
 import { computeFootprint, sizeTarget } from "./sizing.js";
@@ -209,14 +212,36 @@ const CODEGEN_TARGETS: Record<string, "cloudflare" | "hetzner"> = {
   hetzner: "hetzner",
 };
 
+/** Today's bill, and where it came from. What the customer told us wins over
+ * what the connector priced from the inventory, because connectors price at
+ * published list rates and never read an invoice. Neither known means
+ * unknown, which is never treated as zero. */
+export function resolveCurrentSpend(
+  reportedMonthlySpendCents: number | null,
+  estimatedMonthlyCostCents: number | null
+): CurrentSpend {
+  if (reportedMonthlySpendCents !== null) {
+    return { monthlyCents: reportedMonthlySpendCents, source: "customer_reported" };
+  }
+  if (estimatedMonthlyCostCents !== null) {
+    return { monthlyCents: estimatedMonthlyCostCents, source: "inventory_list_price" };
+  }
+  return { monthlyCents: null, source: "unknown" };
+}
+
 export async function buildMigrationOptions(assessment: {
   id: string;
   provider: string;
   estimatedMonthlyCostCents: number | null;
+  reportedMonthlySpendCents: number | null;
   inventory: ResourceInventoryItem[];
 }): Promise<MigrationOptionsReport> {
   const { runtime, needs } = inferProfile(assessment.inventory);
-  const currentMonthlyCents = assessment.estimatedMonthlyCostCents ?? 0;
+  const currentSpend = resolveCurrentSpend(
+    assessment.reportedMonthlySpendCents,
+    assessment.estimatedMonthlyCostCents
+  );
+  const currentMonthlyCents = currentSpend.monthlyCents;
 
   const required = needs
     .filter((n) => HARD_REQUIREMENT_KEYS.has(n.key))
@@ -225,9 +250,9 @@ export async function buildMigrationOptions(assessment: {
     .filter((n) => !HARD_REQUIREMENT_KEYS.has(n.key))
     .map((n) => n.key);
 
-  // Budget: current spend, floored so a tiny account still gets ranked
-  // against realistic entry pricing.
-  const budgetMonthlyCents = Math.max(currentMonthlyCents, 2000);
+  // Budget: current spend, floored so a tiny account (or an unknown bill)
+  // still gets ranked against realistic entry pricing.
+  const budgetMonthlyCents = Math.max(currentMonthlyCents ?? 0, 2000);
 
   const input: RecommendInput = {
     runtime,
@@ -236,7 +261,12 @@ export async function buildMigrationOptions(assessment: {
     budgetMonthlyCents,
     opsTolerance: 1, // PaaS customers by definition; VPS targets rank lower, honestly
     trafficGbMonth: 50,
-    annualSpendCents: Math.max(currentMonthlyCents, 2000) * 12,
+    // No annualSpendCents: committed-spend tiers are qualified on what the
+    // customer would spend on each target, which computeEffectivePricing
+    // derives from that target's own price. Sizing them off today's bill gave
+    // a $3,229/mo Heroku account Cloudflare's 15% enterprise tier, which
+    // starts at $36,000/yr of Cloudflare spend that account would never reach
+    // once it moved.
     startupCreditsEligible: false,
   };
 
@@ -273,6 +303,14 @@ export async function buildMigrationOptions(assessment: {
   // Workload footprint for sized target pricing.
   const footprint = computeFootprint(assessment.inventory);
 
+  // The exit toll is paid once whichever target is chosen, and it is what
+  // break-even repays. Waivers are on request, so this assumes the customer
+  // asks; the comparison table says so.
+  const exitToll = computeExitToll(
+    assessment.provider as Provider,
+    assessment.inventory
+  );
+
   const options: MigrationOption[] = candidates.map((c) => {
     const companions: CompanionSuggestion[] = [];
     const gaps: string[] = [];
@@ -287,14 +325,23 @@ export async function buildMigrationOptions(assessment: {
     }
 
     // Sized targets: the estimate is built from the measured workload
-    // (data services folded into the line items) and owns the savings math.
+    // (data services folded into the line items) and owns the savings math,
+    // net of the ops line exactly as /estimate counts it.
     // Unsized targets: flat catalog pricing stays visible but no savings
     // claim is made — an absent number beats an absurd one.
     const sizing = sizeTarget(c.slug, footprint);
-    let monthlySavingsCents: number | null = null;
-    if (sizing) {
-      monthlySavingsCents = currentMonthlyCents - sizing.monthlyCents;
-    }
+    const ops = sizing
+      ? opsBurden(c.slug, footprint, DEFAULT_HOURLY_RATE_USD)
+      : null;
+    const compared =
+      sizing && ops
+        ? compareTarget({
+            currentMonthlyCents,
+            targetMonthlyCents: sizing.monthlyCents,
+            ops,
+            exitTollCents: exitToll.centsAfterWaiver,
+          })
+        : null;
 
     return {
       slug: c.slug,
@@ -303,7 +350,11 @@ export async function buildMigrationOptions(assessment: {
       score: c.score,
       pricing: c.pricing,
       sizing,
-      monthlySavingsCents,
+      monthlySavingsCents: compared?.grossMonthlySavingsCents ?? null,
+      ops,
+      netMonthlySavingsCents: compared?.netMonthlySavingsCents ?? null,
+      breakEvenMonths: compared?.breakEvenMonths ?? null,
+      firstYearNetCents: compared?.firstYearNetCents ?? null,
       benefits: c.benefits,
       drawbacks: c.drawbacks,
       managedLevel: c.managedLevel,
@@ -316,12 +367,16 @@ export async function buildMigrationOptions(assessment: {
   });
 
   // Sized options lead: their numbers are defensible line by line, and they
-  // are the migrations infralift can execute. Within each group, best
-  // savings first, then score.
+  // are the migrations infralift can execute. Within the sized group, best
+  // net savings first; with no bill to save against, cheapest first, which is
+  // how /estimate orders the same case. Unsized options go by score.
   options.sort((a, b) => {
     if (!!a.sizing !== !!b.sizing) return a.sizing ? -1 : 1;
     if (a.sizing && b.sizing) {
-      return (b.monthlySavingsCents ?? 0) - (a.monthlySavingsCents ?? 0);
+      if (a.netMonthlySavingsCents !== null && b.netMonthlySavingsCents !== null) {
+        return b.netMonthlySavingsCents - a.netMonthlySavingsCents;
+      }
+      return a.sizing.monthlyCents - b.sizing.monthlyCents;
     }
     return b.score - a.score;
   });
@@ -329,7 +384,7 @@ export async function buildMigrationOptions(assessment: {
   return {
     assessmentId: assessment.id,
     provider: assessment.provider as Provider,
-    currentMonthlyCents,
+    currentSpend,
     needs,
     profile: {
       runtime,
@@ -339,10 +394,7 @@ export async function buildMigrationOptions(assessment: {
     },
     // The migration doc promises this before approval, and it is the question
     // every buyer asks after seeing the monthly savings.
-    exitToll: computeExitToll(
-      assessment.provider as Provider,
-      assessment.inventory
-    ),
+    exitToll,
     options,
   };
 }

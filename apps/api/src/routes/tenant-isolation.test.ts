@@ -8,11 +8,15 @@ import { describe, expect, it, vi } from "vitest";
 // Prisma is stubbed so the assertions are about the `where` clause each
 // handler builds, which is the part that was wrong.
 
-const findFirst = vi.fn(async () => null);
+const findFirst = vi.fn(async (): Promise<unknown> => null);
+const update = vi.fn(async (args: { where: { id: string }; data: Record<string, unknown> }) => ({
+  id: args.where.id,
+  ...args.data,
+}));
 
 vi.mock("../lib/db.js", () => ({
   prisma: {
-    assessment: { findFirst, findUnique: async () => null },
+    assessment: { findFirst, findUnique: async () => null, update },
     migration: { findFirst },
   },
 }));
@@ -80,6 +84,100 @@ describe("assessment reports are scoped to the caller's org", () => {
         where: { id: "asm_someone_elses", orgId: "org_mine" },
       })
     );
+  });
+});
+
+describe("reported spend is scoped to the caller's org", () => {
+  const user = { orgId: "org_mine", userId: "u1", email: "a@b.c", name: null };
+
+  it("refuses PATCH /:id/spend on another org's assessment, and writes nothing", async () => {
+    findFirst.mockClear();
+    update.mockClear();
+
+    const res = await call(assessmentsRouter, "patch", "/:id/spend", {
+      params: { id: "asm_someone_elses" },
+      body: { monthlyUsd: 1200 },
+      user,
+    });
+
+    // A bill the customer entered changes the savings every viewer of that
+    // assessment sees, so a stranger with the id must not be able to set it.
+    expect(res.status).toBe(404);
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "asm_someone_elses", orgId: "org_mine" },
+      })
+    );
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("stores dollars as cents on the caller's own assessment", async () => {
+    findFirst.mockClear();
+    update.mockClear();
+    findFirst.mockResolvedValueOnce({ id: "asm_mine" });
+
+    const res = await call(assessmentsRouter, "patch", "/:id/spend", {
+      params: { id: "asm_mine" },
+      body: { monthlyUsd: 755.49 },
+      user,
+    });
+
+    expect(res.status).toBe(200);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "asm_mine" },
+        data: { reportedMonthlySpendCents: 75549 },
+      })
+    );
+    expect(res.body).toEqual({ id: "asm_mine", reportedMonthlySpendCents: 75549 });
+  });
+
+  it("clears the reported bill with null", async () => {
+    update.mockClear();
+    findFirst.mockResolvedValueOnce({ id: "asm_mine" });
+
+    const res = await call(assessmentsRouter, "patch", "/:id/spend", {
+      params: { id: "asm_mine" },
+      body: { monthlyUsd: null },
+      user,
+    });
+
+    expect(res.status).toBe(200);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { reportedMonthlySpendCents: null } })
+    );
+  });
+
+  it("rejects a negative, absurd, missing or non-numeric bill before any lookup", async () => {
+    for (const body of [
+      { monthlyUsd: -1 },
+      { monthlyUsd: 10_000_001 },
+      {},
+      { monthlyUsd: "1200" },
+    ]) {
+      findFirst.mockClear();
+      update.mockClear();
+      const res = await call(assessmentsRouter, "patch", "/:id/spend", {
+        params: { id: "asm_mine" },
+        body,
+        user,
+      });
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect(findFirst).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+    }
+  });
+
+  it("accepts both ends of the range", async () => {
+    for (const monthlyUsd of [0, 10_000_000]) {
+      findFirst.mockResolvedValueOnce({ id: "asm_mine" });
+      const res = await call(assessmentsRouter, "patch", "/:id/spend", {
+        params: { id: "asm_mine" },
+        body: { monthlyUsd },
+        user,
+      });
+      expect(res.status).toBe(200);
+    }
   });
 });
 

@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import {
   PROVIDER_LABELS,
+  type CurrentSpendSource,
   type ExitTollEstimate,
   type MigrationOption,
   type MigrationOptionsReport,
@@ -11,6 +12,7 @@ import {
 import { api, formatCents } from "../../../../lib/api";
 import {
   Card,
+  CardTitle,
   Chip,
   Drawer,
   INPUT,
@@ -19,6 +21,9 @@ import {
   Note,
   PrimaryButton,
   StatCard,
+  TableHead,
+  TableRow,
+  type Tone,
 } from "../../../../components/ui";
 
 interface ApproveResult {
@@ -32,6 +37,266 @@ const MANAGED_LABEL: Record<number, string> = {
   2: "managed with knobs",
   3: "fully managed",
 };
+
+const SOURCE_LABEL: Record<CurrentSpendSource, string> = {
+  customer_reported: "your bill",
+  inventory_list_price: "list price",
+  unknown: "unknown",
+};
+const SOURCE_TONE: Record<CurrentSpendSource, Tone> = {
+  customer_reported: "accent",
+  inventory_list_price: "warn",
+  unknown: "faint",
+};
+const SOURCE_DETAIL: Record<CurrentSpendSource, string> = {
+  customer_reported: "the monthly bill you entered",
+  inventory_list_price:
+    "the assessed resources at published list prices, not your invoice",
+  unknown: "this provider does not expose billing to us",
+};
+
+const BTN_OUTLINE =
+  "rounded-lg border border-accent/40 px-3.5 py-2 text-[13px] font-semibold text-accent hover:bg-accent-dim/40 disabled:opacity-50";
+
+function breakEvenLabel(option: MigrationOption, spendKnown: boolean): string {
+  if (!spendKnown) return "\u2014";
+  if (option.breakEvenMonths === null) return "never";
+  if (option.breakEvenMonths === 0) return "immediately";
+  return `${option.breakEvenMonths} mo`;
+}
+
+// One field, inline: the comparison is meaningless without it, so it sits
+// where the missing number would be rather than behind a drawer.
+function SpendForm({
+  assessmentId,
+  initialCents,
+  canClear,
+  onSaved,
+  onCancel,
+}: {
+  assessmentId: string;
+  initialCents: number | null;
+  canClear: boolean;
+  onSaved: () => void;
+  onCancel?: () => void;
+}) {
+  const [value, setValue] = useState(
+    initialCents !== null ? String(initialCents / 100) : ""
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const parsed = Number(value.replace(/[$,\s]/g, ""));
+  const valid = value.trim() !== "" && Number.isFinite(parsed) && parsed >= 0;
+
+  async function save(monthlyUsd: number | null) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/assessments/${assessmentId}/spend`, {
+        method: "PATCH",
+        body: JSON.stringify({ monthlyUsd }),
+      });
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid) save(parsed);
+      }}
+      className="border-b border-border py-3"
+    >
+      <label className={LABEL} htmlFor="monthly-bill">
+        What&apos;s your monthly bill?
+      </label>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="w-[180px]">
+          <input
+            id="monthly-bill"
+            className={INPUT}
+            inputMode="decimal"
+            placeholder="USD, e.g. 750"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </div>
+        <button type="submit" className={BTN_OUTLINE} disabled={busy || !valid}>
+          {busy ? "Saving..." : "Compare"}
+        </button>
+        {canClear && (
+          <button
+            type="button"
+            className="text-[13px] text-muted hover:text-text"
+            disabled={busy}
+            onClick={() => save(null)}
+          >
+            Clear
+          </button>
+        )}
+        {onCancel && (
+          <button
+            type="button"
+            className="text-[13px] text-muted hover:text-text"
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+      <p className="mt-1.5 text-[12px] text-faint">
+        The all-in total from your last invoice. Saved on this assessment and
+        used instead of list prices.
+      </p>
+      {error && <div className="mt-1.5 text-sm text-danger">{error}</div>}
+    </form>
+  );
+}
+
+const CMP_COLS = "grid-cols-[1.8fr_1fr_1fr_1fr_1fr_1fr]";
+
+// Today against every target on the same five numbers. Sized targets carry
+// the full comparison; unsized ones are listed so nothing is hidden, but they
+// make no claim.
+function ComparisonTable({
+  report,
+  onSpendSaved,
+}: {
+  report: MigrationOptionsReport;
+  onSpendSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const spend = report.currentSpend;
+  const known = spend.monthlyCents !== null;
+  const toll = report.exitToll;
+  const sized = report.options.filter((o) => o.sizing);
+  const unsized = report.options.filter((o) => !o.sizing);
+  const rate = sized.find((o) => o.ops)?.ops?.hourlyRateUsd;
+
+  return (
+    <Card className="mb-5">
+      <CardTitle>Side by side</CardTitle>
+      <p className="mb-4 max-w-[680px] text-[13px] leading-relaxed text-muted">
+        Infra is what the provider bills. Ops is the operations work a target
+        adds that you do not do today
+        {rate !== undefined ? `, priced at $${rate}/hour` : ""}. Net is what
+        you keep each month after both. The exit toll is paid once, and
+        break-even is how long the net saving takes to repay it.
+      </p>
+      <div className="overflow-x-auto">
+        <div className="min-w-[680px]">
+          <TableHead cols={CMP_COLS}>
+            <span>Stack</span>
+            <span>Infra/mo</span>
+            <span>Ops/mo</span>
+            <span>Net/mo</span>
+            <span>Exit toll</span>
+            <span>Break-even</span>
+          </TableHead>
+
+          <TableRow cols={CMP_COLS}>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">
+                Today on {PROVIDER_LABELS[report.provider]}
+              </span>
+              <Chip size="xs" tone={SOURCE_TONE[spend.source]}>
+                {SOURCE_LABEL[spend.source]}
+              </Chip>
+            </div>
+            <span className={`text-[15px] font-semibold ${NUM}`}>
+              {known ? formatCents(spend.monthlyCents) : "unknown"}
+              {known && !editing && (
+                <button
+                  type="button"
+                  className="ml-2 text-[12px] font-normal text-muted hover:text-text"
+                  onClick={() => setEditing(true)}
+                >
+                  {spend.source === "customer_reported" ? "edit" : "use your bill"}
+                </button>
+              )}
+            </span>
+            <span className="text-faint">{"\u2014"}</span>
+            <span className="text-faint">{"\u2014"}</span>
+            <span className="text-faint">{"\u2014"}</span>
+            <span className="text-faint">{"\u2014"}</span>
+          </TableRow>
+
+          {(!known || editing) && (
+            <SpendForm
+              assessmentId={report.assessmentId}
+              initialCents={
+                spend.source === "customer_reported" ? spend.monthlyCents : null
+              }
+              canClear={spend.source === "customer_reported"}
+              onSaved={() => {
+                setEditing(false);
+                onSpendSaved();
+              }}
+              onCancel={known ? () => setEditing(false) : undefined}
+            />
+          )}
+
+          {sized.map((o) => {
+            const net = o.netMonthlySavingsCents;
+            return (
+              <TableRow key={o.slug} cols={CMP_COLS}>
+                <span className="text-sm font-medium">{o.name}</span>
+                <span className={NUM}>{formatCents(o.sizing!.monthlyCents)}</span>
+                <span className={NUM}>
+                  {formatCents(o.ops?.monthlyCents)}
+                  {o.ops && (
+                    <span className="block text-[11px] text-faint">
+                      {o.ops.hoursPerMonth} hr
+                    </span>
+                  )}
+                </span>
+                <span
+                  className={`font-semibold ${NUM} ${net === null ? "text-faint" : net > 0 ? "text-accent" : "text-danger"}`}
+                >
+                  {net === null
+                    ? "\u2014"
+                    : `${net > 0 ? "+" : "-"}${formatCents(Math.abs(net))}`}
+                </span>
+                <span className={NUM}>
+                  {formatCents(toll.centsAfterWaiver)}
+                  {toll.waiverAvailable && toll.cents > 0 && (
+                    <span className="block text-[11px] text-faint">
+                      {formatCents(toll.cents)} waived
+                    </span>
+                  )}
+                </span>
+                <span className={NUM}>{breakEvenLabel(o, known)}</span>
+              </TableRow>
+            );
+          })}
+
+          {unsized.map((o) => (
+            <TableRow key={o.slug} cols={CMP_COLS}>
+              <span className="text-sm text-faint">{o.name}</span>
+              <span className="col-span-5 text-[13px] text-faint">
+                not sized &middot; catalog{" "}
+                {formatCents(o.pricing.steadyStateMonthlyCents)}/mo, no comparison
+                made
+              </span>
+            </TableRow>
+          ))}
+        </div>
+      </div>
+      {toll.waiverAvailable && toll.cents > 0 && (
+        <p className="mt-3 text-[12px] text-faint">
+          Break-even assumes you request the egress waiver your provider
+          offers for migrations.
+        </p>
+      )}
+    </Card>
+  );
+}
 
 // The one-time cost of getting data out. Buyers conflate this with the
 // monthly egress line, so it is stated as its own number with the volume it
@@ -106,14 +371,14 @@ function OptionCard({
   option,
   rank,
   assessmentId,
-  currentMonthlyCents,
+  spendKnown,
   onApprove,
 }: {
   onApprove: (target: "cloudflare" | "hetzner") => void;
   option: MigrationOption;
   rank: number;
   assessmentId: string;
-  currentMonthlyCents: number;
+  spendKnown: boolean;
 }) {
   const companionMonthly = option.companions.reduce(
     (sum, c) => sum + c.monthlyCents,
@@ -124,7 +389,9 @@ function OptionCard({
   const allIn = option.sizing
     ? option.sizing.monthlyCents
     : option.pricing.steadyStateMonthlyCents + companionMonthly;
-  const saves = option.monthlySavingsCents;
+  // Net of the ops line, the same figure the comparison table and /estimate
+  // show.
+  const saves = option.netMonthlySavingsCents;
 
   return (
     <Card className="mb-4">
@@ -139,15 +406,20 @@ function OptionCard({
         </Chip>
         {saves !== null && saves > 0 && (
           <span className={`ml-auto text-[15px] font-semibold text-accent ${NUM}`}>
-            saves {formatCents(saves)}/mo
+            saves {formatCents(saves)}/mo net
           </span>
         )}
-        {saves !== null && saves <= 0 && currentMonthlyCents > 0 && (
+        {saves !== null && saves <= 0 && (
           <span className={`ml-auto text-[15px] font-semibold text-warn ${NUM}`}>
             +{formatCents(-saves)}/mo vs today
           </span>
         )}
-        {saves === null && (
+        {saves === null && option.sizing && !spendKnown && (
+          <span className="ml-auto text-[13px] text-faint">
+            enter your bill to compare
+          </span>
+        )}
+        {saves === null && !option.sizing && (
           <span className="ml-auto text-[13px] text-faint">
             sized estimate on request
           </span>
@@ -167,6 +439,13 @@ function OptionCard({
               {option.sizing.confidence}
             </Chip>
           </div>
+          {option.ops && (
+            <p className={`mb-3 text-[13px] text-muted ${NUM}`}>
+              Plus {formatCents(option.ops.monthlyCents)}/mo of operations work
+              ({option.ops.hoursPerMonth} hr at ${option.ops.hourlyRateUsd}/hr).{" "}
+              {option.ops.note}
+            </p>
+          )}
           <div className="mb-1.5 text-[11px] uppercase tracking-[0.06em] text-faint">
             How we sized it
           </div>
@@ -300,11 +579,13 @@ export default function MigrationOptionsPage({
   const [approveError, setApproveError] = useState<string | null>(null);
   const [approved, setApproved] = useState<ApproveResult | null>(null);
 
-  useEffect(() => {
+  function load() {
     api<MigrationOptionsReport>(`/assessments/${id}/options`)
       .then(setReport)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, [id]);
+  }
+
+  useEffect(load, [id]);
 
   async function submitApproval() {
     if (!approving) return;
@@ -332,18 +613,16 @@ export default function MigrationOptionsPage({
   if (error) return <div className="mt-2 text-sm text-danger">{error}</div>;
   if (!report) return <p className="text-muted">Loading options...</p>;
 
-  // Prefer the best sized option for the headline — it's the one whose
-  // number we can defend line by line.
-  const best =
-    report.options
-      .filter((o) => o.sizing && o.monthlySavingsCents !== null)
-      .sort((a, b) => (b.monthlySavingsCents ?? 0) - (a.monthlySavingsCents ?? 0))[0] ??
-    report.options[0];
-  // Only sized targets make a savings claim.
+  // The API already ranks sized options first by net saving, so the top one
+  // is the one whose number we can defend line by line.
+  const best = report.options[0];
+  const spend = report.currentSpend;
+  const spendKnown = spend.monthlyCents !== null;
+  // Only sized targets make a savings claim, and only against a known bill.
   const bestSavings = Math.max(
     0,
     ...report.options
-      .map((o) => o.monthlySavingsCents)
+      .map((o) => o.netMonthlySavingsCents)
       .filter((s): s is number => s !== null)
   );
 
@@ -368,8 +647,9 @@ export default function MigrationOptionsPage({
       <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard
           label={`Current spend on ${PROVIDER_LABELS[report.provider]}`}
-          value={`${formatCents(report.currentMonthlyCents)}/mo`}
-          tone="danger"
+          value={spendKnown ? `${formatCents(spend.monthlyCents)}/mo` : "unknown"}
+          sub={SOURCE_DETAIL[spend.source]}
+          tone={spendKnown ? "danger" : "muted"}
           center
         />
         <StatCard
@@ -378,11 +658,20 @@ export default function MigrationOptionsPage({
           center
         />
         <StatCard
-          label="Best steady-state savings"
-          value={`${formatCents(bestSavings)}/mo`}
+          label="Best net savings"
+          value={spendKnown ? `${formatCents(bestSavings)}/mo` : "\u2014"}
+          sub={
+            spendKnown
+              ? "after operations work"
+              : "enter your bill below to compare"
+          }
           center
         />
       </div>
+
+      {report.options.length > 0 && (
+        <ComparisonTable report={report} onSpendSaved={load} />
+      )}
 
       {report.needs.length > 0 && (
         <Card className="mb-5">
@@ -420,7 +709,7 @@ export default function MigrationOptionsPage({
             option={o}
             rank={i + 1}
             assessmentId={report.assessmentId}
-            currentMonthlyCents={report.currentMonthlyCents}
+            spendKnown={spendKnown}
             onApprove={(target) => {
               setApproved(null);
               setApproveError(null);

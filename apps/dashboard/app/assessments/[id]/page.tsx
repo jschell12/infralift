@@ -68,7 +68,6 @@ interface ReportExtras {
   recommendation?: AssessmentRecommendation;
   quote?: {
     fixedFeeCents: number;
-    paybackMonths: number | null;
     lines: { phase: string; effort: string }[];
   };
 }
@@ -89,7 +88,8 @@ const CATEGORY_LABEL: Record<FindingCategory, string> = {
 };
 
 const CONFIDENCE_TONE: Record<PriceConfidence, Tone> = {
-  invoiced: "muted",
+  reported: "accent",
+  list_price: "warn",
   corroborated: "accent",
   advisor: "warn",
   anecdote: "muted",
@@ -184,8 +184,15 @@ export default function AssessmentReportPage({
 
   const projection = report.costProjection ?? [];
   const inventory = report.inventory.slice(0, 8);
-  const savings = report.estimatedMonthlySavingsCents ?? 0;
   const fee = report.quote?.fixedFeeCents ?? null;
+  // The headline is the recommended target's sized saving net of operations
+  // work, the same figure the options page shows. It used to be the
+  // connector's flat "move to a $20 VPS" guess, which contradicted the sized
+  // recommendation further down the page.
+  const recommended = report.recommendation;
+  const netSavings = recommended?.netMonthlySavingsCents ?? null;
+  const spendUnknown =
+    projection.find((r) => r.isCurrent)?.source === "unknown";
 
   return (
     <>
@@ -214,8 +221,22 @@ export default function AssessmentReportPage({
           center
         />
         <StatCard
-          label="Estimated monthly savings"
-          value={formatCents(report.estimatedMonthlySavingsCents)}
+          label="Net monthly savings"
+          value={
+            netSavings === null
+              ? "\u2014"
+              : formatCents(Math.max(0, netSavings))
+          }
+          sub={
+            netSavings === null
+              ? spendUnknown
+                ? "enter your monthly bill on the options page"
+                : "no sized target to compare yet"
+              : netSavings > 0
+                ? `moving to ${recommended!.target}, after operations work`
+                : `${recommended!.target} does not beat today's bill`
+          }
+          tone={netSavings !== null && netSavings <= 0 ? "warn" : "accent"}
           center
         />
       </div>
@@ -271,7 +292,7 @@ export default function AssessmentReportPage({
                 {formatCents(r.steadyStateCents)}
               </span>
               <Chip tone={CONFIDENCE_TONE[r.confidence]} size="xs">
-                {r.confidence}
+                {r.confidence.replace(/_/g, " ")}
               </Chip>
             </TableRow>
           ))}
@@ -565,16 +586,7 @@ export default function AssessmentReportPage({
               >
                 {formatCents(fee)}
               </div>
-              <div className="mb-4 text-[13px] text-muted">
-                fixed
-                {report.quote.paybackMonths != null && savings > 0 && (
-                  <>
-                    {" "}
-                    &middot; payback in {report.quote.paybackMonths} months on{" "}
-                    {formatCents(savings)}/mo saved
-                  </>
-                )}
-              </div>
+              <div className="mb-4 text-[13px] text-muted">fixed</div>
               <div className="mb-4.5 flex flex-col">
                 {report.quote.lines.map((q) => (
                   <div

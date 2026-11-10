@@ -86,6 +86,9 @@ model Assessment {
   resourceCount               Int       @default(0)
   estimatedMonthlyCostCents   Int?
   estimatedMonthlySavingsCents Int?
+  // The monthly bill as the customer told us, which beats the inventory
+  // priced at list rates. Null until they say. See migration 0018.
+  reportedMonthlySpendCents   Int?
   createdAt                   DateTime  @default(now())
 
   org        Org                @relation(fields: [orgId], references: [id])
