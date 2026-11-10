@@ -11,6 +11,11 @@
 #   backup          nightly (the BACKUP=1 schedule tofu creates): pg_dump to R2
 #   verify_restore  restore that dump into a throwaway Postgres and check it
 #   infra_validate  tofu fmt/validate and shellcheck on changes under deploy/
+#   infra_plan      a read-only plan of deploy/infra on same-project merge
+#                   requests (never applied), and a saved plan on the default
+#                   branch
+#   infra_apply     default branch only: applies that saved plan, in the
+#                   production environment, by hand unless INFRA_AUTO_APPLY=1
 #
 # Every deploy job is skipped until tofu has written SSH_HOST, so nothing
 # runs against infrastructure that does not exist yet. A pipeline run with
@@ -23,7 +28,9 @@ workflow:
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-stages: [validate, build, deploy, backup, verify]
+# infra is after deploy so a waiting manual apply holds up nothing; its jobs
+# use needs: and start as soon as validation passes.
+stages: [validate, build, deploy, infra, backup, verify]
 
 variables:
   IMAGE_TAG: $CI_COMMIT_SHA
@@ -270,3 +277,149 @@ shellcheck:
   rules: *infra_rules
   script:
     - shellcheck deploy/box/bin/*.sh deploy/box/test-local.sh
+
+# -- infrastructure: plan on merge requests, apply on the default branch --------
+#
+# Credentials are CI/CD variables (deploy/README.md lists them). Give read-only
+# values the environment scope "*" and write values the scope "production",
+# protected: only infra_apply names that environment, so only it gets them,
+# and only on a protected branch.
+
+.infra_tool:
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends ca-certificates curl git gnupg >/dev/null
+    # backend.tf says which state backend this project uses. Both tools come
+    # from their vendor's signed apt repository.
+    - |
+      if grep -Eq '^[[:space:]]*cloud[[:space:]]*\{' deploy/infra/backend.tf; then
+        export INFRA_BACKEND=tfc TF=terraform
+        curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp.gpg
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp.gpg] https://apt.releases.hashicorp.com bookworm main" > /etc/apt/sources.list.d/hashicorp.list
+        apt-get update -qq && apt-get install -y -qq --no-install-recommends terraform >/dev/null
+      else
+        export INFRA_BACKEND=r2 TF=tofu
+        curl -fsSL https://get.opentofu.org/install-opentofu.sh -o /tmp/install-opentofu.sh
+        sh /tmp/install-opentofu.sh --install-method deb >/dev/null
+      fi
+    # Credentials go into this job's shell only, under the names the
+    # providers and the backend read.
+    - |
+      export TF_IN_AUTOMATION=1
+      if [ "$INFRA_BACKEND" = tfc ]; then
+        # The run executes in the workspace, with the workspace's variables.
+        export TF_TOKEN_app_terraform_io="$TF_API_TOKEN"
+        INFRA_NEEDS="TF_API_TOKEN"
+      else
+        export AWS_ACCESS_KEY_ID="$TFSTATE_R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$TFSTATE_R2_SECRET_ACCESS_KEY"
+        export TF_VAR_state_passphrase="$TF_STATE_PASSPHRASE" GITLAB_TOKEN="$INFRA_GIT_TOKEN"
+        export TF_VAR_r2_backup_access_key_id="$BACKUP_R2_ACCESS_KEY_ID" TF_VAR_r2_backup_secret_access_key="$BACKUP_R2_SECRET_ACCESS_KEY"
+        export TF_VAR_cloudflare_account_id="$CLOUDFLARE_ACCOUNT_ID" TF_VAR_admin_emails="$ADMIN_EMAILS"
+        INFRA_NEEDS="HCLOUD_TOKEN CLOUDFLARE_API_TOKEN INFRA_GIT_TOKEN BACKUP_R2_ACCESS_KEY_ID BACKUP_R2_SECRET_ACCESS_KEY TFSTATE_R2_ACCESS_KEY_ID TFSTATE_R2_SECRET_ACCESS_KEY TF_STATE_PASSPHRASE CLOUDFLARE_ACCOUNT_ID ADMIN_EMAILS"
+      fi
+      INFRA_MISSING=""
+      for n in $INFRA_NEEDS; do
+        eval "v=\${$n:-}"
+        [ -n "$v" ] || INFRA_MISSING="$INFRA_MISSING $n"
+      done
+      unset v
+    # backend.r2.hcl is per-account and git-ignored; the committed example
+    # names the bucket and key, CLOUDFLARE_ACCOUNT_ID completes it.
+    - |
+      cd deploy/infra
+      if [ "$INFRA_BACKEND" = r2 ] && [ -z "$INFRA_MISSING" ] && [ ! -f backend.r2.hcl ]; then
+        echo "$CLOUDFLARE_ACCOUNT_ID" | grep -Eqx '[0-9a-f]{32}' || { echo "CLOUDFLARE_ACCOUNT_ID is not a Cloudflare account id" >&2; exit 1; }
+        sed "s/<cloudflare-account-id>/$CLOUDFLARE_ACCOUNT_ID/" backend.r2.hcl.example > backend.r2.hcl
+      fi
+
+infra_plan:
+  extends: .infra_tool
+  stage: infra
+  needs: [infra_validate, terraform_validate]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" || $BACKUP == "1"
+      when: never
+    # Merge requests from forks get no variables, so no plan.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID
+      changes: [deploy/**/*, .gitlab-ci.yml]
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes: [deploy/**/*, .gitlab-ci.yml]
+  # before_script left the shell in deploy/infra.
+  script:
+    - echo "INFRA_CHANGES=false" > infra.env
+    - |
+      if [ -n "$INFRA_MISSING" ]; then
+        echo "infra plan skipped: not set for the $INFRA_BACKEND backend:$INFRA_MISSING. See deploy/README.md."
+        exit 0
+      fi
+    - if [ "$INFRA_BACKEND" = r2 ]; then $TF init -input=false -backend-config=backend.r2.hcl; else $TF init -input=false; fi
+    # Only the default branch saves a plan. A merge request's plan is never
+    # written anywhere it could be applied from (for TFC it is a speculative
+    # run), and -lock=false keeps it from taking the state lock.
+    - |
+      set -- -input=false -no-color -detailed-exitcode
+      if [ "$INFRA_BACKEND" = r2 ]; then set -- "$@" -lock=false; fi
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then set -- "$@" -out=tfplan; fi
+      set +e
+      $TF plan "$@" > plan.txt 2>&1
+      code=$?
+      set -e
+      cat plan.txt
+      counts=$(sed -nE 's/^Plan: (.*, )?([0-9]+) to add, ([0-9]+) to change, ([0-9]+) to destroy.*/\2 \3 \4/p' plan.txt | tail -1)
+      set -- ${counts:-0 0 0}
+      add=$1 change=$2 destroy=$3
+      # Read by the merge request's Terraform widget.
+      printf '{"create": %s, "update": %s, "delete": %s}\n' "$add" "$change" "$destroy" > plan.json
+      if [ "$code" = 1 ]; then echo "infra plan failed" >&2; exit 1; fi
+      if [ "$code" = 2 ] || [ $((add + change + destroy)) -gt 0 ]; then
+        echo "INFRA_CHANGES=true" > infra.env
+        echo "infra plan: $add to add, $change to change, $destroy to destroy"
+      else
+        echo "infra plan: no changes"
+      fi
+  # The saved plan is what infra_apply runs, with the provider lock it was
+  # made with. For R2 it is encrypted with the state passphrase; for TFC it
+  # only names the run.
+  artifacts:
+    when: always
+    access: developer
+    expire_in: 5 days
+    paths:
+      - deploy/infra/tfplan
+      - deploy/infra/.terraform.lock.hcl
+      - deploy/infra/plan.txt
+    reports:
+      dotenv: deploy/infra/infra.env
+      terraform: deploy/infra/plan.json
+
+infra_apply:
+  extends: .infra_tool
+  stage: infra
+  needs: [infra_plan]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" || $BACKUP == "1"
+      when: never
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      when: never
+    - if: $INFRA_AUTO_APPLY == "1"
+      changes: [deploy/**/*, .gitlab-ci.yml]
+    # Blocking: the pipeline shows as waiting until someone applies, and a
+    # failed apply fails it.
+    - changes: [deploy/**/*, .gitlab-ci.yml]
+      when: manual
+      allow_failure: false
+  # Shared with deploy_prod: one change to production at a time.
+  resource_group: production
+  environment:
+    name: production
+  script:
+    - |
+      if [ "$INFRA_CHANGES" != true ]; then
+        echo "the plan changes nothing; nothing to apply"
+        exit 0
+      fi
+    - if [ -n "$INFRA_MISSING" ]; then echo "not set for the $INFRA_BACKEND backend:$INFRA_MISSING" >&2; exit 1; fi
+    - if [ "$INFRA_BACKEND" = r2 ]; then $TF init -input=false -backend-config=backend.r2.hcl; else $TF init -input=false; fi
+    # A saved plan applies as planned or not at all: it is refused if state
+    # moved since, and the apply takes the state lock.
+    - $TF apply -input=false -no-color tfplan

@@ -5,9 +5,11 @@
 //
 //   pnpm --filter @infralift/api validate:stacks
 //
-// Needs tofu and terraform on PATH; shellcheck is used when present.
+// Needs tofu and terraform on PATH. shellcheck is used when present, and so is
+// actionlint (which also shellchecks the workflows' run: scripts); in CI
+// actionlint is required, because a workflow that does not parse never runs.
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { listStacks, renderStack } from "../src/lib/stacks/index.js";
@@ -70,6 +72,16 @@ for (const stack of listStacks()) {
       run(generated, "terraform", ["validate"]);
       if (has("shellcheck")) {
         run(out, "sh", ["-c", "shellcheck deploy/box/bin/*.sh deploy/box/*.sh"]);
+      }
+      if (existsSync(join(out, ".github/workflows"))) {
+        if (has("actionlint")) {
+          // Relative paths, so local actions (./.github/actions/...) resolve.
+          // SC2029 is excluded: the deploy steps expand $VARS on the runner
+          // and pass the result to `ssh box` on purpose.
+          run(out, "sh", ["-c", "SHELLCHECK_OPTS=--exclude=SC2029 actionlint .github/workflows/*.yml"]);
+        } else if (process.env.CI) {
+          throw new Error("actionlint is not installed, and CI must lint the rendered workflows");
+        }
       }
       console.log(`ok   ${label}`);
     } catch (err) {

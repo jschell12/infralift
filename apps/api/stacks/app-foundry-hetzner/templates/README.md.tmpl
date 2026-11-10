@@ -40,6 +40,81 @@ box: same-repo {{change_request}}s deploy with the deploy key. Forks get no secr
 
 ## Standing it up
 
+{{ci_name}} plans and applies `infra/`, so nobody has to run `apply` on a laptop.
+
+- A {{change_request}} that touches the stack gets a plan: what it would add, change
+  and destroy, and the rendered plan{{#if delivery_github}}, in the summary of its `infra plan` check{{/if}}{{#if delivery_gitlab}}, in the merge request's Terraform widget and the
+  `infra_plan` job log{{/if}}.
+  It does not take the state lock and is never applied. A {{change_request}} from a
+  fork gets no credentials, so it gets no plan.
+- Merging to the default branch plans again, saves that plan, and applies
+  exactly the saved plan in the `production` environment{{#if delivery_gitlab}} when someone runs the
+  manual `infra_apply` job (or straight away with `INFRA_AUTO_APPLY=1`){{/if}}. If state moved
+  in between, the apply refuses the plan rather than apply something nobody
+  saw. Applies run one at a time.
+
+### Once
+
+{{#if backend_r2}}1. Create the state bucket `{{name}}-tfstate`, with the bootstrap module (the steps
+   are at the top of `bootstrap/main.tf`) or by hand in the Cloudflare
+   dashboard. This is the one step that runs outside CI.
+{{/if}}{{#if backend_tfc}}1. Make the `{{tfc_workspace}}` workspace in `{{tfc_organization}}` CLI-driven (a VCS-connected
+   workspace refuses applies from the CLI), and set the credentials in the
+   table under "Locally" on it as sensitive workspace variables, with the
+   values from `terraform.tfvars.example`. Plans and applies execute there.
+{{/if}}2. {{#if delivery_github}}In Settings, Secrets and variables, Actions, add:{{/if}}{{#if delivery_gitlab}}In Settings, CI/CD, Variables, add (masked where GitLab allows it):{{/if}}
+
+   | Name | Kind | What |
+   |---|---|---|
+{{#if backend_r2}}   | `HCLOUD_TOKEN` | secret | the Hetzner project |
+   | `CLOUDFLARE_API_TOKEN` | secret | the scopes under "Locally" |
+   | `INFRA_GIT_TOKEN` | secret | the git host token under "Locally", which writes {{ci_store}}; the pipeline's own token cannot |
+   | `BACKUP_R2_ACCESS_KEY_ID`, `BACKUP_R2_SECRET_ACCESS_KEY` | secret | R2 keys scoped to the `{{name}}-backups` bucket |
+   | `TFSTATE_R2_ACCESS_KEY_ID`, `TFSTATE_R2_SECRET_ACCESS_KEY` | secret | R2 keys scoped to the `{{name}}-tfstate` bucket |
+   | `TF_STATE_PASSPHRASE` | secret | the state passphrase; long and random, since saved plans are encrypted with it too |
+   | `CLOUDFLARE_ACCOUNT_ID` | variable | completes `backend.r2.hcl` from its example, and `cloudflare_account_id` |
+   | `ADMIN_EMAILS` | variable | `admin_emails`, as a list: `["you@example.com"]` |
+{{/if}}{{#if backend_tfc}}   | `TF_API_TOKEN` | secret | a Terraform Cloud token that can queue and apply runs on `{{tfc_workspace}}` |
+{{/if}}
+
+3. Gate production.
+{{#if delivery_github}}   In Settings, Environments, open `production` (create it if no deploy has run
+   yet):
+   - Required reviewers: add the people or teams who approve. `infra apply`
+     then waits for one of them; the plan they approve is the `infra plan` job
+     of the same run. `deploy.yml` uses the same environment, so they approve
+     app deploys too.
+   - Deployment branches: selected branches, `main` only, so a branch with
+     an edited workflow cannot reach this environment's secrets.
+   - Environment secrets: put the write tokens here, under the same names.
+     Inside the apply job they win over the repository's, so the repository
+     can keep read-only ones for plans: a read-only Hetzner token, a
+     Cloudflare token with read in place of edit, Secrets and Variables read
+     on `INFRA_GIT_TOKEN`, and state keys with object read. With Terraform
+     Cloud state it is one token: plan access on the repository, apply access
+     on the environment. With only repository secrets, plans and applies both
+     use them.
+{{/if}}{{#if delivery_gitlab}}   Give the read-only values above the environment scope `*` and the write
+   values the scope `production`, protected: only `infra_apply` names that
+   environment, and protected variables only reach protected branches. On
+   Premium, also protect the `production` environment (Settings, CI/CD,
+   Protected environments) and add approval rules. On any tier the manual job
+   runs only on the default branch, and only someone allowed to merge into a
+   protected branch can run it.
+{{/if}}
+Then merge the {{change_request}} that adds `deploy/`. The first apply creates the
+server and writes {{ci_store}}.
+
+Who can see what: plan output is in the job log and summary for anyone who can
+read them, with sensitive values redacted; on a public repository that is
+everyone, including the saved plan artifact (encrypted with the state
+passphrase on R2, a run reference on Terraform Cloud). Plans on {{change_request}}s read state, so
+anyone who can push a branch here can read state, which matches the rule
+above that pushing a branch is root on the box. What the split keeps from them
+is the write tokens.
+
+### Locally, when you need to
+
 Credentials come from the environment only:
 
 | Variable | Scope |
@@ -52,17 +127,16 @@ Credentials come from the environment only:
 {{#if backend_r2}}| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | R2 S3 keys scoped to the `{{name}}-tfstate` bucket |
 | `TF_VAR_state_passphrase` | encrypts state; `tofu init` needs it too, and losing it makes the state unreadable |
 {{/if}}
-{{#if backend_r2}}1. Create the state bucket once, then move the bootstrap's own state into it
-   (the steps are at the top of `bootstrap/main.tf`).
-2. `cd deploy/infra`, copy `backend.r2.hcl.example` and
+
+{{#if backend_r2}}1. `cd deploy/infra`, copy `backend.r2.hcl.example` and
    `terraform.tfvars.example` without the `.example` suffix and fill them in.
-3. `tofu init -backend-config=backend.r2.hcl && tofu plan -out tfplan && tofu apply tfplan`
-{{/if}}{{#if backend_tfc}}1. The `{{tfc_workspace}}` workspace in `{{tfc_organization}}` runs `deploy/infra`. Set the
-   variables above on it, as sensitive workspace variables.
-2. Copy `terraform.tfvars.example` values into workspace variables too.
-3. Plan and apply from the workspace.
+2. `tofu init -backend-config=backend.r2.hcl && tofu plan -out tfplan && tofu apply tfplan`
+{{/if}}{{#if backend_tfc}}1. `cd deploy/infra && terraform login && terraform init`
+2. `terraform plan`, or start a run from the workspace.
 {{/if}}
-Then push to the default branch{{#if delivery_github}}, or run `deploy.yml` by hand{{/if}}{{#if delivery_gitlab}}, or run a pipeline on it by hand{{/if}}. Every deploy job
+A local apply takes the same state lock as CI, so the two cannot overlap.
+
+After the first apply, push to the default branch{{#if delivery_github}}, or run `deploy.yml` by hand{{/if}}{{#if delivery_gitlab}}, or run a pipeline on it by hand{{/if}}. Every deploy job
 is skipped until the infrastructure exists.
 
 ## Acceptance

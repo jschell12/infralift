@@ -71,6 +71,13 @@ jobs:
         with:
           terraform_wrapper: false
 
+      # Lints the rendered GitHub Actions workflows (validate-stacks requires
+      # it in CI). go install verifies the module against the checksum DB.
+      - name: Install actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
       - run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client

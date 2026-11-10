@@ -1,0 +1,8 @@
+
+Error: Reference to undeclared input variable
+
+  on main.tf line 3, in resource "terraform_data" "c":
+   3: resource "terraform_data" "c" { input = var.nope }
+
+An input variable with the name "nope" has not been declared. This variable
+can be declared with a variable "nope" {} block.
