@@ -9,8 +9,13 @@ export class GitCommitError extends Upstream {
    *  it is read from there rather than threaded through ~30 throw sites. */
   readonly hostStatus: number | null;
 
-  constructor(message: string, status?: number) {
+  /** GitHub's primary or secondary rate limit, which can answer 403: a
+   *  back-off, never a refused credential. */
+  readonly rateLimited: boolean;
+
+  constructor(message: string, status?: number, opts: { rateLimited?: boolean } = {}) {
     super(message);
+    this.rateLimited = opts.rateLimited ?? false;
     this.hostStatus = status ?? (Number(message.match(/\((\d{3})\)/)?.[1] ?? NaN) || null);
   }
 }

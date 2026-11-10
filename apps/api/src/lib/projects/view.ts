@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { isGitHost, type GitHost, type ImportCheckResult, type Project, type RootModule } from "@infralift/shared";
+import { isGitHost, type DriftStatus, type GitHost, type ImportCheckResult, type Project, type RootModule } from "@infralift/shared";
 
 // ---------------------------------------------------------------------------
 // TfProject row -> Project (one type per kind, @infralift/shared projects.ts).
@@ -31,6 +31,19 @@ export class ProjectShapeError extends Error {
 
 const settings = (v: Prisma.JsonValue): Record<string, unknown> =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+
+const DRIFT_STATES: readonly string[] = ["none", "drift", "unknown"];
+
+function driftOf(row: ProjectRow): DriftStatus | null {
+  if (!row.driftState || !row.driftCheckedAt || !DRIFT_STATES.includes(row.driftState)) return null;
+  return {
+    state: row.driftState as DriftStatus["state"],
+    message: row.driftMessage ?? "",
+    checkUrl: row.driftCheckUrl,
+    ranAt: row.driftRanAt?.toISOString() ?? null,
+    checkedAt: row.driftCheckedAt.toISOString(),
+  };
+}
 
 export function toProjectView(row: ProjectRow): Project {
   const need = <T>(value: T | null | undefined, field: string): T => {
@@ -75,6 +88,7 @@ export function toProjectView(row: ProjectRow): Project {
         kind: "stack",
         stackSlug: need(row.stackSlug, "stack slug"),
         providerConfig: settings(row.providerConfig),
+        drift: driftOf(row),
       };
     case "imported":
       return {
@@ -83,6 +97,7 @@ export function toProjectView(row: ProjectRow): Project {
         importJson: need(row.importJson, "scan") as unknown as RootModule,
         importCheckJson: (row.importCheckJson ?? null) as unknown as ImportCheckResult | null,
         assessmentId: row.assessmentId,
+        drift: driftOf(row),
       };
     case "adopted":
       return { ...common, kind: "adopted" };

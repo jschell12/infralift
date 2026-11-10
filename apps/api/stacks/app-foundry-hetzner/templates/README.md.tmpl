@@ -52,7 +52,16 @@ box: same-repo {{change_request}}s deploy with the deploy key. Forks get no secr
   manual `infra_apply` job (or straight away with `INFRA_AUTO_APPLY=1`){{/if}}. If state moved
   in between, the apply refuses the plan rather than apply something nobody
   saw. Applies run one at a time.
-
+{{#if delivery_github}}- Every day at 06:41 UTC the `infra drift` check plans the default branch
+  against what is running, read-only, with the repository's secrets (so the
+  read-only tokens below are enough). It saves, uploads and applies nothing.
+  It fails when the plan would change anything: someone changed the
+  infrastructure outside Terraform, in a console or by hand, or a merged
+  change is still waiting for its apply. infralift reads that check and shows
+  drift on the project. Run it any time with "Run workflow" on `infra` in the
+  Actions tab. GitHub pauses scheduled workflows in a repository with no
+  activity for 60 days; re-enable it there if that happens.
+{{/if}}
 ### Once
 
 {{#if backend_r2}}1. Create the state bucket `{{name}}-tfstate`, with the bootstrap module (the steps

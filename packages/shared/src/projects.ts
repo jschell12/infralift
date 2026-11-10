@@ -35,6 +35,22 @@ interface ProjectCommon {
   createdAt: string;
 }
 
+/** Whether what is running still matches the code on the default branch,
+ *  from the daily `infra drift` check. "unknown": the check has not run, is
+ *  running, or failed before it could compare. */
+export type DriftState = "none" | "drift" | "unknown";
+
+export interface DriftStatus {
+  state: DriftState;
+  /** One line, from the check's own annotation when there is one. */
+  message: string;
+  checkUrl: string | null;
+  /** When the drift plan ran, if one was found. */
+  ranAt: string | null;
+  /** When infralift last read it. */
+  checkedAt: string;
+}
+
 export interface TemplateProject extends ProjectCommon {
   kind: "template";
   templateVersion: { releaseTag: string; template: { slug: string } };
@@ -57,6 +73,8 @@ export interface StackProject extends ProjectCommon {
   stackSlug: string;
   /** The stack's settings, with its defaults filled in. */
   providerConfig: Record<string, unknown>;
+  /** Null until infralift has read the drift check. */
+  drift: DriftStatus | null;
 }
 
 export interface ImportedProject extends ProjectCommon {
@@ -67,6 +85,8 @@ export interface ImportedProject extends ProjectCommon {
   importCheckJson: ImportCheckResult | null;
   /** Set when adopted from a cloud account's assessment. */
   assessmentId: string | null;
+  /** Null until infralift has read the drift check. */
+  drift: DriftStatus | null;
 }
 
 export interface AdoptedProject extends ProjectCommon {

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { getStack, renderStack } from "./index.js";
+import { DRIFT_JOB_NAME, READ_DRIFT } from "../import/contract.js";
 
 // The stack's CI plans every change and applies only the plan saved on the
 // default branch. These tests read the rendered workflow files for the
@@ -223,6 +224,79 @@ describe("github-actions plan summary script", () => {
     const r = summarize(big, "2");
     expect(r.summary).toContain("Truncated at 60000 bytes");
     expect(r.summary.length).toBeLessThan(61000);
+  });
+});
+
+describe("github-actions infra drift", () => {
+  const wf = workflow();
+  const drift = wf.jobs.drift;
+
+  it("runs daily off the hour and on demand, on the default branch only", () => {
+    const cron = (wf.on.schedule as { cron: string }[])[0].cron;
+    expect(cron).toBe("41 6 * * *");
+    expect(cron.split(" ")[0]).not.toBe("0");
+    expect(wf.on).toHaveProperty("workflow_dispatch");
+    expect(drift.name).toBe(DRIFT_JOB_NAME);
+    expect(drift.if).toContain("github.event_name == 'schedule'");
+    expect(drift.if).toContain("github.ref_name == github.event.repository.default_branch");
+  });
+
+  it("plans only: no -out, no artifact, no apply, nothing depends on it", () => {
+    expect(runs(drift)).toContain("-detailed-exitcode");
+    expect(runs(drift)).not.toMatch(/-out=|\b(tofu|terraform) apply\b|-auto-approve/);
+    expect(drift.steps.filter((s) => s.uses?.includes("artifact"))).toEqual([]);
+    expect(drift.permissions).toBeUndefined();
+    expect(drift.environment).toBeUndefined();
+    for (const job of Object.values(wf.jobs)) expect([job.needs].flat()).not.toContain("drift");
+  });
+
+  it("leaves every other job off the schedule, and never cancels a push", () => {
+    for (const name of ["validate", "box", "plan", "plan-fork", "apply"]) {
+      const cond = wf.jobs[name].if ?? "";
+      // Each names the events it runs on; none of them is schedule or dispatch.
+      expect(cond, name).toMatch(/github\.event_name == 'pull_request'|github\.event_name == 'push'/);
+      expect(cond, name).not.toMatch(/schedule|workflow_dispatch/);
+    }
+    expect(wf.concurrency.group).toContain("'infra-drift'");
+  });
+
+  const script = drift.steps.find((s) => s.name === "Result")!.run!;
+  function result(plan: string, code: string) {
+    const dir = scratch();
+    writeFileSync(join(dir, "plan.txt"), plan);
+    writeFileSync(join(dir, "summary"), "");
+    const r = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", script], {
+      cwd: dir,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, CODE: code, GITHUB_STEP_SUMMARY: join(dir, "summary") },
+    });
+    const message = /::(?:notice|error) title=infra drift::(.*)/.exec(r.stdout)?.[1] ?? "";
+    return { status: r.status, message, summary: readFileSync(join(dir, "summary"), "utf8") };
+  }
+
+  it("passes with the no-drift notice when the plan changes nothing", () => {
+    const r = result(planOutput("no-changes"), "0");
+    expect(r.status).toBe(0);
+    expect(READ_DRIFT.none(r.message)).toBe(true);
+    expect(READ_DRIFT.found(r.message)).toBe(false);
+  });
+
+  it("fails with the drift marker on exit code 2, counting from the plan", () => {
+    const r = result(planOutput("update-destroy"), "2");
+    expect(r.status).toBe(1);
+    expect(READ_DRIFT.found(r.message)).toBe(true);
+    expect(r.message).toContain("0 to add, 1 to change, 1 to destroy");
+    expect(r.summary).toContain("### infra drift");
+  });
+
+  it("fails with neither marker when the plan errors or never ran", () => {
+    for (const [plan, code] of [[planOutput("error"), "1"], ["", ""]]) {
+      const r = result(plan, code);
+      expect(r.status).toBe(1);
+      expect(r.message).not.toBe("");
+      expect(READ_DRIFT.none(r.message)).toBe(false);
+      expect(READ_DRIFT.found(r.message)).toBe(false);
+    }
   });
 });
 

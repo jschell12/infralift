@@ -37,3 +37,35 @@ export const READ = {
   missing: (m: string) => m.startsWith(OUTCOME.missingPrefix),
   planFailed: (m: string) => m === OUTCOME.planFailed,
 } as const;
+
+// -- drift ---------------------------------------------------------------------
+// The scheduled drift check: the same read-only plan, run daily on the default
+// branch, under its own job name so it never answers for a pull request's
+// check. Written by the import check workflow (check.ts) and by stacks that
+// ship one (apps/api/stacks/*/deliveries/github-actions/.../infra.yml, which
+// spell these strings out literally; a test pins them). Read by the drift
+// sweep (services/drift.ts).
+
+/** The stack's drift job name, which GitHub uses as the check run's name. */
+export const DRIFT_JOB_NAME = "infra drift";
+
+/** An imported module's drift job name. One repository can hold several
+ *  imported modules, each with its own workflow, and all their scheduled runs
+ *  land on the same commit, so each name carries the module's slug
+ *  (check.ts checkSlug, the same string as its workflow file name) and the
+ *  sweep asks for exactly its own. */
+export const driftJobName = (moduleSlug: string) => `${DRIFT_JOB_NAME}: ${moduleSlug}`;
+
+export const DRIFT = {
+  /** Notice: nothing changed outside the code. */
+  none: "No drift: the plan changes nothing.",
+  /** Error prefix: the plan would change something. */
+  foundPrefix: "Drift:",
+} as const;
+
+/** A drift run's outcome. The import check's own messages count too, since
+ *  its drift job reuses the import plan step. */
+export const READ_DRIFT = {
+  none: (m: string) => m === DRIFT.none || READ.passed(m),
+  found: (m: string) => m.startsWith(DRIFT.foundPrefix) || READ.changes(m),
+} as const;

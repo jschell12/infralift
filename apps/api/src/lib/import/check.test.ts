@@ -9,6 +9,7 @@ import {
   secretNameFor,
 } from "./check.js";
 import { scanRepo } from "./scan.js";
+import { DRIFT_JOB_NAME, driftJobName } from "./contract.js";
 
 const root = (files: { path: string; content: string }[]) => scanRepo(files).roots[0];
 
@@ -208,5 +209,57 @@ describe("check helpers", () => {
   it("slugs the workflow file by module path", () => {
     expect(checkWorkflowPath("")).toBe(".github/workflows/infralift-import-root.yml");
     expect(checkWorkflowPath("Envs/Prod_EU")).toBe(".github/workflows/infralift-import-envs-prod-eu.yml");
+  });
+});
+
+describe("the daily drift job", () => {
+  const steps = (job: { steps: { run?: string; uses?: string; if?: string; name?: string }[] }) => job.steps;
+
+  it("runs on a schedule and on dispatch, separate from the pull request check", () => {
+    const wf = parse(renderImportCheck(PROD).content);
+    expect(wf.on.schedule).toEqual([{ cron: "23 6 * * *" }]);
+    expect(wf.on.schedule[0].cron.split(" ")[0]).not.toBe("0");
+    expect(wf.on).toHaveProperty("workflow_dispatch");
+    // Per module: several imported modules' runs land on one commit.
+    expect(wf.jobs.drift.name).toBe(driftJobName("infra-prod"));
+    expect(wf.jobs.drift.name).toBe("infra drift: infra-prod");
+    expect(wf.jobs.drift.name).not.toBe(DRIFT_JOB_NAME);
+    expect(wf.jobs.drift.name).not.toBe(wf.jobs.plan.name);
+    expect(wf.jobs.drift.if).toContain("github.event_name == 'schedule'");
+    expect(wf.jobs.drift.if).toContain("github.event.repository.default_branch");
+    // The pull request check never runs on the schedule.
+    expect(wf.jobs.plan.if).toBe("github.event_name != 'schedule'");
+  });
+
+  it("plans only: no apply, no commit, no upload, a read-only token", () => {
+    // Generating code is the job that commits; the drift job must not.
+    const gen = { ...PROD, generateConfig: true };
+    const wf = parse(renderImportCheck(gen).content);
+    expect(wf.permissions.contents).toBe("write");
+    const drift = wf.jobs.drift;
+    expect(drift.permissions.contents).toBe("read");
+    expect(drift.permissions).not.toHaveProperty("checks");
+    const runs = steps(drift).map((s) => s.run ?? "").join("\n");
+    const uses = steps(drift).map((s) => s.uses ?? "");
+    expect(runs).toContain("terraform plan -input=false -lock=false -no-color -detailed-exitcode");
+    expect(runs).not.toMatch(/\b(terraform|tofu) apply\b|-auto-approve|git push|git commit|check-runs|generate-config-out/);
+    expect(uses.filter((u) => u.includes("upload-artifact"))).toEqual([]);
+    expect(uses[0]).toBe("actions/checkout@v4");
+    expect(steps(drift)[0]).not.toHaveProperty("with");
+    // Its annotations are the ones the drift sweep reads.
+    expect(runs).toContain('msg="No changes: all $total resources match the code."');
+    expect(runs).toContain('msg="$changes of $total resources would change."');
+    expect(runs).toContain('echo "## infralift drift check: $MODULE_LABEL"');
+    // The pull request job is unchanged: it still generates and commits.
+    expect(steps(wf.jobs.plan).map((s) => s.name)).toContain("Commit the generated code");
+  });
+
+  it("can sign in with OIDC when the module needs a cloud", () => {
+    const aws = root([
+      { path: "main.tf", content: 'terraform {\n  backend "s3" {\n    bucket = "b"\n    key = "k"\n  }\n}\nresource "aws_s3_bucket" "b" {}\n' },
+    ]);
+    const wf = parse(renderImportCheck(aws).content);
+    expect(wf.jobs.drift.permissions).toEqual({ contents: "read", "id-token": "write" });
+    expect(steps(wf.jobs.drift).some((s) => s.uses === "aws-actions/configure-aws-credentials@v4")).toBe(true);
   });
 });

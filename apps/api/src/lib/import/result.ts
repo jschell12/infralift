@@ -1,5 +1,6 @@
 import type { ChangeRequestState, CheckRun } from "../git/hosts.js";
-import { READ } from "./contract.js";
+import { READ, READ_DRIFT } from "./contract.js";
+import type { DriftState } from "@infralift/shared";
 
 // What the import check said, read back from GitHub. The workflow writes one
 // annotation per outcome (lib/import/check.ts), and this turns the check run
@@ -57,5 +58,34 @@ export function classifyCheck(
     ...base,
     state: "failed",
     message: errors[0] ?? `The check ended as ${run.conclusion ?? run.status}.`,
+  };
+}
+
+/** What the newest `infra drift` run said. Success counts as no drift only
+ *  with the no-drift notice, and failure as drift only with the drift marker:
+ *  a run that passed or failed for any other reason (credentials missing, the
+ *  plan erroring) says nothing about drift, so it is unknown. */
+export function classifyDrift(
+  run: CheckRun | null,
+  branch: string
+): { state: DriftState; message: string; checkUrl: string | null; ranAt: string | null } {
+  const base = { checkUrl: run?.url ?? null, ranAt: run?.completedAt ?? null };
+  if (!run) return { ...base, state: "unknown", message: `The drift check has not run on ${branch} yet.` };
+  if (run.status !== "completed") return { ...base, state: "unknown", message: "The drift check is running." };
+  const by = (level: string) => run.annotations.filter((a) => a.level === level).map((a) => a.message);
+  const notices = by("notice");
+  const errors = by("failure");
+  if (run.conclusion === "success") {
+    const none = notices.find(READ_DRIFT.none);
+    if (none) return { ...base, state: "none", message: none };
+  }
+  if (run.conclusion === "failure") {
+    const found = errors.find(READ_DRIFT.found);
+    if (found) return { ...base, state: "drift", message: found };
+  }
+  return {
+    ...base,
+    state: "unknown",
+    message: errors[0] ?? `The drift check ended as ${run.conclusion ?? run.status} without saying whether anything changed.`,
   };
 }
