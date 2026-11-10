@@ -1,9 +1,11 @@
 import { Router } from "express";
-import { AppError, Conflict, InvalidBody, InvalidInput, NotFound, Unprocessable, Upstream, handle } from "../lib/errors.js";
+import { AppError, Conflict, InvalidBody, InvalidInput, NotFound, Unprocessable, Upstream, handle, parseBody } from "../lib/errors.js";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { encryptToken, decryptToken } from "../lib/crypto.js";
+import { isSafePath } from "../lib/import/check.js";
+import * as runs from "../services/workspace-runs.js";
 import { TfcClient, TfcClientError, tfcBaseUrl } from "../lib/tf/tfc-client.js";
 import {
   DependencyCycleError,
@@ -92,6 +94,8 @@ workspacesRouter.get("/", handle(async (req, res) => {
       driftDetected: w.driftDetected,
       lastRunStatus: w.lastRunStatus,
       lastRunAt: w.lastRunAt?.toISOString() ?? null,
+      vcsRepo: w.vcsRepo,
+      connectionId: w.connectionId,
     }))
   );
 }));
@@ -591,4 +595,50 @@ workspacesRouter.post("/:id/outputs/refresh", handle(async (req, res) => {
   }
   await prisma.workspace.update({ where: { id: ws.id }, data: { outputs: outputs as object[] } });
   res.json({ id: ws.id, outputs: outputs.map((o) => o.name) });
+}));
+
+// -- VCS link and runs (services/workspace-runs.ts) ---------------------------------
+
+const oauthTokenId = z.string().regex(/^ot-[A-Za-z0-9]+$/);
+
+workspacesRouter.get("/connections/:connectionId/oauth-tokens", handle(async (req, res) => {
+  res.json(await runs.listOAuthTokens(req.user!.orgId, req.params.connectionId));
+}));
+
+workspacesRouter.put("/connections/:connectionId/oauth-token", handle(async (req, res) => {
+  const body = parseBody(z.object({ oauthTokenId }), req.body);
+  res.json(await runs.selectOAuthToken(req.user!.orgId, req.params.connectionId, body.oauthTokenId));
+}));
+
+const linkSchema = z.object({
+  repo: z.string().max(200).regex(/^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)+$/, "owner/repo"),
+  branch: z.string().max(200).regex(/^[A-Za-z0-9._\/-]+$/).optional(),
+  workingDirectory: z.string().max(200).refine((p) => p === "" || (isSafePath(p) && !p.startsWith("/")), "a relative path").optional(),
+  oauthTokenId: oauthTokenId.optional(),
+});
+
+workspacesRouter.post("/:id/vcs", handle(async (req, res) => {
+  res.json(await runs.linkRepository(req.user!.orgId, req.params.id, parseBody(linkSchema, req.body)));
+}));
+
+workspacesRouter.get("/:id/runs", handle(async (req, res) => {
+  res.json(await runs.listRuns(req.user!.orgId, req.params.id));
+}));
+
+const queueSchema = z.object({ message: z.string().max(200).optional(), planOnly: z.boolean().optional() });
+
+workspacesRouter.post("/:id/runs", handle(async (req, res) => {
+  res.status(201).json(await runs.queueRun(req.user!.orgId, req.params.id, parseBody(queueSchema, req.body ?? {})));
+}));
+
+const applySchema = z.object({ confirm: z.string(), comment: z.string().max(200).optional() });
+
+workspacesRouter.post("/:id/runs/:runId/apply", handle(async (req, res) => {
+  const body = parseBody(applySchema, req.body);
+  res.status(202).json(await runs.applyRun(req.user!.orgId, req.params.id, req.params.runId, body));
+}));
+
+workspacesRouter.post("/:id/runs/:runId/discard", handle(async (req, res) => {
+  const body = parseBody(z.object({ comment: z.string().max(200).optional() }), req.body ?? {});
+  res.status(202).json(await runs.discardRun(req.user!.orgId, req.params.id, req.params.runId, body));
 }));

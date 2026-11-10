@@ -1,0 +1,24 @@
+{
+  "data": [
+    {
+      "id": "oc-XKFwG6ggfA9n7t1K",
+      "type": "oauth-clients",
+      "attributes": {
+        "created-at": "2018-04-16T20:42:53.771Z",
+        "service-provider": "github",
+        "service-provider-display-name": "GitHub",
+        "name": null,
+        "http-url": "https://github.com",
+        "api-url": "https://api.github.com",
+        "organization-scoped": false
+      },
+      "relationships": {
+        "organization": { "data": { "id": "acme", "type": "organizations" } },
+        "oauth-tokens": {
+          "data": [],
+          "links": { "related": "/api/v2/oauth-clients/oc-XKFwG6ggfA9n7t1K/oauth-tokens" }
+        }
+      }
+    }
+  ]
+}

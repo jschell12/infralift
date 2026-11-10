@@ -14,9 +14,9 @@ export const TFC_PROVIDER = "tfc";
 
 export class TfcConnectionError extends Error {}
 
-/** The org-scoped connection's credential, host-checked. Throws
+/** The org-scoped connection row and its credential, host-checked. Throws
  *  TfcConnectionError when it is missing or points somewhere private. */
-export async function loadTfcConnection(orgId: string, connectionId: string): Promise<TfcCredential> {
+export async function loadTfcConnectionRow(orgId: string, connectionId: string) {
   const conn = await prisma.providerConnection.findFirst({
     where: { id: connectionId, orgId, provider: TFC_PROVIDER },
   });
@@ -27,14 +27,21 @@ export async function loadTfcConnection(orgId: string, connectionId: string): Pr
   } catch (err) {
     throw new TfcConnectionError(err instanceof Error ? err.message : String(err));
   }
-  return cred;
+  return { conn, cred };
 }
 
-/** A workspace adapter for that connection's organization. */
+/** The org-scoped connection's credential, host-checked. */
+export async function loadTfcConnection(orgId: string, connectionId: string): Promise<TfcCredential> {
+  return (await loadTfcConnectionRow(orgId, connectionId)).cred;
+}
+
+/** A workspace adapter for that connection's organization. Workspaces it
+ *  creates are linked to their repo when the connection has a VCS token. */
 export async function tfcAdapterFor(
   orgId: string,
   connectionId: string
 ): Promise<{ adapter: TfCloudWorkspaceAdapter; cred: TfcCredential }> {
-  const cred = await loadTfcConnection(orgId, connectionId);
-  return { adapter: new TfCloudWorkspaceAdapter(cred.token, cred.organization, tfcBaseUrl(cred.hostname)), cred };
+  const { conn, cred } = await loadTfcConnectionRow(orgId, connectionId);
+  const adapter = new TfCloudWorkspaceAdapter(cred.token, cred.organization, tfcBaseUrl(cred.hostname), conn.vcsOauthTokenId);
+  return { adapter, cred };
 }

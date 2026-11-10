@@ -65,6 +65,9 @@ model ProviderConnection {
   // When the provider says the credential stops working, if it says so
   // cheaply on the verify call (Cloudflare, GitHub). Null = unknown or never.
   expiresAt      DateTime?
+  // tfc only: the VCS OAuth token (ot-...) in that organization that
+  // workspaces are linked through. An id, not a secret. See migration 0021.
+  vcsOauthTokenId String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @default(now()) @updatedAt
 

@@ -445,10 +445,59 @@ export interface MigrationSummary {
 export interface WorkspaceSummary {
   id: string;
   name: string;
+  kind: string;
   tfcWorkspaceUrl: string | null;
   driftDetected: boolean;
   lastRunStatus: string | null;
   lastRunAt: string | null;
+  /** owner/repo the workspace plans from; null when API-driven. */
+  vcsRepo: string | null;
+  /** The tfc connection it runs through; null when it has none, and then
+   *  there are no runs to show. */
+  connectionId: string | null;
+}
+
+/** One Terraform Cloud run, as GET /workspaces/:id/runs lists it. Counts
+ *  are null until the plan has finished. */
+export interface TfcRunSummary {
+  id: string;
+  status: string;
+  message: string;
+  source: string | null;
+  createdAt: string;
+  planOnly: boolean;
+  hasChanges: boolean | null;
+  isConfirmable: boolean;
+  isDiscardable: boolean;
+  additions: number | null;
+  changes: number | null;
+  destructions: number | null;
+}
+
+export interface TfcOAuthTokenSummary {
+  id: string;
+  serviceProvider: string;
+  serviceProviderDisplayName: string;
+  user: string | null;
+}
+
+/** Run statuses that will not change without someone acting. */
+export const TFC_FINAL_RUN_STATUSES = [
+  "applied",
+  "planned_and_finished",
+  "planned_and_saved",
+  "errored",
+  "discarded",
+  "canceled",
+  "force_canceled",
+  "policy_soft_failed",
+  "policy_override",
+] as const;
+
+/** True when a run is finished or waiting for a person (confirmable), so
+ *  polling it would only repeat the same answer. */
+export function runIsSettled(run: Pick<TfcRunSummary, "status" | "isConfirmable">): boolean {
+  return run.isConfirmable || (TFC_FINAL_RUN_STATUSES as readonly string[]).includes(run.status);
 }
 
 export interface IacStandardCheck {

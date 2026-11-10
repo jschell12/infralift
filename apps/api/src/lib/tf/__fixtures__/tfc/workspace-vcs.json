@@ -1,0 +1,22 @@
+{
+  "data": {
+    "id": "ws-noZcaGXsac6aZSJR",
+    "type": "workspaces",
+    "attributes": {
+      "name": "app-foundry-demo",
+      "auto-apply": false,
+      "working-directory": "deploy/infra",
+      "created-at": "2021-05-24T07:30:00.000Z",
+      "updated-at": "2021-05-24T07:30:00.000Z",
+      "resource-count": 0,
+      "vcs-repo": {
+        "branch": "main",
+        "ingress-submodules": false,
+        "identifier": "acme/app",
+        "oauth-token-id": "ot-hmAyP66qk2AMVdbJ",
+        "repository-http-url": "https://github.com/acme/app",
+        "service-provider": "github"
+      }
+    }
+  }
+}

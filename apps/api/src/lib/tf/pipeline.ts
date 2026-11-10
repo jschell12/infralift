@@ -14,6 +14,7 @@ import { deliveryFor, getStack, renderStack } from "../stacks/index.js";
 import { gitHostClient, type GitHostClient, type HostFile } from "../git/hosts.js";
 import { isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
 import { tfcAdapterFor } from "./tfc-connection.js";
+import type { CreatedWorkspace } from "./workspace.js";
 import { JobRun } from "../jobs/state.js";
 import { generateHcl } from "./codegen.js";
 import { checkEnv, checkSetupLines, renderImportCheck } from "../import/check.js";
@@ -146,7 +147,7 @@ export async function runJob(jobId: string): Promise<void> {
     if (project.tfcConnectionId) {
       const workspaceName = `${project.name}-${providerCfg.region ?? "default"}`;
       const { adapter, cred } = await tfcAdapterFor(project.orgId, project.tfcConnectionId);
-      await adapter.createWorkspace({
+      const ws = await adapter.createWorkspace({
         workspaceName,
         repo: project.destRepo,
         branch: project.destBranch,
@@ -155,7 +156,7 @@ export async function runJob(jobId: string): Promise<void> {
       });
       const run = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
       await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
-      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}`;
+      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws, run.runId !== "none")}`;
     }
 
     // -- complete ----------------------------------------------------------
@@ -298,7 +299,7 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
     if (project.tfcConnectionId) {
       const workspaceName = project.name;
       const { adapter, cred } = await tfcAdapterFor(project.orgId, project.tfcConnectionId);
-      await adapter.createWorkspace({
+      const ws = await adapter.createWorkspace({
         workspaceName,
         repo: repo.repo,
         branch,
@@ -307,7 +308,7 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
       });
       const run = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
       await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
-      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}`;
+      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws, run.runId !== "none")}`;
     }
 
     // -- complete ----------------------------------------------------------
@@ -515,8 +516,9 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
     });
 
     // -- workspace ---------------------------------------------------------
-    // Only a Terraform Cloud backend has a workspace to create. It tracks the
-    // default branch, so it plans the change once the request is merged.
+    // Only a Terraform Cloud backend has a workspace to create. It plans the
+    // change once the request is merged only if it is linked to the repo,
+    // which needs a VCS connection picked for the TFC connection.
     await run.start("workspace");
     let workspaceNote = "state in R2; no workspace";
     if (args.backend === "tfc") {
@@ -529,15 +531,18 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       }
       const workspaceName = String(args.tfc_workspace ?? args.name);
       const { adapter } = await tfcAdapterFor(project.orgId, project.tfcConnectionId);
-      await adapter.createWorkspace({
+      const ws = await adapter.createWorkspace({
         workspaceName,
         repo,
         branch: destBranch,
         workingDirectory: `${prefix}deploy/infra`,
         autoApply: false,
+        // No run is queued here (the change is not merged yet), so TFC would
+        // hold the merge's run until someone queued one by hand.
+        queueAllRuns: true,
       });
       await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
-      workspaceNote = `workspace ${workspaceName}`;
+      workspaceNote = `workspace ${workspaceName}; ${vcsNote(ws, false)}`;
     }
 
     // -- complete ----------------------------------------------------------
@@ -652,4 +657,18 @@ function importRequestBody(root: RootModule, repo: string, label: string): strin
       : "The check needs no secrets.",
     ...(root.notes.length ? ["", "Notes from the scan:", "", ...root.notes.map((n) => `- ${n}`)] : []),
   ].join("\n");
+}
+
+/** Whether a merge will plan, said only when it is true: the workspace is
+ *  linked, and TFC will queue a push's run (queue-all-runs, or a run was
+ *  already queued by hand, which is `queuedRun`). */
+export function vcsNote(ws: CreatedWorkspace, queuedRun: boolean): string {
+  if (ws.vcsRepo && (ws.queueAllRuns || queuedRun)) {
+    return `linked to ${ws.vcsRepo}, so it plans once the change is merged`;
+  }
+  if (ws.vcsRepo) {
+    return `linked to ${ws.vcsRepo}, but a merge plans only after a first run: queue one under Workspaces`;
+  }
+  if (ws.linkError) return `${ws.linkError}, so it was created unlinked and a merge does not plan: link it under Workspaces`;
+  return "not linked to a repository, so a merge does not plan: pick a VCS connection under Workspaces";
 }
