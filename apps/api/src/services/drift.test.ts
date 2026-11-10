@@ -30,6 +30,8 @@ const svc = await import("./drift.js");
 const NOW = new Date("2026-11-10T12:00:00Z");
 const PROJECT = {
   id: "proj_1",
+  source: "imported",
+  destPath: "infra/app",
   orgId: "org_mine",
   destRepo: "acme/web",
   destBranch: "main",
@@ -40,33 +42,45 @@ const CONN = { id: "conn_1", orgId: "org_mine", provider: "github", status: "val
 
 const STACK_DRIFT = `${DRIFT.foundPrefix} 0 to add, 1 to change, 1 to destroy. Something changed outside Terraform, or a merged change is not applied yet.`;
 
-const run = (o: { conclusion: string | null; status?: string; annotations?: number }) => ({
+const APP = "infra drift: infra-app";
+
+const run = (o: { conclusion: string | null; status?: string; annotations?: number; id?: number }) => ({
   total_count: 1,
   check_runs: [
     {
-      id: 991,
+      id: o.id ?? 991,
       status: o.status ?? "completed",
       conclusion: o.conclusion,
-      html_url: "https://github.com/acme/web/runs/991",
+      html_url: `https://github.com/acme/web/runs/${o.id ?? 991}`,
       started_at: "2026-11-10T06:41:12Z",
       completed_at: o.status && o.status !== "completed" ? null : "2026-11-10T06:43:40Z",
       output: { title: null, annotations_count: o.annotations ?? 1 },
     },
   ],
 });
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
+  new Response(JSON.stringify(body), { status, headers });
 
-/** GitHub, answering per path: two commits on main, the drift run on the older. */
-function github(checkRun: object, annotations: { annotation_level: string; message: string }[], opts: { head?: object } = {}) {
+type Annotation = { annotation_level: string; message: string };
+type Body = { total_count?: number; check_runs: { id: number }[] };
+
+/** GitHub with two commits on main and drift runs on the older one, filtered
+ *  by exact check_name as GitHub filters them. */
+function githubRuns(byName: Record<string, { body: Body; annotations: Annotation[] }>) {
   return vi.fn(async (url: string) => {
-    const path = new URL(url).pathname + new URL(url).search;
-    if (path.startsWith("/repos/acme/web/commits?")) return json([{ sha: "c2" }, { sha: "c1" }]);
-    if (path.startsWith("/repos/acme/web/commits/c2/check-runs")) return json(opts.head ?? { total_count: 0, check_runs: [] });
-    if (path.startsWith("/repos/acme/web/commits/c1/check-runs")) return json(checkRun);
-    if (path.startsWith("/repos/acme/web/check-runs/991/annotations")) return json(annotations);
+    const u = new URL(url);
+    if (u.pathname === "/repos/acme/web/commits") return json([{ sha: "c2" }, { sha: "c1" }]);
+    const commit = /^\/repos\/acme\/web\/commits\/(c\d)\/check-runs$/.exec(u.pathname);
+    if (commit) {
+      const hit = commit[1] === "c1" ? byName[u.searchParams.get("check_name") ?? ""] : undefined;
+      return json(hit?.body ?? { total_count: 0, check_runs: [] });
+    }
+    const ann = /^\/repos\/acme\/web\/check-runs\/(\d+)\/annotations$/.exec(u.pathname);
+    if (ann) return json(Object.values(byName).find((r) => r.body.check_runs[0]?.id === Number(ann[1]))?.annotations ?? []);
     return json({ message: "Not Found" }, 404);
   });
 }
+const github = (body: Body, annotations: Annotation[]) => githubRuns({ [APP]: { body, annotations } });
 
 const projectWrites = () =>
   projectUpdateMany.mock.calls.map((c) => c[0] as { where: Record<string, unknown>; data: Record<string, unknown> });
@@ -83,7 +97,7 @@ describe("checkProjectDrift", () => {
     vi.stubGlobal("fetch", fetchMock);
     expect(await svc.checkProjectDrift({ ...PROJECT }, NOW)).toBe(true);
     // Looked past the head commit, which had no run yet.
-    expect(fetchMock.mock.calls.map((c) => String(c[0])).some((u) => u.includes("check_name=infra%20drift"))).toBe(true);
+    expect(fetchMock.mock.calls.some((c) => new URL(String(c[0])).searchParams.get("check_name") === APP)).toBe(true);
     const [claim, write] = projectWrites();
     expect(claim).toEqual({ where: { id: "proj_1", orgId: "org_mine", driftCheckedAt: null }, data: { driftCheckedAt: NOW } });
     expect(write.where).toEqual({ id: "proj_1", orgId: "org_mine" });
@@ -166,6 +180,68 @@ describe("checkProjectDrift", () => {
     await svc.checkProjectDrift({ ...PROJECT }, NOW);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(projectWrites()[1].data).toMatchObject({ driftState: "unknown" });
+  });
+});
+
+describe("several drift checks on one commit", () => {
+  it("gives each imported module, and the stack, exactly its own result", async () => {
+    // Two modules' workflows in one repository, both run at 06:23 on the same
+    // commit; the clean one started last, so "newest infra drift run" would
+    // have answered for both.
+    const fetchMock = githubRuns({
+      [APP]: {
+        body: run({ conclusion: "failure", id: 991 }),
+        annotations: [{ annotation_level: "failure", message: OUTCOME.changes("1", "9") }],
+      },
+      "infra drift: infra-network": {
+        body: run({ conclusion: "success", id: 992 }),
+        annotations: [{ annotation_level: "notice", message: OUTCOME.passed("4") }],
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await svc.checkProjectDrift({ ...PROJECT }, NOW);
+    await svc.checkProjectDrift({ ...PROJECT, id: "proj_2", destPath: "infra/network" }, NOW);
+    await svc.checkProjectDrift({ ...PROJECT, id: "proj_3", source: "stack", destPath: "" }, NOW);
+    const states = Object.fromEntries(
+      projectWrites()
+        .filter((w) => "driftState" in w.data)
+        .map((w) => [w.where.id, [w.data.driftState, w.data.driftCheckUrl]])
+    );
+    expect(states).toEqual({
+      proj_1: ["drift", "https://github.com/acme/web/runs/991"],
+      proj_2: ["none", "https://github.com/acme/web/runs/992"],
+      // The stack asks for plain "infra drift", which neither module writes.
+      proj_3: ["unknown", null],
+    });
+    const asked = fetchMock.mock.calls.map((c) => new URL(String(c[0])).searchParams.get("check_name")).filter(Boolean);
+    expect(new Set(asked)).toEqual(new Set([APP, "infra drift: infra-network", "infra drift"]));
+    expect(workspaceUpdateMany.mock.calls.map((c) => c[0])).toEqual([
+      { where: { projectId: "proj_1", orgId: "org_mine" }, data: { driftDetected: true } },
+      { where: { projectId: "proj_2", orgId: "org_mine" }, data: { driftDetected: false } },
+    ]);
+  });
+});
+
+describe("GitHub rate limits are a back-off, not a refused credential", () => {
+  const cases: [string, () => Response][] = [
+    ["x-ratelimit-remaining 0", () => json({ message: "API rate limit exceeded" }, 403, { "x-ratelimit-remaining": "0" })],
+    ["retry-after", () => json({ message: "Forbidden" }, 403, { "retry-after": "60" })],
+    ["a secondary-limit body", () => json({ message: "You have exceeded a secondary rate limit." }, 403)],
+    ["429", () => json({ message: "Too Many Requests" }, 429)],
+  ];
+  for (const [what, answer] of cases) {
+    it(`keeps the connection and the last state on a 403/429 with ${what}`, async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => answer()));
+      expect(await svc.checkProjectDrift({ ...PROJECT }, NOW)).toBe(true);
+      expect(connUpdateMany).not.toHaveBeenCalled();
+      expect(projectWrites()).toHaveLength(1); // the claim, which is the back-off
+    });
+  }
+
+  it("still marks the connection invalid on a 403 that is not a rate limit", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ message: "Resource not accessible by personal access token" }, 403)));
+    await svc.checkProjectDrift({ ...PROJECT }, NOW);
+    expect(connUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "invalid" }) }));
   });
 });
 

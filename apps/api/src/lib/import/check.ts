@@ -1,6 +1,6 @@
 import { Document } from "yaml";
 import type { RootModule } from "./scan.js";
-import { CHECK_JOB_NAME, DRIFT_JOB_NAME, GENERATED_COMMIT_SUBJECT, OUTCOME } from "./contract.js";
+import { CHECK_JOB_NAME, GENERATED_COMMIT_SUBJECT, OUTCOME, driftJobName } from "./contract.js";
 
 // ---------------------------------------------------------------------------
 // The import check: a GitHub Actions workflow infralift adds to the customer's
@@ -411,7 +411,7 @@ export function renderImportCheck(
       // stands in for a pull request's check. Plans only: no generated code,
       // no commit, no artifact, and a token that can only read.
       drift: {
-        name: DRIFT_JOB_NAME,
+        name: driftJobName(checkSlug(root.path)),
         if: "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch)",
         "runs-on": "ubuntu-latest",
         "timeout-minutes": 30,

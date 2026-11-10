@@ -3,7 +3,8 @@ import { decryptToken } from "../lib/crypto.js";
 import { PREFER_USABLE_CONNECTION } from "../lib/connection-order.js";
 import { gitHostClient, type GitHostClient } from "../lib/git/hosts.js";
 import { GitCommitError } from "../lib/git/errors.js";
-import { DRIFT_JOB_NAME } from "../lib/import/contract.js";
+import { checkSlug } from "../lib/import/check.js";
+import { DRIFT_JOB_NAME, driftJobName } from "../lib/import/contract.js";
 import { classifyDrift } from "../lib/import/result.js";
 import { markInvalidOnAuthFailure } from "./connections.js";
 
@@ -37,6 +38,8 @@ type ClientFor = (host: string, token: string) => GitHostClient;
 
 interface DriftProject {
   id: string;
+  source: string;
+  destPath: string;
   orgId: string;
   destRepo: string;
   destBranch: string;
@@ -57,7 +60,7 @@ export async function dueForDrift(now = new Date(), limit = DRIFT_BATCH): Promis
     },
     orderBy: { driftCheckedAt: { sort: "asc", nulls: "first" } },
     take: limit,
-    select: { id: true, orgId: true, destRepo: true, destBranch: true, gitConnectionId: true, driftCheckedAt: true },
+    select: { id: true, source: true, destPath: true, orgId: true, destRepo: true, destBranch: true, gitConnectionId: true, driftCheckedAt: true },
   });
 }
 
@@ -101,15 +104,20 @@ export async function checkProjectDrift(
 
   try {
     const client = clientFor(conn.provider, decryptToken(conn.encryptedToken));
+    // Exactly this project's check: the stack's, or this module's of several.
+    const name = project.source === "stack" ? DRIFT_JOB_NAME : driftJobName(checkSlug(project.destPath));
     let run = null;
     for (const sha of await client.listCommits({ repo: project.destRepo, branch: project.destBranch, limit: DRIFT_COMMITS })) {
-      run = await client.getCheckRun({ repo: project.destRepo, sha, name: DRIFT_JOB_NAME });
+      run = await client.getCheckRun({ repo: project.destRepo, sha, name });
       if (run) break;
     }
     const result = classifyDrift(run, project.destBranch);
     await record(result.state, result.message, result.checkUrl, result.ranAt);
   } catch (err) {
     if (!(err instanceof GitCommitError)) throw err;
+    // A rate limit is a back-off: the claim already moved driftCheckedAt, so
+    // the next try is an interval away. Never a reason to mark the connection.
+    if (err.rateLimited) return true;
     if (await markInvalidOnAuthFailure(conn, err, "git", "the drift check")) {
       await record("unknown", "GitHub refused the connection; reconnect it under Connections to read the drift check.");
     }

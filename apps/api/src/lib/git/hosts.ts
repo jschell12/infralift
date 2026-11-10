@@ -123,6 +123,21 @@ export const REPO_READY = { attempts: 40, intervalMs: 1500 };
 
 // -- GitHub ------------------------------------------------------------------
 
+/** A failed GitHub response as a GitCommitError, flagged when it is a rate
+ *  limit: 429, or 403 with retry-after, x-ratelimit-remaining 0, or a body
+ *  that says so (the secondary limit). The body is read for that word only;
+ *  the message never includes it. */
+export async function githubError(res: Response, message: string): Promise<GitCommitError> {
+  let limited = res.status === 429;
+  if (res.status === 403) {
+    limited =
+      res.headers.has("retry-after") ||
+      res.headers.get("x-ratelimit-remaining") === "0" ||
+      /rate limit/i.test(await res.text().catch(() => ""));
+  }
+  return new GitCommitError(message, res.status, { rateLimited: limited });
+}
+
 function githubClient(token: string): GitHostClient {
   const gh = (method: string, path: string, body?: object) =>
     fetch(`https://api.github.com${path}`, {
@@ -209,7 +224,7 @@ function githubClient(token: string): GitHostClient {
         "GET",
         `/repos/${repo}/commits/${sha}/check-runs?check_name=${encodeURIComponent(name)}&filter=latest&per_page=10`
       );
-      if (!res.ok) throw new GitCommitError(`GitHub check-run lookup failed (${res.status}) for ${repo}@${sha}`);
+      if (!res.ok) throw await githubError(res, `GitHub check-run lookup failed (${res.status}) for ${repo}@${sha}`);
       const body = (await res.json()) as {
         check_runs: {
           id: number;
@@ -245,7 +260,7 @@ function githubClient(token: string): GitHostClient {
 
     async listCommits({ repo, branch, limit }) {
       const res = await gh("GET", `/repos/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${limit}`);
-      if (!res.ok) throw new GitCommitError(`GitHub commit listing failed (${res.status}) for ${repo}@${branch}`);
+      if (!res.ok) throw await githubError(res, `GitHub commit listing failed (${res.status}) for ${repo}@${branch}`);
       return ((await res.json()) as { sha: string }[]).map((c) => c.sha);
     },
 

@@ -46,8 +46,15 @@ export const READ = {
 // spell these strings out literally; a test pins them). Read by the drift
 // sweep (services/drift.ts).
 
-/** The drift job's name, which GitHub uses as the check run's name. */
+/** The stack's drift job name, which GitHub uses as the check run's name. */
 export const DRIFT_JOB_NAME = "infra drift";
+
+/** An imported module's drift job name. One repository can hold several
+ *  imported modules, each with its own workflow, and all their scheduled runs
+ *  land on the same commit, so each name carries the module's slug
+ *  (check.ts checkSlug, the same string as its workflow file name) and the
+ *  sweep asks for exactly its own. */
+export const driftJobName = (moduleSlug: string) => `${DRIFT_JOB_NAME}: ${moduleSlug}`;
 
 export const DRIFT = {
   /** Notice: nothing changed outside the code. */

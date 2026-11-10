@@ -9,7 +9,7 @@ import {
   secretNameFor,
 } from "./check.js";
 import { scanRepo } from "./scan.js";
-import { DRIFT_JOB_NAME } from "./contract.js";
+import { DRIFT_JOB_NAME, driftJobName } from "./contract.js";
 
 const root = (files: { path: string; content: string }[]) => scanRepo(files).roots[0];
 
@@ -220,7 +220,10 @@ describe("the daily drift job", () => {
     expect(wf.on.schedule).toEqual([{ cron: "23 6 * * *" }]);
     expect(wf.on.schedule[0].cron.split(" ")[0]).not.toBe("0");
     expect(wf.on).toHaveProperty("workflow_dispatch");
-    expect(wf.jobs.drift.name).toBe(DRIFT_JOB_NAME);
+    // Per module: several imported modules' runs land on one commit.
+    expect(wf.jobs.drift.name).toBe(driftJobName("infra-prod"));
+    expect(wf.jobs.drift.name).toBe("infra drift: infra-prod");
+    expect(wf.jobs.drift.name).not.toBe(DRIFT_JOB_NAME);
     expect(wf.jobs.drift.name).not.toBe(wf.jobs.plan.name);
     expect(wf.jobs.drift.if).toContain("github.event_name == 'schedule'");
     expect(wf.jobs.drift.if).toContain("github.event.repository.default_branch");
