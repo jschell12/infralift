@@ -72,6 +72,10 @@ export interface ProviderConnectionSummary {
   createdAt: string;
   lastVerifiedAt: string | null;
   status: "unverified" | "valid" | "invalid";
+  /** Why the connection is invalid; null when it is not. */
+  lastError: string | null;
+  /** When the provider says the credential expires; null when unknown. */
+  expiresAt: string | null;
 }
 
 export interface ResourceInventoryItem {

@@ -80,7 +80,7 @@ async function vfetch(token, path, fetchImpl) {
   const res = await fetchImpl(`${API}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(`Vercel API ${path} -> ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(`Vercel API ${path} -> ${res.status}`), { status: res.status });
   return res.json();
 }
 

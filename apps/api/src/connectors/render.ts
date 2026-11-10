@@ -1,5 +1,5 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
-import type { Connector, ConnectorAssessment } from "./types.js";
+import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 
 const API = "https://api.render.com/v1";
 
@@ -8,7 +8,7 @@ async function rFetch(token: string, path: string): Promise<any> {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
-    throw new Error(`Render API ${path} -> ${res.status}`);
+    throw new ProviderHttpError(`Render API ${path} -> ${res.status}`, res.status);
   }
   return res.json();
 }

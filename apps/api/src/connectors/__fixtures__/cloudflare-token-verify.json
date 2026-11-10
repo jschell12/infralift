@@ -1,0 +1,26 @@
+{
+  "_source": "Response example for GET /user/tokens/verify in the Cloudflare API reference (developers.cloudflare.com/api/resources/user/subresources/tokens/methods/verify), read 2026-11-10. success/errors/messages are the v4 envelope every Cloudflare response carries.",
+  "active": {
+    "result": {
+      "id": "ed17574386854bf78a67040be0a770b0",
+      "status": "active",
+      "expires_on": "2020-01-01T00:00:00Z",
+      "not_before": "2018-07-01T05:20:00Z"
+    },
+    "success": true,
+    "errors": [],
+    "messages": []
+  },
+  "noExpiry": {
+    "result": { "id": "ed17574386854bf78a67040be0a770b0", "status": "active" },
+    "success": true,
+    "errors": [],
+    "messages": []
+  },
+  "refused": {
+    "result": null,
+    "success": false,
+    "errors": [{ "code": 1000, "message": "Invalid API Token" }],
+    "messages": []
+  }
+}

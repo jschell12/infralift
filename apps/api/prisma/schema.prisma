@@ -59,7 +59,14 @@ model ProviderConnection {
   encryptedToken String
   status         String    @default("unverified") // unverified | valid | invalid
   lastVerifiedAt DateTime?
+  // Why it is invalid, in words a customer can act on. Never a provider
+  // response body. Cleared by a verify that succeeds. See migration 0020.
+  lastError      String?
+  // When the provider says the credential stops working, if it says so
+  // cheaply on the verify call (Cloudflare, GitHub). Null = unknown or never.
+  expiresAt      DateTime?
   createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
 
   org         Org          @relation(fields: [orgId], references: [id])
   assessments Assessment[]

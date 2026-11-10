@@ -1,5 +1,5 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
-import type { Connector, ConnectorAssessment } from "./types.js";
+import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 
 // Fly.io Machines API (REST). The legacy platform API at api.fly.io has been
 // superseded by the Machines API at api.machines.dev for app/machine management.
@@ -12,7 +12,7 @@ async function flyFetch(token: string, url: string): Promise<any> {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
-    throw new Error(`Fly.io API ${new URL(url).pathname} -> ${res.status}`);
+    throw new ProviderHttpError(`Fly.io API ${new URL(url).pathname} -> ${res.status}`, res.status);
   }
   return res.json();
 }

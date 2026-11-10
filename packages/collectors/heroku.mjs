@@ -80,7 +80,7 @@ async function hFetch(token, path, fetchImpl) {
       Accept: "application/vnd.heroku+json; version=3",
     },
   });
-  if (!res.ok) throw new Error(`Heroku API ${path} -> ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(`Heroku API ${path} -> ${res.status}`), { status: res.status });
   return res.json();
 }
 

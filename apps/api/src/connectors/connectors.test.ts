@@ -4,7 +4,8 @@ import { cloudflareConnector } from "./cloudflare.js";
 import { herokuConnector } from "./heroku.js";
 import { awsConnector } from "./aws.js";
 import { firebaseConnector } from "./firebase.js";
-import { githubConnector } from "./github.js";
+import { githubConnector, parseGithubExpiration } from "./github.js";
+import { readFileSync } from "node:fs";
 import { netlifyConnector } from "./netlify.js";
 import { renderConnector } from "./render.js";
 import { railwayConnector } from "./railway.js";
@@ -13,6 +14,10 @@ import { digitaloceanConnector } from "./digitalocean.js";
 import { gcpConnector } from "./gcp.js";
 import { azureConnector } from "./azure.js";
 import { getConnector } from "./index.js";
+
+const cfVerify = JSON.parse(
+  readFileSync(new URL("./__fixtures__/cloudflare-token-verify.json", import.meta.url), "utf8")
+);
 
 // ---------------------------------------------------------------------------
 // Shared fetch mock helpers
@@ -119,6 +124,26 @@ describe("cloudflare", () => {
       json: () => Promise.resolve({ result: { status: "active" } }),
     });
     expect(await cloudflareConnector.verify("tok")).toBe(true);
+  });
+
+  it("check reads expires_on from the verify response", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(cfVerify.active), { status: 200 }));
+    expect(await cloudflareConnector.check!("tok")).toEqual({
+      valid: true,
+      reason: null,
+      expiresAt: new Date("2020-01-01T00:00:00Z"),
+    });
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(cfVerify.noExpiry), { status: 200 }));
+    expect((await cloudflareConnector.check!("tok")).expiresAt).toBeNull();
+  });
+
+  it("check gives Cloudflare's own reason for a refused token", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(cfVerify.refused), { status: 401 }));
+    expect(await cloudflareConnector.check!("bad")).toEqual({
+      valid: false,
+      reason: "Cloudflare answered 401: Invalid API Token",
+      expiresAt: null,
+    });
   });
 
   it("verify returns false on inactive", async () => {
@@ -268,8 +293,38 @@ describe("firebase", () => {
 
 describe("github", () => {
   it("verify returns true on 200", async () => {
-    fetchMock.mockResolvedValueOnce({ ok: true, status: 200 });
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers() });
     expect(await githubConnector.verify("tok")).toBe(true);
+  });
+
+  // GitHub sends github-authentication-token-expiration on every response to
+  // a personal access token that has an expiry, and nothing for one without.
+  // The header value's shape is GitHub's "YYYY-MM-DD HH:MM:SS UTC" as reported
+  // by clients that parse it (composer's diagnose); not captured from a live
+  // token here, which is why the parser also takes a numeric offset.
+  it("check reads the token's expiry from the verify response header", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response("{}", { status: 200, headers: { "github-authentication-token-expiration": "2026-12-01 00:00:00 UTC" } })
+    );
+    const out = await githubConnector.check!("tok");
+    expect(out).toEqual({ valid: true, reason: null, expiresAt: new Date("2026-12-01T00:00:00Z") });
+  });
+
+  it("check gives a null expiry without the header, and the reason on a 401", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    expect((await githubConnector.check!("tok")).expiresAt).toBeNull();
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: "Bad credentials", documentation_url: "https://docs.github.com/rest", status: "401" }), { status: 401 })
+    );
+    expect(await githubConnector.check!("bad")).toEqual({ valid: false, reason: "GitHub answered 401: Bad credentials", expiresAt: null });
+  });
+
+  it("parseGithubExpiration accepts UTC and numeric offsets, and nothing else", () => {
+    expect(parseGithubExpiration("2026-12-01 00:00:00 UTC")?.toISOString()).toBe("2026-12-01T00:00:00.000Z");
+    expect(parseGithubExpiration("2026-12-01 00:00:00 -0700")?.toISOString()).toBe("2026-12-01T07:00:00.000Z");
+    expect(parseGithubExpiration("")).toBeNull();
+    expect(parseGithubExpiration(null)).toBeNull();
+    expect(parseGithubExpiration("next tuesday")).toBeNull();
   });
 
   it("assess returns empty", async () => {

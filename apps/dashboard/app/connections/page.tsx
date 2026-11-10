@@ -12,13 +12,13 @@ import {
   Card,
   CardTitle,
   Chip,
+  Drawer,
   H1,
   INPUT,
   LABEL,
   Note,
   PrimaryButton,
   TableHead,
-  TableRow,
 } from "../../components/ui";
 
 type FieldKind = "token" | "arn" | "json";
@@ -91,7 +91,172 @@ const SCOPE_HELP: Record<Provider, string> = {
     "Register an app in Azure AD, create a client secret, and grant the Reader role on the subscription. We inventory App Services, VMs, SQL databases, and storage accounts, read-only.",
 };
 
-const COLS = "grid-cols-[1fr_1fr_90px]";
+const COLS = "grid-cols-[1fr_1fr_120px]";
+const SMALL_BTN =
+  "rounded-md border border-border bg-transparent px-2 py-1 text-xs text-muted hover:text-text disabled:opacity-50 cursor-pointer";
+
+function providerName(provider: string): string {
+  return PROVIDER_LABELS[provider as Provider] ?? (provider === "tfc" ? "Terraform Cloud" : provider);
+}
+
+/** valid / invalid / expires in N days (warn under 14). */
+function StatusChip({ c }: { c: ProviderConnectionSummary }) {
+  if (c.status === "valid" && c.expiresAt) {
+    const days = Math.ceil((new Date(c.expiresAt).getTime() - Date.now()) / 86_400_000);
+    if (days <= 0) return <Chip tone="danger">expired</Chip>;
+    return <Chip tone={days < 14 ? "warn" : "accent"}>{`expires in ${days} day${days === 1 ? "" : "s"}`}</Chip>;
+  }
+  return (
+    <Chip tone={c.status === "valid" ? "accent" : c.status === "invalid" ? "danger" : "muted"}>{c.status}</Chip>
+  );
+}
+
+/** Replace a connection's credential. The API verifies the new one first and
+ *  keeps the old one if it fails, so a failure here changes nothing. */
+function ReplaceDrawer({
+  c,
+  onClose,
+  onDone,
+}: {
+  c: ProviderConnectionSummary;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const isTfc = String(c.provider) === "tfc";
+  const field = isTfc ? null : FIELD[c.provider];
+  const [token, setToken] = useState("");
+  const [organization, setOrganization] = useState("");
+  const [hostname, setHostname] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/connections/${c.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(
+          isTfc ? { token, organization: organization || undefined, hostname: hostname || undefined } : { token }
+        ),
+      });
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Drawer
+      title="Replace credential"
+      subtitle={`${providerName(c.provider)} · ${c.label}. The new credential is verified before it replaces the current one.`}
+      onClose={onClose}
+    >
+      <form onSubmit={submit}>
+        {isTfc && (
+          <>
+            <label className={LABEL}>Organization (blank keeps the current one)</label>
+            <input className={`${INPUT} mb-4`} value={organization} onChange={(e) => setOrganization(e.target.value)} />
+            <label className={LABEL}>Hostname (blank keeps the current one)</label>
+            <input className={`${INPUT} mb-4`} value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="app.terraform.io" />
+          </>
+        )}
+        <label className={LABEL}>{field?.label ?? "Team or user API token"}</label>
+        {field?.kind === "json" ? (
+          <textarea
+            className={`${INPUT} mb-4 font-mono`}
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            rows={6}
+            placeholder={field.placeholder}
+            required
+          />
+        ) : (
+          <input
+            className={`${INPUT} mb-4 font-mono`}
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            type={field?.kind === "arn" ? "text" : "password"}
+            placeholder={field?.placeholder}
+            required
+          />
+        )}
+        <PrimaryButton disabled={busy}>{busy ? "Verifying..." : "Verify & replace"}</PrimaryButton>
+        {error && <div className="mt-2 text-sm text-danger">{error}</div>}
+      </form>
+    </Drawer>
+  );
+}
+
+/** One connection: what state it is in, why, and the three ways to act on it. */
+function ConnectionRow({ c, onChanged }: { c: ProviderConnectionSummary; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [replacing, setReplacing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  async function act(path: string, method: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(path, { method });
+      setConfirming(false);
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border-b border-border py-3 text-[13px]">
+      <div className={`grid ${COLS} items-center gap-2`}>
+        <span>{providerName(c.provider)}</span>
+        <span className="text-muted">{c.label}</span>
+        <StatusChip c={c} />
+      </div>
+      {c.status === "invalid" && c.lastError && <div className="mt-1.5 text-xs text-danger">{c.lastError}</div>}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button className={SMALL_BTN} disabled={busy} onClick={() => void act(`/connections/${c.id}/verify`, "POST")}>
+          {busy && !confirming ? "Verifying..." : "Re-verify"}
+        </button>
+        <button className={SMALL_BTN} disabled={busy} onClick={() => setReplacing(true)}>
+          Replace credential
+        </button>
+        {confirming ? (
+          <>
+            <span className="text-xs text-muted">Remove &quot;{c.label}&quot; and its stored credential?</span>
+            <button className={SMALL_BTN.replace("text-muted hover:text-text", "text-danger")} disabled={busy} onClick={() => void act(`/connections/${c.id}`, "DELETE")}>
+              Remove
+            </button>
+            <button className={SMALL_BTN} disabled={busy} onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button className={SMALL_BTN} disabled={busy} onClick={() => setConfirming(true)}>
+            Remove
+          </button>
+        )}
+      </div>
+      {error && <div className="mt-1.5 text-xs text-danger">{error}</div>}
+      {replacing && (
+        <ReplaceDrawer
+          c={c}
+          onClose={() => setReplacing(false)}
+          onDone={() => {
+            setReplacing(false);
+            onChanged();
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
 /** HCP Terraform / TFE: where a project's workspace lives when it uses a
  *  Terraform Cloud backend. Stored by /workspaces/connections as a "tfc"
@@ -294,21 +459,7 @@ export default function ConnectionsPage() {
                 <span>Status</span>
               </TableHead>
               {connections.map((c) => (
-                <TableRow key={c.id} cols={COLS}>
-                  <span>{PROVIDER_LABELS[c.provider] ?? (String(c.provider) === "tfc" ? "Terraform Cloud" : c.provider)}</span>
-                  <span className="text-muted">{c.label}</span>
-                  <Chip
-                    tone={
-                      c.status === "valid"
-                        ? "accent"
-                        : c.status === "invalid"
-                          ? "danger"
-                          : "muted"
-                    }
-                  >
-                    {c.status}
-                  </Chip>
-                </TableRow>
+                <ConnectionRow key={c.id} c={c} onChanged={() => void load()} />
               ))}
             </>
           )}

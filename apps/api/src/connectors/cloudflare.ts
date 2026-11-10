@@ -1,5 +1,5 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
-import type { Connector, ConnectorAssessment } from "./types.js";
+import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 
 const API = "https://api.cloudflare.com/client/v4";
 
@@ -8,7 +8,7 @@ async function cfFetch(token: string, path: string): Promise<any> {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
-    throw new Error(`Cloudflare API ${path} -> ${res.status}`);
+    throw new ProviderHttpError(`Cloudflare API ${path} -> ${res.status}`, res.status);
   }
   const body: any = await res.json();
   if (body.success === false) {
@@ -23,12 +23,28 @@ export const cloudflareConnector: Connector = {
   provider: "cloudflare",
 
   async verify(token) {
+    return (await cloudflareConnector.check!(token)).valid;
+  },
+
+  // /user/tokens/verify answers {result: {id, status, expires_on?}}, status
+  // one of active | disabled | expired; expires_on is absent for a token
+  // without an expiry. A refused token is a 401 whose errors[] says why.
+  async check(token) {
     const res = await fetch(`${API}/user/tokens/verify`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return false;
-    const body: any = await res.json();
-    return body?.result?.status === "active";
+    const body: any = await res.json().catch(() => null);
+    if (!res.ok) {
+      const why = typeof body?.errors?.[0]?.message === "string" ? `: ${body.errors[0].message.slice(0, 120)}` : "";
+      return { valid: false, reason: `Cloudflare answered ${res.status}${why}`, expiresAt: null };
+    }
+    const status = body?.result?.status;
+    const expires = typeof body?.result?.expires_on === "string" ? new Date(body.result.expires_on) : null;
+    const expiresAt = expires && !Number.isNaN(expires.getTime()) ? expires : null;
+    if (status !== "active") {
+      return { valid: false, reason: `Cloudflare reports this token as ${String(status ?? "unknown")}`, expiresAt };
+    }
+    return { valid: true, reason: null, expiresAt };
   },
 
   async assess(token): Promise<ConnectorAssessment> {

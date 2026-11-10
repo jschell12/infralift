@@ -218,6 +218,7 @@ describe("look-up-then-act routes filter by org in the query", () => {
   const cases: [string, unknown, string, string, Record<string, unknown>, string][] = [
     ["POST /connections/:id/verify", connectionsRouter, "post", "/:id/verify", { params: { id: "conn_theirs" } }, "conn_theirs"],
     ["DELETE /connections/:id", connectionsRouter, "delete", "/:id", { params: { id: "conn_theirs" } }, "conn_theirs"],
+    ["PATCH /connections/:id", connectionsRouter, "patch", "/:id", { params: { id: "conn_theirs" }, body: { token: "t" } }, "conn_theirs"],
     ["POST /assessments/run", assessmentsRouter, "post", "/run", { body: { connectionId: "conn_theirs" } }, "conn_theirs"],
     ["GET /assessments/:id/options", assessmentsRouter, "get", "/:id/options", { params: { id: "asm_theirs" } }, "asm_theirs"],
   ];

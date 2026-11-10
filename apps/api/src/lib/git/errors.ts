@@ -4,7 +4,13 @@ import { Upstream } from "../errors.js";
  *  the operation, repository and status, never a token. A request that hits
  *  one answers 502 with that message. */
 export class GitCommitError extends Upstream {
-  constructor(message: string) {
+  /** The git host's HTTP status (not this error's own 502), when the request got one. Every site that
+   *  has one formats it as "(NNN)" in the message (github.ts, hosts.ts), so
+   *  it is read from there rather than threaded through ~30 throw sites. */
+  readonly hostStatus: number | null;
+
+  constructor(message: string, status?: number) {
     super(message);
+    this.hostStatus = status ?? (Number(message.match(/\((\d{3})\)/)?.[1] ?? NaN) || null);
   }
 }
