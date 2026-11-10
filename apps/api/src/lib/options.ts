@@ -22,6 +22,7 @@ import { computeExitToll } from "./exit-toll.js";
 import { PRICES_VERIFIED_AT } from "./pricing.js";
 import { recommend, type RecommendInput } from "./recommend.js";
 import { computeFootprint, sizeTarget } from "./sizing.js";
+import { buildWorkloadBreakdown } from "./workloads.js";
 
 // ---------------------------------------------------------------------------
 // Need inference
@@ -397,6 +398,10 @@ export async function buildMigrationOptions(assessment: {
     // every buyer asks after seeing the monthly savings.
     exitToll,
     options,
+    ...buildWorkloadBreakdown(assessment.inventory, {
+      estimatedMonthlyCostCents: assessment.estimatedMonthlyCostCents,
+      reportedMonthlySpendCents: assessment.reportedMonthlySpendCents,
+    }),
     pricesVerifiedAt: PRICES_VERIFIED_AT,
   };
 }

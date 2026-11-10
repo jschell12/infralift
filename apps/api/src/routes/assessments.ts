@@ -69,6 +69,7 @@ async function summarize(assessmentId: string): Promise<AssessmentSummary | null
     estimatedMonthlyCostCents: a.estimatedMonthlyCostCents,
     ...(await assessmentSavings(a)),
     findingCounts,
+    connectionId: a.connectionId,
   };
 }
 
@@ -135,12 +136,10 @@ assessmentsRouter.post("/run", handle(async (req, res) => {
     throw new InvalidInput("Invalid request", { detail: parsed.error.message });
   }
 
-  const connection = await prisma.providerConnection.findUnique({
-    where: { id: parsed.data.connectionId },
+  const connection = await prisma.providerConnection.findFirst({
+    where: { id: parsed.data.connectionId, orgId: req.user!.orgId },
   });
-  if (!connection || connection.orgId !== req.user!.orgId) {
-    throw new NotFound("Connection not found");
-  }
+  if (!connection) throw new NotFound("Connection not found");
   // Connections also hold destinations that are not assessment sources, such
   // as a customer's Terraform Cloud org ("tfc"), which has no connector.
   if (!(PROVIDERS as readonly string[]).includes(connection.provider)) {
@@ -247,13 +246,11 @@ assessmentsRouter.post("/from-bundle", handle(async (req, res) => {
 
 // Migration options: rank target providers against the assessed workload.
 assessmentsRouter.get("/:id/options", handle(async (req, res) => {
-  const assessment = await prisma.assessment.findUnique({
-    where: { id: req.params.id },
+  const assessment = await prisma.assessment.findFirst({
+    where: { id: req.params.id, orgId: req.user!.orgId },
     include: { inventory: true },
   });
-  if (!assessment || assessment.orgId !== req.user!.orgId) {
-    throw new NotFound("Not found");
-  }
+  if (!assessment) throw new NotFound("Not found");
   if (assessment.status !== "completed") {
     throw new InvalidInput("Assessment not completed");
   }

@@ -207,7 +207,7 @@ describe("org-private templates stay private", () => {
 
 describe("a TFC connection is not an assessment source", () => {
   it("POST /assessments/run refuses it without creating an assessment", async () => {
-    db.providerConnection.findUnique.mockResolvedValue({
+    db.providerConnection.findFirst.mockResolvedValue({
       id: "conn_mine",
       orgId: "org_mine",
       provider: "tfc",

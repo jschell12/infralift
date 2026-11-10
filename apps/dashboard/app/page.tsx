@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type {
-  ProviderConnectionSummary,
-  AssessmentSummary,
+import {
+  orgSpendTotals,
+  type ProviderConnectionSummary,
+  type AssessmentSummary,
 } from "@infralift/shared";
 import { api, formatCents, savingsNote } from "../lib/api";
 import {
@@ -127,11 +128,22 @@ export default function Dashboard() {
     );
   }
 
-  const completed = assessments.filter((a) => a.status === "completed");
-  const totalCost = completed.reduce(
-    (s, a) => s + (a.estimatedMonthlyCostCents ?? 0),
-    0
-  );
+  // One assessment per connection (an "Assess again" rerun replaces the
+  // earlier run rather than adding to it), each at the bill the options page
+  // compares against. An unknown bill is said, never summed as zero.
+  const {
+    counted: completed,
+    knownMonthlyCents: totalCost,
+    unknownCount,
+  } = orgSpendTotals(assessments);
+  const unknownNote =
+    unknownCount > 0
+      ? `unknown for ${unknownCount} stack${unknownCount === 1 ? "" : "s"}`
+      : null;
+  const costHeadline =
+    unknownCount === completed.length
+      ? "unknown"
+      : `${formatCents(totalCost)}/mo${unknownCount > 0 ? "+" : ""}`;
   // Net savings across every assessed stack, so a split stack (a Vercel
   // frontend and a Heroku backend) adds up. Each figure is that assessment's
   // best sized target after operations work, the same number its options
@@ -164,11 +176,14 @@ export default function Dashboard() {
     return (
       <>
         <h1 className={H1}>
-          Your infrastructure costs {formatCents(totalCost)}/mo
+          {unknownCount === completed.length
+            ? "Your infrastructure cost is unknown"
+            : `Your infrastructure costs ${costHeadline}`}
         </h1>
         <p className="text-muted mb-7">
           Across {completed.length} assessed provider
-          {completed.length > 1 ? "s" : ""}.
+          {completed.length > 1 ? "s" : ""}
+          {unknownNote && unknownCount < completed.length ? `, ${unknownNote}` : ""}.
           {totalSavings > 0 && (
             <>
               {" "}
@@ -192,8 +207,9 @@ export default function Dashboard() {
         <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
           <StatCard
             label="Current monthly"
-            value={formatCents(totalCost)}
-            tone="danger"
+            value={unknownCount === completed.length ? "unknown" : formatCents(totalCost)}
+            sub={unknownNote ?? undefined}
+            tone={unknownCount === completed.length ? "muted" : "danger"}
           />
           <StatCard
             label="Net savings"
@@ -226,7 +242,9 @@ export default function Dashboard() {
                 <Chip tone="accent">{a.status}</Chip>
               </div>
               <div className={`mb-1 text-2xl font-bold text-danger ${NUM}`}>
-                {formatCents(a.estimatedMonthlyCostCents)}/mo
+                {a.currentSpend.monthlyCents === null
+                  ? "unknown"
+                  : `${formatCents(a.currentSpend.monthlyCents)}/mo`}
               </div>
               <div className="text-sm text-muted">
                 {a.resourceCount} resources,{" "}

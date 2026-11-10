@@ -90,6 +90,9 @@ function report(
       notes: [],
     },
     options: [hetznerOption(spend, exitTollCents)],
+    workloads: [],
+    workloadsShared: null,
+    workloadsNote: null,
     pricesVerifiedAt: PRICES_VERIFIED_AT,
     ...over,
   };

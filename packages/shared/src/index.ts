@@ -114,6 +114,9 @@ export interface AssessmentSummary {
    *  unknown or no target is sized; negative when staying put is cheaper */
   netMonthlySavingsCents: number | null;
   findingCounts: Record<FindingSeverity, number>;
+  /** the connection it was run against; null for an uploaded snapshot. Reruns
+   *  of one connection share it, which is how org totals keep only the latest */
+  connectionId: string | null;
 }
 
 export interface AssessmentReport extends AssessmentSummary {
@@ -346,8 +349,72 @@ export interface MigrationOptionsReport {
   /** what it costs once to get the data out, before any target is chosen */
   exitToll: ExitTollEstimate;
   options: MigrationOption[];
+  /** per-workload costs; empty when the connector models no workloads */
+  workloads: WorkloadCost[];
+  /** what no single workload owns: shared databases, add-ons, platform fees */
+  workloadsShared: WorkloadShared | null;
+  /** why the workload rows do not add up to the totals, when they do not */
+  workloadsNote: string | null;
   /** ISO date the sizing and exit-toll price tables were last checked */
   pricesVerifiedAt: string;
+}
+
+export interface WorkloadTargetCost {
+  slug: string;
+  monthlyCents: number;
+}
+
+/** One app or service as the connector models it, priced on its own. */
+export interface WorkloadCost {
+  name: string;
+  /** e.g. "Heroku app", "Render service" */
+  kind: string;
+  /** at connector list prices, never the reported bill; null when unpriced */
+  currentMonthlyCents: number | null;
+  /** each sized target, sized on this workload's footprint alone */
+  targets: WorkloadTargetCost[];
+}
+
+export interface WorkloadShared {
+  /** inventory items no workload owns */
+  items: string[];
+  /** list-price total minus the workloads; null when the total is unknown */
+  currentMonthlyCents: number | null;
+  /** the data services the shared items size to on each target */
+  targets: WorkloadTargetCost[];
+}
+
+/** The org-wide headline: one assessment per connection (the latest completed
+ *  rerun), each at its resolved current spend. Unknown bills are counted, not
+ *  summed as zero. */
+export function orgSpendTotals(assessments: AssessmentSummary[]): {
+  counted: AssessmentSummary[];
+  knownMonthlyCents: number;
+  unknownCount: number;
+} {
+  const latest = new Map<string, AssessmentSummary>();
+  const counted: AssessmentSummary[] = [];
+  for (const a of assessments) {
+    if (a.status !== "completed") continue;
+    // An uploaded snapshot has no connection to be a rerun of.
+    if (a.connectionId === null) {
+      counted.push(a);
+      continue;
+    }
+    const prev = latest.get(a.connectionId);
+    if (!prev || (a.completedAt ?? "") > (prev.completedAt ?? "")) {
+      latest.set(a.connectionId, a);
+    }
+  }
+  counted.push(...latest.values());
+  counted.sort((x, y) => (y.completedAt ?? "").localeCompare(x.completedAt ?? ""));
+  let knownMonthlyCents = 0;
+  let unknownCount = 0;
+  for (const a of counted) {
+    if (a.currentSpend.monthlyCents === null) unknownCount += 1;
+    else knownMonthlyCents += a.currentSpend.monthlyCents;
+  }
+  return { counted, knownMonthlyCents, unknownCount };
 }
 
 export interface MigrationPhase {

@@ -75,12 +75,10 @@ connectionsRouter.post("/", handle(async (req, res) => {
 
 // Re-verify an existing connection.
 connectionsRouter.post("/:id/verify", handle(async (req, res) => {
-  const connection = await prisma.providerConnection.findUnique({
-    where: { id: req.params.id },
+  const connection = await prisma.providerConnection.findFirst({
+    where: { id: req.params.id, orgId: req.user!.orgId },
   });
-  if (!connection || connection.orgId !== req.user!.orgId) {
-    throw new NotFound("Not found");
-  }
+  if (!connection) throw new NotFound("Not found");
   // A Terraform Cloud connection ("tfc") stores JSON credentials and has no
   // connector; without this it would be marked invalid by a TypeError.
   if (!(PROVIDERS as readonly string[]).includes(connection.provider)) {
@@ -107,12 +105,10 @@ connectionsRouter.post("/:id/verify", handle(async (req, res) => {
 
 // Delete a connection (and its stored token).
 connectionsRouter.delete("/:id", handle(async (req, res) => {
-  const connection = await prisma.providerConnection.findUnique({
-    where: { id: req.params.id },
+  const connection = await prisma.providerConnection.findFirst({
+    where: { id: req.params.id, orgId: req.user!.orgId },
   });
-  if (!connection || connection.orgId !== req.user!.orgId) {
-    throw new NotFound("Not found");
-  }
+  if (!connection) throw new NotFound("Not found");
   await prisma.providerConnection.delete({ where: { id: connection.id } });
   res.status(204).end();
 }));
