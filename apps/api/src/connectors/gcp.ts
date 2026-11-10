@@ -295,7 +295,6 @@ export const gcpConnector: Connector = {
       inventory,
       findings,
       estimatedMonthlyCostCents: null, // Cloud Billing API requires billing account scope
-      estimatedMonthlySavingsCents: null,
     };
   },
 };

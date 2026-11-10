@@ -24,7 +24,6 @@ export const githubConnector: Connector = {
       inventory: [],
       findings: [],
       estimatedMonthlyCostCents: null,
-      estimatedMonthlySavingsCents: null,
     };
   },
 };

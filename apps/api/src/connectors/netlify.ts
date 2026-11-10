@@ -137,7 +137,6 @@ export const netlifyConnector: Connector = {
       inventory,
       findings,
       estimatedMonthlyCostCents: null, // Netlify has no billing read API on standard tokens
-      estimatedMonthlySavingsCents: null,
     };
   },
 };

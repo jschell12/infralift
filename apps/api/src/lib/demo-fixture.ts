@@ -22,7 +22,6 @@ export interface DemoAssessment {
   inventory: ResourceInventoryItem[];
   findings: Omit<AssessmentFinding, "id">[];
   estimatedMonthlyCostCents: number | null;
-  estimatedMonthlySavingsCents: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,21 +122,17 @@ export function buildDemoHerokuAssessment(): DemoAssessment {
     resourceRef: HK_ADDON.postgres,
   });
 
-  const vpsEstimate = 2000;
-  const savings = Math.max(0, totalCostCents - vpsEstimate);
   findings.push({
     category: "cost",
     severity: "high",
     title: `~$${(totalCostCents / 100).toFixed(0)}/mo on Heroku dynos + add-ons`,
     detail: `Inventoried dynos and add-ons total roughly $${(totalCostCents / 100).toFixed(2)}/mo. Equivalent workloads on a VPS (Docker Compose or systemd behind Caddy) typically run $10–$40/mo total.`,
-    monthlySavingsCents: savings,
   });
 
   return {
     inventory,
     findings,
     estimatedMonthlyCostCents: totalCostCents,
-    estimatedMonthlySavingsCents: savings,
   };
 }
 
@@ -323,21 +318,18 @@ export function buildDemoVercelAssessment(): DemoAssessment {
   });
 
   // Demo-only: the estimate the connector cannot make yet.
-  const savings = VC_MODELED_MONTHLY_CENTS - 20000; // vs ~$200/mo modern stack
   findings.push({
     category: "cost",
     severity: "high",
     title: `Modeled ~$${(VC_MODELED_MONTHLY_CENTS / 100).toFixed(0)}/mo Vercel run-rate`,
     detail:
       "Estimated from account shape, not billing (Vercel exposes no billing read API): 20 Pro seats at $20 ($400), 10TB/mo bandwidth of which 9TB bills beyond the included 1TB at $0.15/GB (~$1,350), plus function invocations and duration, edge config reads, and blob storage (~$1,010). Actual invoices vary with usage.",
-    monthlySavingsCents: savings,
   });
 
   return {
     inventory,
     findings,
     estimatedMonthlyCostCents: VC_MODELED_MONTHLY_CENTS,
-    estimatedMonthlySavingsCents: savings,
   };
 }
 
@@ -447,20 +439,17 @@ export function buildDemoRenderAssessment(): DemoAssessment {
       "Render managed Postgres migrates via pg_dump/pg_restore to Neon, a VPS Postgres, or any managed provider. Connection strings move to Terraform-managed env vars.",
     resourceRef: "dpg-demo-northwind-1",
   });
-  const savings = Math.max(0, total - 2000);
   findings.push({
     category: "cost",
     severity: "high",
     title: `~$${(total / 100).toFixed(0)}/mo on Render services`,
     detail: `Five always-on services, managed Postgres and Redis, seats, and bandwidth total roughly $${(total / 100).toFixed(2)}/mo. Per-instance plan pricing compounds fast once every service needs pro-tier RAM.`,
-    monthlySavingsCents: savings,
   });
 
   return {
     inventory,
     findings,
     estimatedMonthlyCostCents: total,
-    estimatedMonthlySavingsCents: savings,
   };
 }
 
@@ -568,20 +557,17 @@ export function buildDemoRailwayAssessment(): DemoAssessment {
       "Railway Postgres migrates via pg_dump/pg_restore to Neon, a VPS Postgres, or any managed provider.",
     resourceRef: "plg-demo-northwind-pg",
   });
-  const savings = Math.max(0, total - 2000);
   findings.push({
     category: "cost",
     severity: "high",
     title: `~$${(total / 100).toFixed(0)}/mo of Railway usage billing`,
     detail: `Usage-based compute, egress, and per-seat pricing total roughly $${(total / 100).toFixed(2)}/mo, and the bill moves with traffic instead of with plan changes you approve.`,
-    monthlySavingsCents: savings,
   });
 
   return {
     inventory,
     findings,
     estimatedMonthlyCostCents: total,
-    estimatedMonthlySavingsCents: savings,
   };
 }
 
@@ -702,20 +688,17 @@ export function buildDemoDigitaloceanAssessment(): DemoAssessment {
       "Kubernetes adds an operations tax most teams this size do not need. The workloads on it are containers that run anywhere.",
     resourceRef: "k8s-demo-northwind",
   });
-  const savings = Math.max(0, total - 2000);
   findings.push({
     category: "cost",
     severity: "high",
     title: `~$${(total / 100).toFixed(0)}/mo on DigitalOcean`,
     detail: `Seven droplets, two managed database clusters, DOKS, and extras total roughly $${(total / 100).toFixed(2)}/mo.`,
-    monthlySavingsCents: savings,
   });
 
   return {
     inventory,
     findings,
     estimatedMonthlyCostCents: total,
-    estimatedMonthlySavingsCents: savings,
   };
 }
 
@@ -824,19 +807,16 @@ export function buildDemoFirebaseAssessment(): DemoAssessment {
     detail:
       "Firestore's document model and per-operation billing shape the whole app. Migration means a relational redesign (usually Postgres) and a data backfill; infralift scopes this phase explicitly before quoting.",
   });
-  const savings = Math.max(0, total - 20000);
   findings.push({
     category: "cost",
     severity: "high",
     title: `~$${(total / 100).toFixed(0)}/mo of per-operation Firebase billing`,
     detail: `Reads, writes, egress, invocations, and MAU pricing total roughly $${(total / 100).toFixed(2)}/mo, and every one of those meters scales with growth. This is the bill that produced the famous $70k-in-a-day stories.`,
-    monthlySavingsCents: savings,
   });
 
   return {
     inventory,
     findings,
     estimatedMonthlyCostCents: total,
-    estimatedMonthlySavingsCents: savings,
   };
 }

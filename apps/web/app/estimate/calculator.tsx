@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { verifiedMonth } from "../../lib/prices";
+
 // The public calculator. Like assessment-form.tsx this is deliberately
 // dependency-free: the marketing site is a static export and this is the only
 // other interactive thing on it.
@@ -71,6 +73,7 @@ interface EstimateResult {
   targets: EstimateTarget[];
   bestSlug: string | null;
   assumptions: string[];
+  pricesVerifiedAt?: string;
 }
 
 function usd(cents: number): string {
@@ -381,6 +384,7 @@ export function Calculator() {
 function Result({ result }: { result: EstimateResult }) {
   const { targets, bestSlug, assumptions } = result;
   const best = targets.find((t) => t.slug === bestSlug) ?? null;
+  const verified = verifiedMonth(result.pricesVerifiedAt);
 
   return (
     <div className="grid gap-6 border-t border-border pt-10">
@@ -499,6 +503,7 @@ function Result({ result }: { result: EstimateResult }) {
           produces our assessments and the Terraform we generate from them. The
           assessment reads your actual account, so it corrects whatever you
           guessed here.
+          {verified && <> Prices verified {verified}.</>}
         </p>
       </div>
     </div>

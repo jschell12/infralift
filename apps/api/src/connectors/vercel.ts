@@ -102,7 +102,6 @@ export function analyzeVercel(snapshot: VercelSnapshot): ConnectorAssessment {
     inventory,
     findings,
     estimatedMonthlyCostCents: null, // Vercel has no billing read API on standard tokens
-    estimatedMonthlySavingsCents: null,
   };
 }
 

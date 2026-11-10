@@ -33,6 +33,9 @@ const profileSchema = z.object({
   budgetMonthlyCents: z.number().int().nonnegative().default(5000),
   opsTolerance: z.number().int().min(0).max(3).default(1),
   trafficGbMonth: z.number().int().nonnegative().default(10),
+  // Today's annual bill, kept on a saved profile as the customer described
+  // it. It is never passed to recommend(): discount tiers qualify on spend on
+  // the target, not on the bill being left (see recommend.ts).
   annualSpendCents: z.number().int().positive().optional(),
   startupCreditsEligible: z.boolean().default(false),
 });
@@ -43,7 +46,8 @@ providersRouter.post("/recommendations", handle(async (req, res) => {
   if (!parsed.success) {
     throw new InvalidInput("Invalid request", { detail: parsed.error.message });
   }
-  res.json(await recommend(parsed.data as RecommendInput));
+  const { annualSpendCents: _currentSpend, ...profile } = parsed.data;
+  res.json(await recommend(profile));
 }));
 
 const saveProfileSchema = profileSchema.extend({
@@ -85,7 +89,6 @@ providersRouter.get("/app-profiles/:id/recommendations", handle(async (req, res)
       budgetMonthlyCents: profile.budgetMonthlyCents,
       opsTolerance: profile.opsTolerance,
       trafficGbMonth: profile.trafficGbMonth,
-      annualSpendCents: profile.annualSpendCents ?? undefined,
       startupCreditsEligible: profile.startupCreditsEligible,
     })
   );

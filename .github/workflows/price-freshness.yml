@@ -1,0 +1,42 @@
+name: Price freshness
+
+# The options page and /estimate tell customers when the price tables were
+# last verified (PRICES_VERIFIED_AT in apps/api/src/lib/pricing.ts). This
+# fails once that date is more than 120 days old, so the tables get
+# re-checked. It is deliberately separate from ci.yml: deploys wait on CI, and
+# a stale price date must not block a fix from shipping.
+
+on:
+  schedule:
+    - cron: "17 13 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  freshness:
+    name: Price tables verified within 120 days
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm db:generate
+
+      - run: pnpm --filter './packages/*' build
+
+      - name: Check PRICES_VERIFIED_AT
+        working-directory: apps/api
+        env:
+          PRICE_FRESHNESS: "1"
+        run: pnpm exec vitest run src/lib/pricing.test.ts

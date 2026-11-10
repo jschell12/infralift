@@ -6,7 +6,7 @@ import {
   type AssessmentSummary,
   type ProviderConnectionSummary,
 } from "@infralift/shared";
-import { api, formatCents } from "../lib/api";
+import { api, formatCents, savingsNote } from "../lib/api";
 import { Dot, NUM } from "./ui";
 
 // "From existing infrastructure": assess a connected account, then pick a
@@ -22,7 +22,7 @@ const SCAN_LINES = [
   "reading usage: transfer, requests, invocations",
   "applying published pricing and overage rates",
   "scoring candidate targets",
-  "report ready · quote generated",
+  "report ready",
 ];
 
 const POLL_MS = 2000;
@@ -155,7 +155,7 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
               <div className="text-[14px] font-semibold">{PROVIDER_LABELS[a.provider]}</div>
               <div className={`text-[12px] text-muted ${NUM}`}>
                 {a.resourceCount} resources &middot; {formatCents(a.estimatedMonthlyCostCents)}/mo now
-                &middot; {formatCents(a.estimatedMonthlySavingsCents)}/mo possible savings
+                &middot; {savingsNote(a)}
               </div>
               <div className="mt-2 flex gap-3 text-[13px] font-semibold">
                 <a href={`/assessments/${a.id}/options`} className="text-accent">

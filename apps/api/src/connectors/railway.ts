@@ -184,8 +184,6 @@ export const railwayConnector: Connector = {
         severity: "medium",
         title: "Railway usage-based billing",
         detail: `Found ${projects.length} project(s). Railway bills per-second for CPU/memory/egress plus a $5-$20/mo platform fee. A VPS or Cloudflare Workers replaces usage billing with fixed costs.`,
-        monthlySavingsCents:
-          totalCostCents > 0 ? Math.max(0, totalCostCents - 2000) : undefined,
       });
 
       findings.push({
@@ -201,8 +199,6 @@ export const railwayConnector: Connector = {
       inventory,
       findings,
       estimatedMonthlyCostCents: totalCostCents || null,
-      estimatedMonthlySavingsCents:
-        totalCostCents > 0 ? Math.max(0, totalCostCents - 2000) : null,
     };
   },
 };

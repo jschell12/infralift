@@ -21,7 +21,6 @@ export const gitlabConnector: Connector = {
       inventory: [],
       findings: [],
       estimatedMonthlyCostCents: null,
-      estimatedMonthlySavingsCents: null,
     };
   },
 };

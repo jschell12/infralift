@@ -140,7 +140,6 @@ export const cloudflareConnector: Connector = {
       inventory,
       findings,
       estimatedMonthlyCostCents: null,
-      estimatedMonthlySavingsCents: null,
     };
   },
 };

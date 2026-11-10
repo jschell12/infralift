@@ -22,7 +22,9 @@ describe("demo heroku fixture", () => {
       0
     );
     expect(itemSum).toBe(322900);
-    expect(fixture.estimatedMonthlySavingsCents).toBe(320900);
+    // Like the connector, the fixture prices the bill and claims no saving:
+    // 320900 here was $3,229 minus a flat $20 VPS.
+    expect(fixture).not.toHaveProperty("estimatedMonthlySavingsCents");
   });
 
   it("emits dyno externalIds inferProfile can read the process type from", () => {

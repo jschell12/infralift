@@ -7,7 +7,8 @@ import type {
 import { compareTarget } from "./compare.js";
 import { buildDemoHerokuAssessment } from "./demo-fixture.js";
 import { DEFAULT_HOURLY_RATE_USD, opsBurden } from "./estimate.js";
-import { buildReportExtras } from "./report-extras.js";
+import { PRICES_VERIFIED_AT } from "./pricing.js";
+import { buildReportExtras, headlineNetSavings } from "./report-extras.js";
 import { computeFootprint, sizeTarget } from "./sizing.js";
 
 // The Hetzner option is built the way buildMigrationOptions builds it, from
@@ -89,6 +90,7 @@ function report(
       notes: [],
     },
     options: [hetznerOption(spend, exitTollCents)],
+    pricesVerifiedAt: PRICES_VERIFIED_AT,
     ...over,
   };
 }
@@ -271,5 +273,26 @@ describe("assessment report extras: the recommendation", () => {
     expect(recommendation).toBeNull();
     // The current stack still gets a row; there is just nothing to compare to.
     expect(costProjection).toHaveLength(1);
+  });
+});
+
+describe("headlineNetSavings", () => {
+  it("is the recommendation's figure, which is the top option's net", () => {
+    const r = report();
+    expect(headlineNetSavings(r)).toBe(r.options[0].netMonthlySavingsCents);
+    expect(headlineNetSavings(r)).toBe(
+      buildReportExtras(r).recommendation!.netMonthlySavingsCents
+    );
+  });
+
+  it("is null for an unknown bill, an unsized top option, and no options", () => {
+    expect(headlineNetSavings(report(UNKNOWN))).toBeNull();
+
+    const unsized = report();
+    unsized.options[0].sizing = null;
+    unsized.options[0].netMonthlySavingsCents = null;
+    expect(headlineNetSavings(unsized)).toBeNull();
+
+    expect(headlineNetSavings(report(LIST_PRICE, { options: [] }))).toBeNull();
   });
 });

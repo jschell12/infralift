@@ -322,7 +322,6 @@ export const azureConnector: Connector = {
       inventory,
       findings,
       estimatedMonthlyCostCents: null, // Cost Management API requires billing scope
-      estimatedMonthlySavingsCents: null,
     };
   },
 };

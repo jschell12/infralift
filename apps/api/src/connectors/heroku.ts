@@ -84,20 +84,16 @@ export function analyzeHeroku(snapshot: HerokuSnapshot): ConnectorAssessment {
   }
 
   if (totalCostCents > 0) {
-    const vpsEstimate = 2000; // $20/mo VPS baseline
-    const savings = Math.max(0, totalCostCents - vpsEstimate);
     findings.push({
       category: "cost",
       severity: totalCostCents > 10000 ? "high" : "medium",
       title: `~$${(totalCostCents / 100).toFixed(0)}/mo on Heroku dynos + add-ons`,
       detail: `Inventoried dynos and add-ons total roughly $${(totalCostCents / 100).toFixed(2)}/mo. Equivalent workloads on a VPS (Docker Compose or systemd behind Caddy) typically run $10–$40/mo total.`,
-      monthlySavingsCents: savings,
     });
     return {
       inventory,
       findings,
       estimatedMonthlyCostCents: totalCostCents,
-      estimatedMonthlySavingsCents: savings,
     };
   }
 
@@ -105,7 +101,6 @@ export function analyzeHeroku(snapshot: HerokuSnapshot): ConnectorAssessment {
     inventory,
     findings,
     estimatedMonthlyCostCents: totalCostCents || null,
-    estimatedMonthlySavingsCents: null,
   };
 }
 

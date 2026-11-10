@@ -137,20 +137,16 @@ export const renderConnector: Connector = {
     }
 
     if (totalCostCents > 0) {
-      const vpsEstimate = 2000; // $20/mo VPS baseline
-      const savings = Math.max(0, totalCostCents - vpsEstimate);
       findings.push({
         category: "cost",
         severity: totalCostCents > 10000 ? "high" : "medium",
         title: `~$${(totalCostCents / 100).toFixed(0)}/mo on Render services`,
         detail: `Inventoried services total roughly $${(totalCostCents / 100).toFixed(2)}/mo. Equivalent workloads on a VPS (Docker Compose behind Caddy) or Cloudflare Workers typically run $10-$40/mo.`,
-        monthlySavingsCents: savings,
       });
       return {
         inventory,
         findings,
         estimatedMonthlyCostCents: totalCostCents,
-        estimatedMonthlySavingsCents: savings,
       };
     }
 
@@ -158,7 +154,6 @@ export const renderConnector: Connector = {
       inventory,
       findings,
       estimatedMonthlyCostCents: totalCostCents || null,
-      estimatedMonthlySavingsCents: null,
     };
   },
 };

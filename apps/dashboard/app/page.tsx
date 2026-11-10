@@ -5,7 +5,7 @@ import type {
   ProviderConnectionSummary,
   AssessmentSummary,
 } from "@infralift/shared";
-import { api, formatCents } from "../lib/api";
+import { api, formatCents, savingsNote } from "../lib/api";
 import {
   Card,
   CardTitle,
@@ -132,10 +132,30 @@ export default function Dashboard() {
     (s, a) => s + (a.estimatedMonthlyCostCents ?? 0),
     0
   );
-  const totalSavings = completed.reduce(
-    (s, a) => s + (a.estimatedMonthlySavingsCents ?? 0),
+  // Net savings across every assessed stack, so a split stack (a Vercel
+  // frontend and a Heroku backend) adds up. Each figure is that assessment's
+  // best sized target after operations work, the same number its options
+  // page leads with. A stack where staying put is cheaper adds nothing rather
+  // than subtracting, because nobody moves one stack at a loss to pay for
+  // another. Unknown is counted and said, never summed as zero.
+  const compared = completed.filter((a) => a.netMonthlySavingsCents !== null);
+  const totalSavings = compared.reduce(
+    (s, a) => s + Math.max(0, a.netMonthlySavingsCents!),
     0
   );
+  const notCompared = completed.length - compared.length;
+  const needBill = completed.filter(
+    (a) => a.currentSpend.source === "unknown"
+  ).length;
+  const whoNeedsBill =
+    needBill === notCompared
+      ? needBill === 1
+        ? "it needs"
+        : "they need"
+      : `${needBill} ${needBill === 1 ? "needs" : "need"}`;
+  const biggest = [...compared].sort(
+    (a, b) => b.netMonthlySavingsCents! - a.netMonthlySavingsCents!
+  )[0];
   const firstName =
     user?.name?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
 
@@ -156,7 +176,15 @@ export default function Dashboard() {
               <span className="font-semibold text-accent">
                 {formatCents(totalSavings)}/mo
               </span>{" "}
-              in potential savings.
+              in net savings after operations work.
+            </>
+          )}
+          {notCompared > 0 && (
+            <>
+              {" "}
+              {notCompared} of {completed.length} {notCompared === 1 ? "has" : "have"}{" "}
+              no savings figure yet
+              {needBill > 0 ? `: ${whoNeedsBill} your monthly bill, entered on the options page.` : "."}
             </>
           )}
         </p>
@@ -167,13 +195,16 @@ export default function Dashboard() {
             value={formatCents(totalCost)}
             tone="danger"
           />
-          {totalSavings > 0 && (
-            <StatCard
-              label="Estimated savings"
-              value={`${formatCents(totalSavings)}/mo`}
-              tone="accent"
-            />
-          )}
+          <StatCard
+            label="Net savings"
+            value={compared.length > 0 ? `${formatCents(totalSavings)}/mo` : "\u2014"}
+            sub={
+              notCompared === 0
+                ? "after operations work"
+                : `${notCompared} of ${completed.length} not counted yet`
+            }
+            tone="accent"
+          />
           <StatCard
             label="Resources found"
             value={completed.reduce((s, a) => s + a.resourceCount, 0)}
@@ -199,8 +230,8 @@ export default function Dashboard() {
               </div>
               <div className="text-sm text-muted">
                 {a.resourceCount} resources,{" "}
-                {a.findingCounts.high + a.findingCounts.medium} findings &middot;
-                open report &rarr;
+                {a.findingCounts.high + a.findingCounts.medium} findings &middot;{" "}
+                {savingsNote(a)} &middot; open report &rarr;
               </div>
             </a>
           ))}
@@ -216,8 +247,8 @@ export default function Dashboard() {
               We build the target environment in parallel with zero downtime on
               your current stack, delivered as Terraform in a repo you own.
             </p>
-            <PrimaryButton href={`/assessments/${completed[0].id}`}>
-              Review the quote
+            <PrimaryButton href={`/assessments/${(biggest ?? completed[0]).id}/options`}>
+              Compare targets
             </PrimaryButton>
           </div>
         )}
@@ -335,8 +366,7 @@ export default function Dashboard() {
         )}
       </Card>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatCard label="Average savings" value="85%" sub="off Vercel at scale" />
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         <StatCard label="Time to first report" value="2 min" sub="connect and run" />
         <StatCard label="Access level" value="Read-only" sub="never write" />
       </div>

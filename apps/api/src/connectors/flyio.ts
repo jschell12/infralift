@@ -190,20 +190,16 @@ export const flyioConnector: Connector = {
     }
 
     if (totalCostCents > 0) {
-      const vpsEstimate = 2000;
-      const savings = Math.max(0, totalCostCents - vpsEstimate);
       findings.push({
         category: "cost",
         severity: totalCostCents > 10000 ? "high" : "medium",
         title: `~$${(totalCostCents / 100).toFixed(0)}/mo on Fly.io VMs + volumes`,
         detail: `Estimated compute and storage total ~$${(totalCostCents / 100).toFixed(2)}/mo. Equivalent workloads on a Hetzner VPS typically cost $10-$40/mo with 20TB egress included.`,
-        monthlySavingsCents: savings,
       });
       return {
         inventory,
         findings,
         estimatedMonthlyCostCents: totalCostCents,
-        estimatedMonthlySavingsCents: savings,
       };
     }
 
@@ -211,7 +207,6 @@ export const flyioConnector: Connector = {
       inventory,
       findings,
       estimatedMonthlyCostCents: totalCostCents || null,
-      estimatedMonthlySavingsCents: null,
     };
   },
 };

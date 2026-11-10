@@ -41,3 +41,30 @@ export function formatCents(cents: number | null | undefined): string {
   if (cents == null) return "—";
   return `$${(cents / 100).toFixed(2)}`;
 }
+
+/** An assessment's savings in a few words. An unknown bill reads "enter your
+ * bill", never $0, and a negative figure is said as one rather than hidden. */
+export function savingsNote(a: {
+  netMonthlySavingsCents: number | null;
+  currentSpend: { source: string };
+}): string {
+  const net = a.netMonthlySavingsCents;
+  if (net === null) {
+    return a.currentSpend.source === "unknown"
+      ? "enter your bill to compare"
+      : "no sized target yet";
+  }
+  return net > 0
+    ? `saves ${formatCents(net)}/mo net`
+    : "staying put is cheaper";
+}
+
+/** "August 2026" from an ISO date. Read in UTC so the first of a month does
+ * not render as the month before in a timezone west of Greenwich. */
+export function formatMonth(iso: string): string {
+  return new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}

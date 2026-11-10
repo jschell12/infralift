@@ -85,7 +85,6 @@ model Assessment {
   error                       String?
   resourceCount               Int       @default(0)
   estimatedMonthlyCostCents   Int?
-  estimatedMonthlySavingsCents Int?
   // The monthly bill as the customer told us, which beats the inventory
   // priced at list rates. Null until they say. See migration 0018.
   reportedMonthlySpendCents   Int?
@@ -343,7 +342,8 @@ model AppProfile {
   // 0 = wants zero devops … 3 = happy to run servers
   opsTolerance          Int      @default(1)
   trafficGbMonth        Int      @default(10)
-  // Current all-in annual spend, used to size committed-spend discounts
+  // Current all-in annual spend, as the customer described it. Not used to
+  // size committed-spend discounts: those qualify on spend on the target.
   annualSpendCents      Int?
   // Startup-credit eligibility (early stage, funded, no prior credits)
   startupCreditsEligible Boolean @default(false)

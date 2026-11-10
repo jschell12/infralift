@@ -94,7 +94,6 @@ async function seedProvider(orgId: string, provider: string) {
       completedAt: new Date(),
       resourceCount: fixture.inventory.length,
       estimatedMonthlyCostCents: fixture.estimatedMonthlyCostCents,
-      estimatedMonthlySavingsCents: fixture.estimatedMonthlySavingsCents,
     },
   });
 

@@ -9,7 +9,7 @@ import {
   type MigrationOptionsReport,
   type Provider,
 } from "@infralift/shared";
-import { api, formatCents } from "../../../../lib/api";
+import { api, formatCents, formatMonth } from "../../../../lib/api";
 import {
   Card,
   CardTitle,
@@ -87,7 +87,8 @@ function SpendForm({
   const [error, setError] = useState<string | null>(null);
 
   const parsed = Number(value.replace(/[$,\s]/g, ""));
-  const valid = value.trim() !== "" && Number.isFinite(parsed) && parsed >= 0;
+  // The API refuses $0: clearing the bill is the Clear button, not zero.
+  const valid = value.trim() !== "" && Number.isFinite(parsed) && parsed >= 0.01;
 
   async function save(monthlyUsd: number | null) {
     setBusy(true);
@@ -641,7 +642,10 @@ export default function MigrationOptionsPage({
       <p className="mb-6 max-w-[640px] text-muted">
         Ranked against what the assessment actually found — not a generic
         provider list. Estimates use published pricing plus the discounts your
-        spend level really reaches.
+        spend on each target really reaches.{" "}
+        <span className="whitespace-nowrap text-faint">
+          Prices verified {formatMonth(report.pricesVerifiedAt)}.
+        </span>
       </p>
 
       <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">

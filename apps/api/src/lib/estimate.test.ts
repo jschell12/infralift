@@ -6,6 +6,7 @@ import {
   opsBurden,
   type EstimateInput,
 } from "./estimate.js";
+import { PRICES_VERIFIED_AT } from "./pricing.js";
 import { sizeTarget } from "./sizing.js";
 
 /** A Vercel-shaped workload: little RAM, a lot of egress. */
@@ -170,6 +171,15 @@ describe("estimate", () => {
     expect(estimate(vercelish({ hourlyRateUsd: 40 })).assumptions[0]).toContain(
       "$40/hour"
     );
+  });
+
+  it("dates its prices, whether or not there is a bill to compare", () => {
+    // /estimate shows "Prices verified <Month YYYY>" from this field, so a
+    // page with no savings claim still says how old its target costs are.
+    expect(estimate(vercelish()).pricesVerifiedAt).toBe(PRICES_VERIFIED_AT);
+    expect(
+      estimate(vercelish({ monthlySpendUsd: undefined })).pricesVerifiedAt
+    ).toBe(PRICES_VERIFIED_AT);
   });
 });
 

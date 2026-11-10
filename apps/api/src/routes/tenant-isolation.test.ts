@@ -148,8 +148,13 @@ describe("reported spend is scoped to the caller's org", () => {
     );
   });
 
-  it("rejects a negative, absurd, missing or non-numeric bill before any lookup", async () => {
+  it("rejects a zero, negative, absurd, missing or non-numeric bill before any lookup", async () => {
     for (const body of [
+      // A $0 bill made every target a loss and the report say "stay put".
+      // Clearing the bill is null, not zero.
+      { monthlyUsd: 0 },
+      // Rounds to zero cents, which is the same claim by another route.
+      { monthlyUsd: 0.004 },
       { monthlyUsd: -1 },
       { monthlyUsd: 10_000_001 },
       {},
@@ -168,15 +173,22 @@ describe("reported spend is scoped to the caller's org", () => {
     }
   });
 
-  it("accepts both ends of the range", async () => {
-    for (const monthlyUsd of [0, 10_000_000]) {
+  it("accepts both ends of the range, and a cent is stored as a cent", async () => {
+    for (const [monthlyUsd, cents] of [
+      [0.01, 1],
+      [10_000_000, 1_000_000_000],
+    ]) {
+      update.mockClear();
       findFirst.mockResolvedValueOnce({ id: "asm_mine" });
       const res = await call(assessmentsRouter, "patch", "/:id/spend", {
         params: { id: "asm_mine" },
         body: { monthlyUsd },
         user,
       });
-      expect(res.status).toBe(200);
+      expect(res.status, String(monthlyUsd)).toBe(200);
+      expect(update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { reportedMonthlySpendCents: cents } })
+      );
     }
   });
 });

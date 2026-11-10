@@ -12,6 +12,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { clientKey, createRateLimiter } from "../lib/rate-limit.js";
 import { estimate, DEFAULT_HOURLY_RATE_USD } from "../lib/estimate.js";
+import { PRICES_VERIFIED_AT } from "../lib/pricing.js";
 
 export const estimateRouter = Router();
 
@@ -59,7 +60,12 @@ estimateRouter.post("/", (req, res) => {
   // A filled honeypot is a bot. Answer with a shape it cannot distinguish from
   // success, so it has nothing to learn.
   if (input.website && input.website.trim().length > 0) {
-    return res.json({ targets: [], bestSlug: null, assumptions: [] });
+    return res.json({
+      targets: [],
+      bestSlug: null,
+      assumptions: [],
+      pricesVerifiedAt: PRICES_VERIFIED_AT,
+    });
   }
 
   if (limiter.limited(clientKey(req), Date.now())) {

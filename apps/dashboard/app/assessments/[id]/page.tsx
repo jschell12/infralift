@@ -30,10 +30,9 @@ import {
  * the same options engine the migration options page uses, so the two pages
  * cannot disagree.
  *
- * The quote does not. Nothing generates a fixed fee: it is set by a human and
- * lives on the Migration record. This section stays skipped rather than
- * inventing a number, which is the same reason the other two were skipped
- * before they were wired up. */
+ * There is no fixed-fee quote here. Nothing generates one: a fee is set by a
+ * human and lives on the Migration record, where the migrations list shows
+ * it. A quote card on this page waited for a field the API never sent. */
 
 /** /tf/codegen returns the whole configuration to an org cleared for
  * delivery, and a readable sample plus a manifest of what is withheld to
@@ -66,10 +65,6 @@ interface ReportExtras {
   migrationPlan?: MigrationPlan;
   costProjection?: AssessmentCostProjectionRow[];
   recommendation?: AssessmentRecommendation;
-  quote?: {
-    fixedFeeCents: number;
-    lines: { phase: string; effort: string }[];
-  };
 }
 
 const SEVERITY_TONE: Record<FindingSeverity, Tone> = {
@@ -110,8 +105,6 @@ export default function AssessmentReportPage({
     null
   );
   const [error, setError] = useState<string | null>(null);
-  const [approving, setApproving] = useState(false);
-  const [approved, setApproved] = useState(false);
   const [codegenTarget, setCodegenTarget] = useState<"cloudflare" | "hetzner">("cloudflare");
   const [codegenBackend, setCodegenBackend] = useState<"local" | "tfc" | "s3">("local");
   const [codegenFiles, setCodegenFiles] = useState<{ fileName: string; content: string }[] | null>(null);
@@ -131,23 +124,6 @@ export default function AssessmentReportPage({
       setCodegenTarget(target);
     }
   }, [id]);
-
-  async function approve() {
-    if (!report) return;
-    setApproving(true);
-    try {
-      await api("/migrations", {
-        method: "POST",
-        body: JSON.stringify({ assessmentId: report.id }),
-      });
-      setApproved(true);
-      window.location.href = "/projects#migrations";
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setApproving(false);
-    }
-  }
 
   async function runCodegen() {
     if (!report) return;
@@ -184,7 +160,6 @@ export default function AssessmentReportPage({
 
   const projection = report.costProjection ?? [];
   const inventory = report.inventory.slice(0, 8);
-  const fee = report.quote?.fixedFeeCents ?? null;
   // The headline is the recommended target's sized saving net of operations
   // work, the same figure the options page shows. It used to be the
   // connector's flat "move to a $20 VPS" guess, which contradicted the sized
@@ -554,66 +529,24 @@ export default function AssessmentReportPage({
         </Card>
       )}
 
-      {(report.recommendation || report.quote) && (
-        <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-2">
-          {report.recommendation && (
-            <Card>
-              <CardTitle>Recommendation</CardTitle>
-              <p className="mb-3.5 text-sm leading-relaxed text-muted">
-                {report.recommendation.summary}
-              </p>
-              <div className="flex flex-col gap-2">
-                {report.recommendation.rows.map((r) => (
-                  <div
-                    key={r.label}
-                    className="flex items-center gap-2 rounded-md bg-bg px-2.5 py-2 text-[13px]"
-                  >
-                    <span className="text-muted">{r.label}</span>
-                    <span className="ml-auto text-text">{r.value}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {report.quote && fee !== null && (
-            <div className="rounded-xl border border-accent/20 bg-accent-dim/40 p-6">
-              <h3 className="mb-2.5 text-[15px] font-semibold">
-                Fixed-fee quote
-              </h3>
+      {report.recommendation && (
+        <Card>
+          <CardTitle>Recommendation</CardTitle>
+          <p className="mb-3.5 text-sm leading-relaxed text-muted">
+            {report.recommendation.summary}
+          </p>
+          <div className="flex flex-col gap-2">
+            {report.recommendation.rows.map((r) => (
               <div
-                className={`mb-0.5 text-[38px] font-bold tracking-[-0.02em] ${NUM}`}
+                key={r.label}
+                className="flex items-center gap-2 rounded-md bg-bg px-2.5 py-2 text-[13px]"
               >
-                {formatCents(fee)}
+                <span className="text-muted">{r.label}</span>
+                <span className="ml-auto text-text">{r.value}</span>
               </div>
-              <div className="mb-4 text-[13px] text-muted">fixed</div>
-              <div className="mb-4.5 flex flex-col">
-                {report.quote.lines.map((q) => (
-                  <div
-                    key={q.phase}
-                    className="flex border-t border-accent/15 py-2 text-[13px] text-muted"
-                  >
-                    <span>{q.phase}</span>
-                    <span className={`ml-auto text-text ${NUM}`}>
-                      {q.effort}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <PrimaryButton onClick={approve} disabled={approving} full>
-                {approved
-                  ? "Quote approved \u2014 view migration"
-                  : approving
-                    ? "Approving\u2026"
-                    : `Approve ${formatCents(fee)} fixed fee`}
-              </PrimaryButton>
-              <p className="mt-3 text-xs leading-relaxed text-muted">
-                The price in the report is the price you pay. No hourly billing,
-                no scope creep.
-              </p>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        </Card>
       )}
     </>
   );
