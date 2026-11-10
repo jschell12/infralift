@@ -10,6 +10,7 @@ import {
   toSummary,
   verifyConnection,
 } from "../services/connections.js";
+import { awsSetup } from "../services/aws-access.js";
 
 export const connectionsRouter = Router();
 
@@ -35,6 +36,12 @@ connectionsRouter.get("/", handle(async (req, res) => {
     orderBy: { createdAt: "desc" },
   });
   res.json(connections.map(toSummary));
+}));
+
+// The caller's org's AWS external ID and the IAM policies to paste, or
+// {enabled: false} when this server has no AWS principal configured.
+connectionsRouter.get("/aws-setup", handle(async (req, res) => {
+  res.json(await awsSetup(req.user!.orgId));
 }));
 
 // Register a read-only token. Verified immediately against the provider.

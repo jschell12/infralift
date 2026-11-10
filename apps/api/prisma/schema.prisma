@@ -15,6 +15,9 @@ model Org {
   // Set by an admin today; a payment webhook can set it later without
   // touching the call sites. See migration 0010.
   codegenUnlocked Boolean @default(false)
+  // The sts:ExternalId this org's AWS roles must require. Minted once, on
+  // first use, and never sent to another org. See migration 0024.
+  awsExternalId String? @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

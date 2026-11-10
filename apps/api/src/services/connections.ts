@@ -3,7 +3,9 @@ import { prisma } from "../lib/db.js";
 import { decryptToken, encryptToken } from "../lib/crypto.js";
 import { getConnector } from "../connectors/index.js";
 import { ProviderHttpError, type VerifyResult } from "../connectors/types.js";
-import { AppError, Conflict, InvalidBody, InvalidInput, NotFound } from "../lib/errors.js";
+import { AppError, Conflict, InvalidBody, InvalidInput, NotFound, Unprocessable } from "../lib/errors.js";
+import { AwsNotEnabledError } from "../connectors/aws.js";
+import { connectionSecret } from "./aws-access.js";
 import { GitCommitError } from "../lib/git/errors.js";
 import { TfcClient, TfcClientError, tfcBaseUrl } from "../lib/tf/tfc-client.js";
 import { TFC_PROVIDER } from "../lib/tf/tfc-connection.js";
@@ -62,9 +64,10 @@ async function checkTfc(secret: string): Promise<VerifyResult> {
     : { valid: false, reason: `this token cannot read the organization ${cred.organization}`, expiresAt: null };
 }
 
-/** Asks the provider whether a credential works. Never throws: a failure
- *  that is not the provider answering (a network error, a malformed key)
- *  becomes a reason that names no part of the credential. */
+/** Asks the provider whether a credential works. Never throws, except when
+ *  AWS is off on this server (422): a failure that is not the provider
+ *  answering (a network error, a malformed key) becomes a reason that names
+ *  no part of the credential. */
 export async function checkCredential(provider: string, secret: string): Promise<VerifyResult> {
   const label = providerLabel(provider);
   try {
@@ -77,6 +80,7 @@ export async function checkCredential(provider: string, secret: string): Promise
     const valid = await connector.verify(secret);
     return { valid, reason: valid ? null : `${label} did not accept this credential`, expiresAt: null };
   } catch (err) {
+    if (err instanceof AwsNotEnabledError) throw new Unprocessable(err.message);
     // JSON.parse and zod messages can quote the input, which is the secret.
     const status = err instanceof ProviderHttpError ? err.status : err instanceof TfcClientError ? err.statusCode : null;
     return {
@@ -97,13 +101,14 @@ export async function createConnection(
   orgId: string,
   input: { provider: Provider; label: string; token: string }
 ): Promise<ProviderConnectionSummary> {
-  const outcome = await checkCredential(input.provider, input.token);
+  const secret = await connectionSecret(orgId, input.provider, input.token);
+  const outcome = await checkCredential(input.provider, secret);
   const connection = await prisma.providerConnection.create({
     data: {
       orgId,
       provider: input.provider,
       label: input.label,
-      encryptedToken: encryptToken(input.token),
+      encryptedToken: encryptToken(secret),
       status: outcome.valid ? "valid" : "invalid",
       lastVerifiedAt: outcome.valid ? new Date() : null,
       lastError: outcome.reason,
@@ -116,7 +121,8 @@ export async function createConnection(
 /** Re-runs the provider's verify call and records what it said. */
 export async function verifyConnection(orgId: string, id: string): Promise<ProviderConnectionSummary> {
   const connection = await findOwned(orgId, id);
-  const outcome = await checkCredential(connection.provider, decryptToken(connection.encryptedToken));
+  const secret = await connectionSecret(orgId, connection.provider, decryptToken(connection.encryptedToken));
+  const outcome = await checkCredential(connection.provider, secret);
   const updated = await prisma.providerConnection.update({
     where: { id: connection.id },
     data: outcome.valid
@@ -149,6 +155,7 @@ export async function rotateConnection(orgId: string, id: string, input: RotateI
     if (!cred.success) throw new InvalidBody(cred.error.flatten());
     secret = JSON.stringify(cred.data);
   }
+  secret = await connectionSecret(orgId, connection.provider, secret);
 
   const outcome = await checkCredential(connection.provider, secret);
   if (!outcome.valid) {
