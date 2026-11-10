@@ -75,10 +75,12 @@ providersRouter.get("/app-profiles", handle(async (req, res) => {
   );
 }));
 
-// Recommendations for a saved profile.
+// Recommendations for a saved profile. Scoped to the caller's org: another
+// org's profile id is Not found, the same as one that does not exist.
 providersRouter.get("/app-profiles/:id/recommendations", handle(async (req, res) => {
-  const profile = await prisma.appProfile.findUnique({
-    where: { id: req.params.id },
+  const { orgId } = req.user!;
+  const profile = await prisma.appProfile.findFirst({
+    where: { id: req.params.id, orgId },
   });
   if (!profile) throw new NotFound("Not found");
   res.json(

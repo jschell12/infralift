@@ -16,7 +16,7 @@ vi.mock("../lib/db.js", () => ({
   prisma: {
     $queryRaw: h.queryRaw,
     discountProgram: { findMany: h.programs },
-    appProfile: { findUnique: h.profile },
+    appProfile: { findFirst: h.profile },
   },
 }));
 
@@ -165,5 +165,20 @@ describe("GET /providers/app-profiles/:id/recommendations", () => {
     const [cf] = out.body as Priced[];
     expect(cf.pricing.steadyStateMonthlyCents).toBe(1500);
     expect(cf.pricing.applied).toEqual([]);
+  });
+
+  it("looks the profile up within the caller's org only", async () => {
+    // What Postgres does with { id, orgId } for another org's id: no row.
+    h.profile.mockImplementation(async ({ where }: { where: { id: string; orgId?: string } }) =>
+      where.orgId === "org-b" ? { id: where.id, orgId: "org-b", name: "api", ...profile } : null
+    );
+
+    const out = await call("get", "/app-profiles/:id/recommendations", {
+      params: { id: "ap-of-org-b" },
+    });
+
+    expect(out.status).toBe(404);
+    expect(h.profile).toHaveBeenCalledWith({ where: { id: "ap-of-org-b", orgId: "org-a" } });
+    expect(h.queryRaw).not.toHaveBeenCalled();
   });
 });
