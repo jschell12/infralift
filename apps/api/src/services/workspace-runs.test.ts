@@ -168,6 +168,7 @@ describe("VCS link", () => {
     "GET /oauth-clients/oc-XKFwG6ggfA9n7t1K/oauth-tokens": [200, fixture("oauth-tokens.json")] as [number, string],
     [RUNS]: [200, runs] as [number, string],
     [`PATCH /workspaces/${TFC_WS}`]: [200, fixture("workspace-vcs.json")] as [number, string],
+    [`GET /workspaces/${TFC_WS}`]: [200, fixture("workspace-vcs.json")] as [number, string],
   });
 
   it("links a never-run workspace through the picked token with queue-all-runs, so a merge plans", async () => {
@@ -182,6 +183,14 @@ describe("VCS link", () => {
       where: { id: "conn_mine" },
       data: { vcsOauthTokenId: "ot-hmAyP66qk2AMVdbJ" },
     });
+  });
+
+  it("does not set queue-all-runs on a never-run workspace that auto-applies", async () => {
+    const autoApplying = JSON.parse(fixture("workspace-vcs.json"));
+    autoApplying.data.attributes["auto-apply"] = true;
+    tfc({ ...linkRoutes('{"data":[]}'), [`GET /workspaces/${TFC_WS}`]: [200, JSON.stringify(autoApplying)] });
+    await svc.linkRepository("org_mine", "w1", { repo: "acme/app", oauthTokenId: "ot-hmAyP66qk2AMVdbJ" });
+    expect(bodies[`PATCH /workspaces/${TFC_WS}`].data.attributes).not.toHaveProperty("queue-all-runs");
   });
 
   it("links a workspace that has run without touching queue-all-runs", async () => {

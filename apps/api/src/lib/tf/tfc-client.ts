@@ -230,6 +230,12 @@ export class TfcClient {
     return results;
   }
 
+  /** Get a single workspace by its id (ws-...). */
+  async getWorkspaceById(id: string): Promise<TfcWorkspace> {
+    const json = await this.request<any>("GET", `/workspaces/${encodeURIComponent(id)}`);
+    return TfcClient.mapWorkspace(json.data);
+  }
+
   /** Get a single workspace by name. Returns null if it doesn't exist. */
   async getWorkspace(name: string): Promise<TfcWorkspace | null> {
     try {

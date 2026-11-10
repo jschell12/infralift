@@ -125,13 +125,18 @@ export async function linkRepository(orgId: string, id: string, input: LinkInput
   }
   // TFC holds VCS-triggered runs until a first run has been queued by hand
   // (queue-all-runs defaults to false). A workspace that has never run gets
-  // queue-all-runs, so the next merge plans without anyone queueing one.
+  // queue-all-runs, so the next merge plans without anyone queueing one --
+  // unless it auto-applies: queue-all-runs starts a run at once, and on a
+  // workspace with state and auto-apply on, linking would apply.
   const neverRun = (await tfc(t.conn, "listing runs", () => t.client.listRuns(t.tfcWorkspaceId))).length === 0;
+  const autoApply = neverRun
+    ? (await tfc(t.conn, "reading the workspace", () => t.client.getWorkspaceById(t.tfcWorkspaceId))).autoApply
+    : false;
   const remote = await tfc(t.conn, "linking a repository", () =>
     t.client.linkWorkspaceRepo(
       t.tfcWorkspaceId,
       { identifier: input.repo, oauthTokenId: tokenId, branch: input.branch ?? "" },
-      { workingDir: input.workingDirectory, queueAllRuns: neverRun }
+      { workingDir: input.workingDirectory, queueAllRuns: neverRun && !autoApply }
     )
   );
   const updated = await prisma.workspace.update({
