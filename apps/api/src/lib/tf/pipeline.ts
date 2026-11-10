@@ -156,7 +156,7 @@ export async function runJob(jobId: string): Promise<void> {
       });
       const run = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
       await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
-      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws)}`;
+      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws, run.runId !== "none")}`;
     }
 
     // -- complete ----------------------------------------------------------
@@ -308,7 +308,7 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
       });
       const run = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
       await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
-      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws)}`;
+      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws, run.runId !== "none")}`;
     }
 
     // -- complete ----------------------------------------------------------
@@ -537,9 +537,12 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
         branch: destBranch,
         workingDirectory: `${prefix}deploy/infra`,
         autoApply: false,
+        // No run is queued here (the change is not merged yet), so TFC would
+        // hold the merge's run until someone queued one by hand.
+        queueAllRuns: true,
       });
       await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
-      workspaceNote = `workspace ${workspaceName}; ${vcsNote(ws)}`;
+      workspaceNote = `workspace ${workspaceName}; ${vcsNote(ws, false)}`;
     }
 
     // -- complete ----------------------------------------------------------
@@ -656,9 +659,16 @@ function importRequestBody(root: RootModule, repo: string, label: string): strin
   ].join("\n");
 }
 
-/** Whether a merge will plan, said only when it is true. */
-export function vcsNote(ws: CreatedWorkspace): string {
-  return ws.vcsRepo
-    ? `linked to ${ws.vcsRepo}, so it plans once the change is merged`
-    : "not linked to a repository, so a merge does not plan: pick a VCS connection under Workspaces";
+/** Whether a merge will plan, said only when it is true: the workspace is
+ *  linked, and TFC will queue a push's run (queue-all-runs, or a run was
+ *  already queued by hand, which is `queuedRun`). */
+export function vcsNote(ws: CreatedWorkspace, queuedRun: boolean): string {
+  if (ws.vcsRepo && (ws.queueAllRuns || queuedRun)) {
+    return `linked to ${ws.vcsRepo}, so it plans once the change is merged`;
+  }
+  if (ws.vcsRepo) {
+    return `linked to ${ws.vcsRepo}, but a merge plans only after a first run: queue one under Workspaces`;
+  }
+  if (ws.linkError) return `${ws.linkError}, so it was created unlinked and a merge does not plan: link it under Workspaces`;
+  return "not linked to a repository, so a merge does not plan: pick a VCS connection under Workspaces";
 }

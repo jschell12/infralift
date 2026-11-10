@@ -22,6 +22,8 @@ export interface TfcWorkspace {
   /** Clone URL of the VCS repo, which is not always GitHub. */
   vcsRepoUrl: string | null;
   vcsBranch: string | null;
+  /** Whether VCS pushes queue runs before anyone has queued one by hand. */
+  queueAllRuns: boolean;
   currentConfigVersionId: string | null;
   globalRemoteState: boolean;
   description: string;
@@ -154,6 +156,7 @@ export class TfcClient {
       vcsRepo: vcs?.identifier ?? null,
       vcsRepoUrl: vcs?.["repository-http-url"] ?? null,
       vcsBranch: vcs?.branch || null,
+      queueAllRuns: a["queue-all-runs"] === true,
       currentConfigVersionId:
         data.relationships?.["current-configuration-version"]?.data?.id ?? null,
       globalRemoteState: a["global-remote-state"] ?? false,
@@ -248,7 +251,7 @@ export class TfcClient {
    */
   async createWorkspace(
     name: string,
-    opts?: { vcs?: TfcVcsRepo; description?: string; workingDir?: string; autoApply?: boolean },
+    opts?: { vcs?: TfcVcsRepo; queueAllRuns?: boolean; description?: string; workingDir?: string; autoApply?: boolean },
   ): Promise<TfcWorkspace> {
     const attributes: Record<string, unknown> = {
       name,
@@ -258,6 +261,7 @@ export class TfcClient {
     if (opts?.description) attributes.description = opts.description;
     // With a repo, TFC fetches the branch and plans each push to it.
     if (opts?.vcs) attributes["vcs-repo"] = TfcClient.vcsAttributes(opts.vcs);
+    if (opts?.queueAllRuns) attributes["queue-all-runs"] = true;
 
     const relationships: Record<string, unknown> = {};
 
@@ -316,10 +320,16 @@ export class TfcClient {
     }
   }
 
-  /** Link a workspace to a repository, so pushes to the branch plan. */
-  async linkWorkspaceRepo(workspaceId: string, vcs: TfcVcsRepo, workingDir?: string): Promise<TfcWorkspace> {
+  /** Link a workspace to a repository. Pushes to the branch plan once the
+   *  workspace has had a run, or at once with `queueAllRuns`. */
+  async linkWorkspaceRepo(
+    workspaceId: string,
+    vcs: TfcVcsRepo,
+    opts?: { workingDir?: string; queueAllRuns?: boolean },
+  ): Promise<TfcWorkspace> {
     const attributes: Record<string, unknown> = { "vcs-repo": TfcClient.vcsAttributes(vcs) };
-    if (workingDir !== undefined) attributes["working-directory"] = workingDir;
+    if (opts?.workingDir !== undefined) attributes["working-directory"] = opts.workingDir;
+    if (opts?.queueAllRuns) attributes["queue-all-runs"] = true;
     const json = await this.request<any>("PATCH", `/workspaces/${encodeURIComponent(workspaceId)}`, {
       data: { type: "workspaces", attributes },
     });

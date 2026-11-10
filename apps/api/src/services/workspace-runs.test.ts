@@ -50,11 +50,13 @@ function runResponse(confirmable: boolean, workspaceId = TFC_WS) {
   return JSON.stringify({ data: run });
 }
 
+const bodies: Record<string, any> = {};
 function tfc(table: Record<string, [number, string]>) {
   const calls: string[] = [];
-  vi.stubGlobal("fetch", async (url: string, init: { method: string }) => {
+  vi.stubGlobal("fetch", async (url: string, init: { method: string; body?: string }) => {
     const call = `${init.method} ${url.replace("https://app.terraform.io/api/v2", "")}`;
     calls.push(call);
+    bodies[call] = init.body ? JSON.parse(init.body) : undefined;
     const [status, body] = table[call] ?? [404, "{}"];
     return { ok: status < 300, status, json: async () => JSON.parse(body), text: async () => body };
   });
@@ -160,19 +162,32 @@ describe("VCS link", () => {
     expect(err.body().error).toContain("https://app.terraform.io/app/acme/settings/version-control");
   });
 
-  it("links an infralift workspace through the picked token and records it", async () => {
-    const calls = tfc({
-      "GET /organizations/acme/oauth-clients?page%5Bsize%5D=100": [200, fixture("oauth-clients.json")],
-      "GET /oauth-clients/oc-XKFwG6ggfA9n7t1K/oauth-tokens": [200, fixture("oauth-tokens.json")],
-      [`PATCH /workspaces/${TFC_WS}`]: [200, fixture("workspace-vcs.json")],
-    });
+  const RUNS = `GET /workspaces/${TFC_WS}/runs?page%5Bsize%5D=20&include=plan`;
+  const linkRoutes = (runs: string) => ({
+    "GET /organizations/acme/oauth-clients?page%5Bsize%5D=100": [200, fixture("oauth-clients.json")] as [number, string],
+    "GET /oauth-clients/oc-XKFwG6ggfA9n7t1K/oauth-tokens": [200, fixture("oauth-tokens.json")] as [number, string],
+    [RUNS]: [200, runs] as [number, string],
+    [`PATCH /workspaces/${TFC_WS}`]: [200, fixture("workspace-vcs.json")] as [number, string],
+  });
+
+  it("links a never-run workspace through the picked token with queue-all-runs, so a merge plans", async () => {
+    tfc(linkRoutes('{"data":[]}'));
     const out = await svc.linkRepository("org_mine", "w1", { repo: "acme/app", oauthTokenId: "ot-hmAyP66qk2AMVdbJ" });
     expect(out.vcsRepo).toBe("acme/app");
+    expect(bodies[`PATCH /workspaces/${TFC_WS}`].data.attributes).toEqual({
+      "vcs-repo": { identifier: "acme/app", "oauth-token-id": "ot-hmAyP66qk2AMVdbJ", branch: "" },
+      "queue-all-runs": true,
+    });
     expect(db.providerConnection.update).toHaveBeenCalledWith({
       where: { id: "conn_mine" },
       data: { vcsOauthTokenId: "ot-hmAyP66qk2AMVdbJ" },
     });
-    expect(calls).toContain(`PATCH /workspaces/${TFC_WS}`);
+  });
+
+  it("links a workspace that has run without touching queue-all-runs", async () => {
+    tfc(linkRoutes(fixture("runs-with-plan.json")));
+    await svc.linkRepository("org_mine", "w1", { repo: "acme/app", oauthTokenId: "ot-hmAyP66qk2AMVdbJ" });
+    expect(bodies[`PATCH /workspaces/${TFC_WS}`].data.attributes).not.toHaveProperty("queue-all-runs");
   });
 
   it("refuses a token that is not in the organization", async () => {

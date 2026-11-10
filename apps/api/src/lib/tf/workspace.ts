@@ -15,16 +15,27 @@ export interface CreatedWorkspace {
   /** The repo TFC fetches from; null when the workspace is API-driven, so
    *  nothing plans on a merge. */
   vcsRepo: string | null;
+  /** TFC holds VCS-triggered runs until one run has been queued by hand,
+   *  unless this is set. */
+  queueAllRuns: boolean;
+  /** Why a link was asked for and not made; the workspace was created
+   *  unlinked instead. */
+  linkError: string | null;
+}
+
+export interface CreateWorkspaceOpts {
+  workspaceName: string;
+  repo: string;
+  branch: string;
+  workingDirectory: string;
+  autoApply: boolean;
+  /** Let pushes queue runs before any run has been queued by hand. For a
+   *  caller that queues no run of its own after creating the workspace. */
+  queueAllRuns?: boolean;
 }
 
 export interface WorkspaceAdapter {
-  createWorkspace(opts: {
-    workspaceName: string;
-    repo: string;
-    branch: string;
-    workingDirectory: string;
-    autoApply: boolean;
-  }): Promise<CreatedWorkspace>;
+  createWorkspace(opts: CreateWorkspaceOpts): Promise<CreatedWorkspace>;
   queueRun(workspaceName: string, description: string): Promise<WorkspaceRun>;
   getRun(workspaceName: string, runId: string): Promise<WorkspaceRun>;
 }
@@ -45,25 +56,32 @@ export class TfCloudWorkspaceAdapter implements WorkspaceAdapter {
   }
 
   // Idempotent: a 422 name-taken response resolves to the existing workspace,
-  // which is reported as it is and not linked here.
-  async createWorkspace(opts: {
-    workspaceName: string;
-    repo: string;
-    branch: string;
-    workingDirectory: string;
-    autoApply: boolean;
-  }): Promise<CreatedWorkspace> {
+  // which is reported as it is and not linked here. A link TFC refuses (it
+  // cannot see the repo through that token) falls back to an unlinked
+  // workspace, so a job that worked before a VCS token was picked still works.
+  async createWorkspace(opts: CreateWorkspaceOpts): Promise<CreatedWorkspace> {
     const vcs =
       this.vcsOauthTokenId && opts.repo
         ? { identifier: opts.repo, oauthTokenId: this.vcsOauthTokenId, branch: opts.branch }
         : undefined;
-    const ws = await this.client.createWorkspace(opts.workspaceName, {
-      vcs,
+    const base = {
       description: `infralift: ${opts.repo}@${opts.branch}`,
       workingDir: opts.workingDirectory,
       autoApply: opts.autoApply,
-    });
-    return { workspaceName: opts.workspaceName, vcsRepo: ws.vcsRepo };
+    };
+    let linkError: string | null = null;
+    let ws;
+    try {
+      ws = await this.client.createWorkspace(opts.workspaceName, {
+        ...base,
+        ...(vcs ? { vcs, queueAllRuns: opts.queueAllRuns } : {}),
+      });
+    } catch (err) {
+      if (!vcs || !(err instanceof TfcClientError) || err.statusCode !== 422) throw err;
+      linkError = `Terraform Cloud could not link ${opts.repo} (it answered 422)`;
+      ws = await this.client.createWorkspace(opts.workspaceName, base);
+    }
+    return { workspaceName: opts.workspaceName, vcsRepo: ws.vcsRepo, queueAllRuns: ws.queueAllRuns, linkError };
   }
 
   async queueRun(

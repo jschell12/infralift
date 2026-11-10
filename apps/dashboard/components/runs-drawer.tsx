@@ -131,7 +131,13 @@ export function RunsDrawer({
   return (
     <Drawer
       title={workspace.name}
-      subtitle={workspace.vcsRepo ? `Plans each merge to ${workspace.vcsRepo}.` : "Not linked to a repository: merges do not plan."}
+      subtitle={
+        !workspace.vcsRepo
+          ? "Not linked to a repository: merges do not plan."
+          : runs?.length === 0
+            ? `Linked to ${workspace.vcsRepo}. No run yet: if a merge does not start one, queue a plan.`
+            : `Linked to ${workspace.vcsRepo}: merges to its branch plan.`
+      }
       onClose={onClose}
     >
       {error && <div className="text-danger text-sm mb-4">{error}</div>}

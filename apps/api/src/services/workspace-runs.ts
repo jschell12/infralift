@@ -123,18 +123,27 @@ export async function linkRepository(orgId: string, id: string, input: LinkInput
     await listOAuthTokens(orgId, t.conn.id); // 422 when the org has none
     throw new InvalidInput("pick a VCS connection to link through");
   }
+  // TFC holds VCS-triggered runs until a first run has been queued by hand
+  // (queue-all-runs defaults to false). A workspace that has never run gets
+  // queue-all-runs, so the next merge plans without anyone queueing one.
+  const neverRun = (await tfc(t.conn, "listing runs", () => t.client.listRuns(t.tfcWorkspaceId))).length === 0;
   const remote = await tfc(t.conn, "linking a repository", () =>
     t.client.linkWorkspaceRepo(
       t.tfcWorkspaceId,
       { identifier: input.repo, oauthTokenId: tokenId, branch: input.branch ?? "" },
-      input.workingDirectory
+      { workingDir: input.workingDirectory, queueAllRuns: neverRun }
     )
   );
   const updated = await prisma.workspace.update({
     where: { id: t.ws.id },
     data: { vcsRepo: remote.vcsRepo ?? input.repo, workingDirectory: remote.workingDirectory },
   });
-  return { id: updated.id, vcsRepo: updated.vcsRepo, workingDirectory: updated.workingDirectory };
+  return {
+    id: updated.id,
+    vcsRepo: updated.vcsRepo,
+    workingDirectory: updated.workingDirectory,
+    queueAllRuns: remote.queueAllRuns,
+  };
 }
 
 // -- runs ----------------------------------------------------------------------

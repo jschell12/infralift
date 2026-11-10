@@ -30,7 +30,7 @@ const h = vi.hoisted(() => {
   const adapter = {
     createWorkspace: vi.fn(async (opts: Record<string, unknown>) => {
       state.workspaces.push(opts);
-      return { workspaceName: opts.workspaceName, vcsRepo: null as string | null };
+      return { workspaceName: opts.workspaceName, vcsRepo: null as string | null, queueAllRuns: false, linkError: null as string | null };
     }),
     queueRun: vi.fn(async () => ({ id: "run", status: "pending" })),
   };
@@ -226,14 +226,19 @@ describe("stack job", () => {
     await runJob("job_abcdefgh12345678");
     expect(h.state.stages.at(-1)?.statusMessage).toMatch(/not linked to a repository, so a merge does not plan/);
 
+    // A real adapter sends queue-all-runs with the link (workspace.test.ts).
     h.adapter.createWorkspace.mockImplementationOnce(async (opts: Record<string, unknown>) => ({
       workspaceName: opts.workspaceName,
       vcsRepo: "acme/app",
+      queueAllRuns: opts.queueAllRuns === true,
+      linkError: null,
     }));
     stackJob({ ...example, backend: "tfc", tfc_organization: "acme" }, "app-foundry-hetzner", { tfcConnectionId: "tfc-1" });
     fakeGitHub();
     await runJob("job_abcdefgh12345678");
     expect(h.state.stages.at(-1)?.statusMessage).toMatch(/linked to acme\/app, so it plans once the change is merged/);
+    // The stack job queues no run of its own, so it asks TFC to queue pushes.
+    expect(h.adapter.createWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({ queueAllRuns: true }));
   });
 
   it("creates no workspace anywhere when a tfc project has no connection", async () => {
