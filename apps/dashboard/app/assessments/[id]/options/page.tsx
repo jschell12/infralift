@@ -302,6 +302,56 @@ function ComparisonTable({
 // The one-time cost of getting data out. Buyers conflate this with the
 // monthly egress line, so it is stated as its own number with the volume it
 // was computed from rather than folded into any target's estimate.
+const WL_COLS = "grid-cols-[2fr_1fr_1fr_1fr]";
+
+function WorkloadTable({ report }: { report: MigrationOptionsReport }) {
+  const cell = (cents: number | null | undefined) =>
+    cents === null || cents === undefined ? "unknown" : formatCents(cents);
+  const target = (t: { slug: string; monthlyCents: number }[], slug: string) =>
+    cell(t.find((x) => x.slug === slug)?.monthlyCents);
+  const shared = report.workloadsShared;
+  return (
+    <Card className="mb-5">
+      <CardTitle>By workload</CardTitle>
+      <div className="overflow-x-auto">
+        <div className="min-w-[520px]">
+          <TableHead cols={WL_COLS}>
+            <span>Workload</span>
+            <span>Today (list)</span>
+            <span>Hetzner</span>
+            <span>Cloudflare</span>
+          </TableHead>
+          {report.workloads.map((w) => (
+            <TableRow key={`${w.kind}:${w.name}`} cols={WL_COLS}>
+              <span className="min-w-0 truncate text-sm">
+                {w.name} <span className="text-faint">{w.kind}</span>
+              </span>
+              <span className={NUM}>{cell(w.currentMonthlyCents)}</span>
+              <span className={NUM}>{target(w.targets, "hetzner")}</span>
+              <span className={NUM}>{target(w.targets, "cloudflare")}</span>
+            </TableRow>
+          ))}
+          {shared && (
+            <TableRow cols={WL_COLS}>
+              <span className="min-w-0 truncate text-sm" title={shared.items.join(", ")}>
+                Unallocated / shared
+              </span>
+              <span className={NUM}>{cell(shared.currentMonthlyCents)}</span>
+              <span className={NUM}>{target(shared.targets, "hetzner")}</span>
+              <span className={NUM}>{target(shared.targets, "cloudflare")}</span>
+            </TableRow>
+          )}
+        </div>
+      </div>
+      {report.workloadsNote && (
+        <p className="mt-3 max-w-[680px] text-[13px] text-muted">
+          {report.workloadsNote}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 function ExitTollCard({
   toll,
   provider,
@@ -676,6 +726,8 @@ export default function MigrationOptionsPage({
       {report.options.length > 0 && (
         <ComparisonTable report={report} onSpendSaved={load} />
       )}
+
+      {report.workloads.length > 0 && <WorkloadTable report={report} />}
 
       {report.needs.length > 0 && (
         <Card className="mb-5">

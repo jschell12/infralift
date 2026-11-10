@@ -18,10 +18,12 @@ vi.mock("../lib/db.js", () => ({
   prisma: {
     assessment: { findFirst, findUnique: async () => null, update },
     migration: { findFirst },
+    providerConnection: { findFirst, findUnique: async () => null },
   },
 }));
 
 const { assessmentsRouter } = await import("./assessments.js");
+const { connectionsRouter } = await import("./connections.js");
 const { migrationsRouter } = await import("./migrations.js");
 const { tfRouter } = await import("./tf.js");
 const { requireAdmin } = await import("../lib/cf-auth.js");
@@ -209,6 +211,26 @@ describe("migration plans are scoped to the caller's org", () => {
       })
     );
   });
+});
+
+describe("look-up-then-act routes filter by org in the query", () => {
+  const user = { orgId: "org_mine", userId: "u1", email: "a@b.c", name: null };
+  const cases: [string, unknown, string, string, Record<string, unknown>, string][] = [
+    ["POST /connections/:id/verify", connectionsRouter, "post", "/:id/verify", { params: { id: "conn_theirs" } }, "conn_theirs"],
+    ["DELETE /connections/:id", connectionsRouter, "delete", "/:id", { params: { id: "conn_theirs" } }, "conn_theirs"],
+    ["POST /assessments/run", assessmentsRouter, "post", "/run", { body: { connectionId: "conn_theirs" } }, "conn_theirs"],
+    ["GET /assessments/:id/options", assessmentsRouter, "get", "/:id/options", { params: { id: "asm_theirs" } }, "asm_theirs"],
+  ];
+  for (const [label, router, method, path, req, id] of cases) {
+    it(`${label} is 404 for another org's id, and the where names both`, async () => {
+      findFirst.mockClear();
+      const res = await call(router, method, path, { ...req, user });
+      expect(res.status).toBe(404);
+      expect(findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id, orgId: "org_mine" } })
+      );
+    });
+  }
 });
 
 describe("shared-catalog and internal /tf routes stay admin-only", () => {
