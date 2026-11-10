@@ -10,6 +10,13 @@ export interface WorkspaceRun {
   status: string;
 }
 
+export interface CreatedWorkspace {
+  workspaceName: string;
+  /** The repo TFC fetches from; null when the workspace is API-driven, so
+   *  nothing plans on a merge. */
+  vcsRepo: string | null;
+}
+
 export interface WorkspaceAdapter {
   createWorkspace(opts: {
     workspaceName: string;
@@ -17,7 +24,7 @@ export interface WorkspaceAdapter {
     branch: string;
     workingDirectory: string;
     autoApply: boolean;
-  }): Promise<{ workspaceName: string }>;
+  }): Promise<CreatedWorkspace>;
   queueRun(workspaceName: string, description: string): Promise<WorkspaceRun>;
   getRun(workspaceName: string, runId: string): Promise<WorkspaceRun>;
 }
@@ -31,24 +38,32 @@ export class TfCloudError extends Error {}
 export class TfCloudWorkspaceAdapter implements WorkspaceAdapter {
   private client: TfcClient;
 
-  constructor(token: string, org: string, base?: string) {
+  /** `vcsOauthTokenId` is the VCS connection the customer picked for this
+   *  organization; without one, workspaces are created API-driven. */
+  constructor(token: string, org: string, base?: string, private vcsOauthTokenId: string | null = null) {
     this.client = new TfcClient(token, org, base);
   }
 
-  // Idempotent: a 422 name-taken response resolves to the existing workspace.
+  // Idempotent: a 422 name-taken response resolves to the existing workspace,
+  // which is reported as it is and not linked here.
   async createWorkspace(opts: {
     workspaceName: string;
     repo: string;
     branch: string;
     workingDirectory: string;
     autoApply: boolean;
-  }): Promise<{ workspaceName: string }> {
-    await this.client.createWorkspace(opts.workspaceName, {
-      vcsRepo: `${opts.repo}@${opts.branch}`,
+  }): Promise<CreatedWorkspace> {
+    const vcs =
+      this.vcsOauthTokenId && opts.repo
+        ? { identifier: opts.repo, oauthTokenId: this.vcsOauthTokenId, branch: opts.branch }
+        : undefined;
+    const ws = await this.client.createWorkspace(opts.workspaceName, {
+      vcs,
+      description: `infralift: ${opts.repo}@${opts.branch}`,
       workingDir: opts.workingDirectory,
       autoApply: opts.autoApply,
     });
-    return { workspaceName: opts.workspaceName };
+    return { workspaceName: opts.workspaceName, vcsRepo: ws.vcsRepo };
   }
 
   async queueRun(

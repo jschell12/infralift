@@ -30,6 +30,7 @@ const h = vi.hoisted(() => {
   const adapter = {
     createWorkspace: vi.fn(async (opts: Record<string, unknown>) => {
       state.workspaces.push(opts);
+      return { workspaceName: opts.workspaceName, vcsRepo: null as string | null };
     }),
     queueRun: vi.fn(async () => ({ id: "run", status: "pending" })),
   };
@@ -217,6 +218,22 @@ describe("stack job", () => {
     ]);
     expect(h.adapter.queueRun).not.toHaveBeenCalled();
     expect(h.state.tfcLookups).toEqual([{ orgId: "o1", connectionId: "tfc-1" }]);
+  });
+
+  it("says a merge plans only when the workspace came back linked to the repo", async () => {
+    stackJob({ ...example, backend: "tfc", tfc_organization: "acme" }, "app-foundry-hetzner", { tfcConnectionId: "tfc-1" });
+    fakeGitHub();
+    await runJob("job_abcdefgh12345678");
+    expect(h.state.stages.at(-1)?.statusMessage).toMatch(/not linked to a repository, so a merge does not plan/);
+
+    h.adapter.createWorkspace.mockImplementationOnce(async (opts: Record<string, unknown>) => ({
+      workspaceName: opts.workspaceName,
+      vcsRepo: "acme/app",
+    }));
+    stackJob({ ...example, backend: "tfc", tfc_organization: "acme" }, "app-foundry-hetzner", { tfcConnectionId: "tfc-1" });
+    fakeGitHub();
+    await runJob("job_abcdefgh12345678");
+    expect(h.state.stages.at(-1)?.statusMessage).toMatch(/linked to acme\/app, so it plans once the change is merged/);
   });
 
   it("creates no workspace anywhere when a tfc project has no connection", async () => {

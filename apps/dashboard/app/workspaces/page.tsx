@@ -1,18 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { WorkspaceSummary } from "@infralift/shared";
 import { api } from "../../lib/api";
+import { RunsDrawer } from "../../components/runs-drawer";
 
 export default function WorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api<WorkspaceSummary[]>(`/workspaces`)
       .then(setWorkspaces)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
+  useEffect(load, [load]);
+  // Read from the list so a link or a run shows up after a reload.
+  const opened = workspaces.find((w) => w.id === open) ?? null;
 
   return (
     <>
@@ -42,6 +47,7 @@ export default function WorkspacesPage() {
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Drift</th>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Last run</th>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Link</th>
+                <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Runs</th>
               </tr>
             </thead>
             <tbody>
@@ -71,12 +77,23 @@ export default function WorkspacesPage() {
                       "—"
                     )}
                   </td>
+                  <td className="p-3 border-b border-border">
+                    {w.connectionId ? (
+                      <button className="text-accent cursor-pointer" onClick={() => setOpen(w.id)}>
+                        Runs
+                      </button>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {opened && <RunsDrawer workspace={opened} onClose={() => setOpen(null)} onChanged={load} />}
     </>
   );
 }

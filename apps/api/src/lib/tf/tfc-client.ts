@@ -64,6 +64,33 @@ export interface TfcRun {
   message: string;
   createdAt: string;
   planOnly: boolean;
+  /** tfe-api, tfe-ui, tfe-configuration-version (VCS push), terraform+cloud ... */
+  source: string | null;
+  workspaceId: string | null;
+  /** Null until the plan has finished. */
+  hasChanges: boolean | null;
+  isConfirmable: boolean;
+  isDiscardable: boolean;
+  /** From the included plan; null when it was not included or has not run. */
+  additions: number | null;
+  changes: number | null;
+  destructions: number | null;
+}
+
+/** A VCS connection's token in the organization: what `vcs-repo` names. */
+export interface TfcOAuthToken {
+  id: string;
+  serviceProvider: string;
+  serviceProviderDisplayName: string;
+  /** The VCS account that authorized it. */
+  user: string | null;
+}
+
+export interface TfcVcsRepo {
+  /** owner/repo */
+  identifier: string;
+  oauthTokenId: string;
+  branch: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,8 +138,8 @@ export class TfcClient {
       const text = await res.text();
       throw new TfcClientError(method, path, res.status, text);
     }
-    // 204 No Content (e.g. DELETE) has no body
-    if (res.status === 204) return undefined as T;
+    // 204 No Content (e.g. DELETE) and 202 from run actions have no body
+    if (res.status === 204 || res.status === 202) return undefined as T;
     return res.json() as Promise<T>;
   }
 
@@ -138,15 +165,31 @@ export class TfcClient {
     };
   }
 
-  private static mapRun(data: any): TfcRun {
+  private static mapRun(data: any, plans: Map<string, any> = new Map()): TfcRun {
     const a = data.attributes;
+    const plan = plans.get(data.relationships?.plan?.data?.id)?.attributes;
+    // A plan that has not finished reports zero counts; say unknown instead.
+    const counted = plan && plan.status === "finished";
+    const count = (k: string): number | null => (counted && typeof plan[k] === "number" ? plan[k] : null);
     return {
       id: data.id,
       status: a.status,
       message: a.message ?? "",
       createdAt: a["created-at"],
       planOnly: a["plan-only"] ?? false,
+      source: a.source ?? null,
+      workspaceId: data.relationships?.workspace?.data?.id ?? null,
+      hasChanges: counted ? Boolean(plan["has-changes"]) : null,
+      isConfirmable: a.actions?.["is-confirmable"] === true,
+      isDiscardable: a.actions?.["is-discardable"] === true,
+      additions: count("resource-additions"),
+      changes: count("resource-changes"),
+      destructions: count("resource-destructions"),
     };
+  }
+
+  private static vcsAttributes(vcs: TfcVcsRepo) {
+    return { identifier: vcs.identifier, "oauth-token-id": vcs.oauthTokenId, branch: vcs.branch };
   }
 
   private static mapStateVersion(data: any): TfcStateVersion {
@@ -198,23 +241,25 @@ export class TfcClient {
     }
   }
 
-  /** Create a workspace. Idempotent: returns the existing workspace on 422 (name taken). */
+  /**
+   * Create a workspace. Idempotent: returns the existing workspace on 422
+   * (name taken), as it is, without linking it to `vcs`: a workspace someone
+   * else made keeps its own workflow.
+   */
   async createWorkspace(
     name: string,
-    opts?: { vcsRepo?: string; workingDir?: string; autoApply?: boolean },
+    opts?: { vcs?: TfcVcsRepo; description?: string; workingDir?: string; autoApply?: boolean },
   ): Promise<TfcWorkspace> {
     const attributes: Record<string, unknown> = {
       name,
       "auto-apply": opts?.autoApply ?? false,
     };
     if (opts?.workingDir) attributes["working-directory"] = opts.workingDir;
+    if (opts?.description) attributes.description = opts.description;
+    // With a repo, TFC fetches the branch and plans each push to it.
+    if (opts?.vcs) attributes["vcs-repo"] = TfcClient.vcsAttributes(opts.vcs);
 
     const relationships: Record<string, unknown> = {};
-    // VCS connection requires an OAuth token ID configured in TFC; just
-    // record the repo identifier in the description for API-driven mode.
-    if (opts?.vcsRepo) {
-      attributes.description = `infralift: ${opts.vcsRepo}`;
-    }
 
     try {
       const json = await this.request<any>(
@@ -271,7 +316,43 @@ export class TfcClient {
     }
   }
 
+  /** Link a workspace to a repository, so pushes to the branch plan. */
+  async linkWorkspaceRepo(workspaceId: string, vcs: TfcVcsRepo, workingDir?: string): Promise<TfcWorkspace> {
+    const attributes: Record<string, unknown> = { "vcs-repo": TfcClient.vcsAttributes(vcs) };
+    if (workingDir !== undefined) attributes["working-directory"] = workingDir;
+    const json = await this.request<any>("PATCH", `/workspaces/${encodeURIComponent(workspaceId)}`, {
+      data: { type: "workspaces", attributes },
+    });
+    return TfcClient.mapWorkspace(json.data);
+  }
+
   // -- organization ---------------------------------------------------------
+
+  /**
+   * The organization's VCS OAuth tokens, across its OAuth clients. Tokens
+   * are listed per client (GET /oauth-clients/:id/oauth-tokens); an org
+   * usually has one or two clients.
+   */
+  async listOAuthTokens(): Promise<TfcOAuthToken[]> {
+    const clients = await this.request<any>(
+      "GET",
+      `/organizations/${encodeURIComponent(this.org)}/oauth-clients?page%5Bsize%5D=100`,
+    );
+    const out: TfcOAuthToken[] = [];
+    for (const c of clients?.data ?? []) {
+      const tokens = await this.request<any>("GET", `/oauth-clients/${encodeURIComponent(c.id)}/oauth-tokens`);
+      for (const t of tokens?.data ?? []) {
+        out.push({
+          id: t.id,
+          serviceProvider: c.attributes?.["service-provider"] ?? "unknown",
+          serviceProviderDisplayName:
+            c.attributes?.name || c.attributes?.["service-provider-display-name"] || c.attributes?.["service-provider"] || "VCS",
+          user: t.attributes?.["service-provider-user"] ?? null,
+        });
+      }
+    }
+    return out;
+  }
 
   /** True when the token can read the organization. Used to verify a connection. */
   async canReadOrganization(): Promise<boolean> {
@@ -397,12 +478,13 @@ export class TfcClient {
 
   // -- runs -----------------------------------------------------------------
 
-  /** Queue a new run (plan + optional apply) for a workspace. */
-  async createRun(workspaceId: string, message: string): Promise<TfcRun> {
+  /** Queue a new run for a workspace: a plan that waits for confirmation
+   *  unless the workspace auto-applies, or only a plan with `planOnly`. */
+  async createRun(workspaceId: string, message: string, opts?: { planOnly?: boolean }): Promise<TfcRun> {
     const json = await this.request<any>("POST", "/runs", {
       data: {
         type: "runs",
-        attributes: { message },
+        attributes: { message, ...(opts?.planOnly ? { "plan-only": true } : {}) },
         relationships: {
           workspace: { data: { type: "workspaces", id: workspaceId } },
         },
@@ -417,13 +499,26 @@ export class TfcClient {
     return TfcClient.mapRun(json.data);
   }
 
-  /** List runs for a workspace (most recent first, up to 20). */
+  /** List runs for a workspace (most recent first, up to 20), with plan counts. */
   async listRuns(workspaceId: string): Promise<TfcRun[]> {
     const json = await this.request<any>(
       "GET",
-      `/workspaces/${encodeURIComponent(workspaceId)}/runs?page%5Bsize%5D=20`,
+      `/workspaces/${encodeURIComponent(workspaceId)}/runs?page%5Bsize%5D=20&include=plan`,
     );
-    return (json.data ?? []).map(TfcClient.mapRun);
+    const plans = new Map<string, any>(
+      (json?.included ?? []).filter((i: any) => i.type === "plans").map((i: any) => [i.id, i]),
+    );
+    return (json?.data ?? []).map((d: any) => TfcClient.mapRun(d, plans));
+  }
+
+  /** Confirm a run that is waiting for it. TFC answers 202 with no body. */
+  async applyRun(runId: string, comment: string): Promise<void> {
+    await this.request("POST", `/runs/${encodeURIComponent(runId)}/actions/apply`, { comment });
+  }
+
+  /** Discard a run that is waiting for confirmation. 202, no body. */
+  async discardRun(runId: string, comment: string): Promise<void> {
+    await this.request("POST", `/runs/${encodeURIComponent(runId)}/actions/discard`, { comment });
   }
 }
 
