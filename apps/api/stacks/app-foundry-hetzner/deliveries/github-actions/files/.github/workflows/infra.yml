@@ -26,6 +26,13 @@ on:
 permissions:
   contents: read
 
+# An explicit bash shell runs every step with -o pipefail. The default shell
+# does not, so `tofu apply ... | tee apply.txt` would take tee's exit code and
+# report a failed apply as a success.
+defaults:
+  run:
+    shell: bash
+
 # Pushes to main share one group: a plan and its apply finish before the next
 # push plans, and nothing in progress is cancelled. Pull request plans are
 # read-only, so a newer push to the same pull request replaces the older one.

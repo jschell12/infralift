@@ -106,7 +106,9 @@ Then merge the {{change_request}} that adds `deploy/`. The first apply creates t
 server and writes {{ci_store}}.
 
 Who can see what: plan output is in the job log and summary for anyone who can
-read them, with sensitive values redacted. Plans on {{change_request}}s read state, so
+read them, with sensitive values redacted; on a public repository that is
+everyone, including the saved plan artifact (encrypted with the state
+passphrase on R2, a run reference on Terraform Cloud). Plans on {{change_request}}s read state, so
 anyone who can push a branch here can read state, which matches the rule
 above that pushing a branch is root on the box. What the split keeps from them
 is the write tokens.

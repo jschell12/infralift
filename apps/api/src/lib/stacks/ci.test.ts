@@ -160,7 +160,7 @@ describe("github-actions plan summary script", () => {
     writeFileSync(join(dir, "plan.txt"), plan);
     writeFileSync(join(dir, "out"), "");
     writeFileSync(join(dir, "summary"), "");
-    // How Actions runs a `run:` step on Linux.
+    // How Actions runs a `run:` step with `shell: bash` (the workflow default).
     const r = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", script], {
       cwd: dir,
       encoding: "utf8",
@@ -353,5 +353,33 @@ describe("gitlab-ci infra jobs", () => {
     const readme = render("gitlab-ci", "r2").get("deploy/README.md")!;
     for (const n of needs) expect(readme, n).toContain(`\`${n}\``);
     expect(render("gitlab-ci", "tfc").get("deploy/README.md")).toContain(`\`${tfc}\``);
+  });
+});
+
+describe("github-actions apply failures", () => {
+  it("runs every step under bash with pipefail", () => {
+    const wf = workflow() as Workflow & { defaults?: { run?: { shell?: string } } };
+    expect(wf.defaults?.run?.shell).toBe("bash");
+  });
+
+  it("fails the apply step when the apply fails, despite the tee", () => {
+    const step = workflow("tfc").jobs.apply.steps.find((s) => /terraform apply\b/.test(s.run ?? ""))!;
+    const dir = scratch();
+    // A terraform that initialises and then refuses the saved plan.
+    writeFileSync(
+      join(dir, "terraform"),
+      '#!/bin/sh\n[ "$1" = init ] && exit 0\necho "Error: Saved plan is stale"; exit 1\n'
+    );
+    chmodSync(join(dir, "terraform"), 0o755);
+    // `shell: bash` is `bash --noprofile --norc -eo pipefail {0}`; without
+    // pipefail (the default shell) this exits 0 and the job goes green.
+    const run = (flags: string[]) =>
+      spawnSync("bash", [...flags, "-c", step.run!], {
+        cwd: dir,
+        encoding: "utf8",
+        env: { PATH: `${dir}:${process.env.PATH}` },
+      }).status;
+    expect(run(["--noprofile", "--norc", "-eo", "pipefail"])).not.toBe(0);
+    expect(run(["-e"])).toBe(0);
   });
 });
