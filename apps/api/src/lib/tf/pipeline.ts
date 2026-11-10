@@ -14,6 +14,7 @@ import { deliveryFor, getStack, renderStack } from "../stacks/index.js";
 import { gitHostClient, type GitHostClient, type HostFile } from "../git/hosts.js";
 import { isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
 import { tfcAdapterFor } from "./tfc-connection.js";
+import { recordJobWorkspaceNote } from "./workspace-record.js";
 import type { CreatedWorkspace } from "./workspace.js";
 import { JobRun } from "../jobs/state.js";
 import { generateHcl } from "./codegen.js";
@@ -156,7 +157,8 @@ export async function runJob(jobId: string): Promise<void> {
       });
       const run = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
       await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
-      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws, run.runId !== "none")}`;
+      const listed = await recordJobWorkspaceNote({ orgId: project.orgId, projectId: project.id, connectionId: project.tfcConnectionId, cred, ws });
+      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws, run.runId !== "none")}; ${listed}`;
     }
 
     // -- complete ----------------------------------------------------------
@@ -308,7 +310,8 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
       });
       const run = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
       await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
-      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws, run.runId !== "none")}`;
+      const listed = await recordJobWorkspaceNote({ orgId: project.orgId, projectId: project.id, connectionId: project.tfcConnectionId, cred, ws });
+      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws, run.runId !== "none")}; ${listed}`;
     }
 
     // -- complete ----------------------------------------------------------
@@ -530,7 +533,7 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
         return;
       }
       const workspaceName = String(args.tfc_workspace ?? args.name);
-      const { adapter } = await tfcAdapterFor(project.orgId, project.tfcConnectionId);
+      const { adapter, cred } = await tfcAdapterFor(project.orgId, project.tfcConnectionId);
       const ws = await adapter.createWorkspace({
         workspaceName,
         repo,
@@ -542,7 +545,8 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
         queueAllRuns: true,
       });
       await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
-      workspaceNote = `workspace ${workspaceName}; ${vcsNote(ws, false)}`;
+      const listed = await recordJobWorkspaceNote({ orgId: project.orgId, projectId: project.id, connectionId: project.tfcConnectionId, cred, ws });
+      workspaceNote = `workspace ${workspaceName}; ${vcsNote(ws, false)}; ${listed}`;
     }
 
     // -- complete ----------------------------------------------------------

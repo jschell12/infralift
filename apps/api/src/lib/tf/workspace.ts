@@ -12,6 +12,13 @@ export interface WorkspaceRun {
 
 export interface CreatedWorkspace {
   workspaceName: string;
+  /** TFC's id for it (ws-...). */
+  tfcWorkspaceId: string;
+  /** False when a workspace of that name already existed and was reused as
+   *  it is. Nothing here can say who made it: a job's earlier run, or the
+   *  customer. */
+  created: boolean;
+  workingDirectory: string | null;
   /** The repo TFC fetches from; null when the workspace is API-driven, so
    *  nothing plans on a merge. */
   vcsRepo: string | null;
@@ -55,8 +62,11 @@ export class TfCloudWorkspaceAdapter implements WorkspaceAdapter {
     this.client = new TfcClient(token, org, base);
   }
 
-  // Idempotent: a 422 name-taken response resolves to the existing workspace,
-  // which is reported as it is and not linked here. A link TFC refuses (it
+  // Idempotent: an existing workspace of that name is reported as it is, with
+  // created false, and not changed here. It is looked up first so the caller
+  // can tell reuse from creation; a workspace created by someone else between
+  // the lookup and the POST is reused by TfcClient.createWorkspace's 422 path
+  // and reported as created, a window of one request. A link TFC refuses (it
   // cannot see the repo through that token) falls back to an unlinked
   // workspace, so a job that worked before a VCS token was picked still works.
   async createWorkspace(opts: CreateWorkspaceOpts): Promise<CreatedWorkspace> {
@@ -69,6 +79,18 @@ export class TfCloudWorkspaceAdapter implements WorkspaceAdapter {
       workingDir: opts.workingDirectory,
       autoApply: opts.autoApply,
     };
+    const existing = await this.client.getWorkspace(opts.workspaceName);
+    if (existing) {
+      return {
+        workspaceName: opts.workspaceName,
+        tfcWorkspaceId: existing.id,
+        created: false,
+        workingDirectory: existing.workingDirectory,
+        vcsRepo: existing.vcsRepo,
+        queueAllRuns: existing.queueAllRuns,
+        linkError: null,
+      };
+    }
     let linkError: string | null = null;
     let ws;
     try {
@@ -81,7 +103,15 @@ export class TfCloudWorkspaceAdapter implements WorkspaceAdapter {
       linkError = `Terraform Cloud could not link ${opts.repo} (it answered 422)`;
       ws = await this.client.createWorkspace(opts.workspaceName, base);
     }
-    return { workspaceName: opts.workspaceName, vcsRepo: ws.vcsRepo, queueAllRuns: ws.queueAllRuns, linkError };
+    return {
+      workspaceName: opts.workspaceName,
+      tfcWorkspaceId: ws.id,
+      created: true,
+      workingDirectory: ws.workingDirectory,
+      vcsRepo: ws.vcsRepo,
+      queueAllRuns: ws.queueAllRuns,
+      linkError,
+    };
   }
 
   async queueRun(

@@ -180,7 +180,9 @@ model Workspace {
   projectId         String?
   // adopted   - imported from the customer's HCP Terraform / TFE org. Their
   //             code, their state, frozen: infralift never pushes upgrades.
-  // managed   - created by infralift from a catalog template.
+  // managed   - created by infralift: a template, codegen or stack job.
+  //             A job that finds the workspace already there records it as
+  //             adopted instead, so infralift leaves its settings alone.
   // extension - added to a project to hold new infrastructure, reading
   //             outputs from the workspaces it depends on.
   kind              String  @default("managed")
@@ -210,6 +212,9 @@ model Workspace {
   dependents      WorkspaceDependency[] @relation("base")
 
   @@unique([orgId, name])
+  // A job records the workspace it created or reused by this key, so a rerun
+  // finds its row instead of adding one (lib/tf/workspace-record.ts).
+  @@unique([orgId, tfcWorkspaceId])
   @@index([projectId])
 }
 

@@ -12,6 +12,7 @@ const h = vi.hoisted(() => {
     jobUpdates: [] as Record<string, unknown>[],
     workspaces: [] as Record<string, unknown>[],
     tfcLookups: [] as { orgId: string; connectionId: string }[],
+    rows: [] as Record<string, unknown>[],
   };
   const prisma = {
     tfJob: {
@@ -26,11 +27,30 @@ const h = vi.hoisted(() => {
     providerConnection: { findFirst: vi.fn(async () => ({ encryptedToken: "enc" })) },
     tfRendering: { upsert: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({})) },
     tfProject: { update: vi.fn(async () => ({})) },
+    // Lookups by either unique key find a row with that TFC workspace id.
+    workspace: {
+      findUnique: vi.fn(async ({ where }: { where: { orgId_tfcWorkspaceId?: { tfcWorkspaceId: string } } }) =>
+        state.rows.find((r) => r.tfcWorkspaceId === where.orgId_tfcWorkspaceId?.tfcWorkspaceId) ?? null
+      ),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        state.rows.push(data);
+        return { id: "w1", ...data };
+      }),
+      update: vi.fn(async () => ({})),
+    },
   };
   const adapter = {
     createWorkspace: vi.fn(async (opts: Record<string, unknown>) => {
       state.workspaces.push(opts);
-      return { workspaceName: opts.workspaceName, vcsRepo: null as string | null, queueAllRuns: false, linkError: null as string | null };
+      return {
+        workspaceName: opts.workspaceName,
+        tfcWorkspaceId: "ws-created1",
+        created: true,
+        workingDirectory: opts.workingDirectory,
+        vcsRepo: null as string | null,
+        queueAllRuns: false,
+        linkError: null as string | null,
+      };
     }),
     queueRun: vi.fn(async () => ({ id: "run", status: "pending" })),
   };
@@ -144,6 +164,7 @@ function stackJob(
 }
 
 beforeEach(() => {
+  h.state.rows = [];
   h.state.stages = [];
   h.state.jobUpdates = [];
   h.state.workspaces = [];
@@ -175,6 +196,7 @@ describe("stack job", () => {
       prUrl: "https://github.com/acme/app/pull/3",
     });
     expect(h.state.workspaces).toEqual([]); // R2 backend: nothing to create
+    expect(h.state.rows).toEqual([]);
   });
 
   it("writes overrides.tf only when the repo does not have one", async () => {
@@ -218,6 +240,24 @@ describe("stack job", () => {
     ]);
     expect(h.adapter.queueRun).not.toHaveBeenCalled();
     expect(h.state.tfcLookups).toEqual([{ orgId: "o1", connectionId: "tfc-1" }]);
+    expect(h.state.rows).toEqual([
+      expect.objectContaining({
+        orgId: "o1",
+        name: "app-foundry-demo",
+        kind: "managed",
+        projectId: "p1",
+        connectionId: "tfc-1",
+        tfcWorkspaceId: "ws-created1",
+        workingDirectory: "deploy/infra",
+      }),
+    ]);
+
+    // A rerun of the job finds its row.
+    stackJob({ ...example, backend: "tfc", tfc_organization: "acme" }, "app-foundry-hetzner", { tfcConnectionId: "tfc-1" });
+    fakeGitHub();
+    await runJob("job_abcdefgh12345678");
+    expect(h.state.rows).toHaveLength(1);
+    expect(h.state.stages.at(-1)?.statusMessage).toContain("listed under Workspaces as managed");
   });
 
   it("says a merge plans only when the workspace came back linked to the repo", async () => {
@@ -229,6 +269,9 @@ describe("stack job", () => {
     // A real adapter sends queue-all-runs with the link (workspace.test.ts).
     h.adapter.createWorkspace.mockImplementationOnce(async (opts: Record<string, unknown>) => ({
       workspaceName: opts.workspaceName,
+      tfcWorkspaceId: "ws-created1",
+      created: true,
+      workingDirectory: opts.workingDirectory,
       vcsRepo: "acme/app",
       queueAllRuns: opts.queueAllRuns === true,
       linkError: null,
