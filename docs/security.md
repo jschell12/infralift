@@ -9,7 +9,7 @@ Every credential we ask for **on the provider you are migrating away from** is r
 | Vercel | Viewer-role token | Token inherits the Viewer role's permissions |
 | Cloudflare | Custom API token | Only `· Read` permissions granted |
 | Heroku | API key / scoped authorization | We only call read endpoints; you can scope the authorization |
-| AWS | Cross-account IAM role | AWS-managed `ReadOnlyAccess` policy; trust policy restricted to our account **with an external ID** |
+| AWS | Cross-account IAM role | `tag:GetResources` and `ce:GetCostAndUsage` only; trust policy restricted to our account **with your organization's external ID** |
 | Firebase / GCP | Service account JSON key | `Viewer` (or granular `*Viewer`) roles carry no write permissions |
 | Netlify, Render, Railway, Fly.io, DigitalOcean, Azure | Provider API token or service principal | We only call read endpoints |
 

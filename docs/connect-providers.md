@@ -39,14 +39,42 @@ Connect one provider or several. Each connection is assessed independently and c
 
 ## AWS
 
-AWS access works via a cross-account IAM role, not a pasted key:
+AWS access works via a cross-account IAM role, not a pasted key. Select **AWS** on the **Connections** page to see your organization's external ID and the two policies below, already filled in, with copy buttons.
 
-1. Create an IAM role in your account.
-2. Attach the AWS-managed **`ReadOnlyAccess`** policy, plus `ce:GetCostAndUsage` (for cost projections from Cost Explorer).
-3. Set the trust policy to our AWS account, **with an external ID** (shown in the dashboard when you select AWS) to prevent confused-deputy access.
-4. Paste the role ARN (`arn:aws:iam::123456789012:role/infralift-readonly`) in the dashboard, or a JSON object `{"roleArn": "...", "externalId": "..."}`.
+1. Create an IAM role in your account with this **trust policy**. The principal is infralift's AWS account and the condition is your organization's external ID, which stops anyone else from pointing infralift at your role (the confused-deputy problem). Your external ID is generated once, is unique to your organization, and is never shown to another one.
 
-**What we read:** resource inventory and Cost Explorer data. `ReadOnlyAccess` cannot create, modify, or delete anything.
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Principal": { "AWS": "arn:aws:iam::<infralift account>:root" },
+         "Action": "sts:AssumeRole",
+         "Condition": { "StringEquals": { "sts:ExternalId": "<your external ID>" } }
+       }
+     ]
+   }
+   ```
+
+2. Attach this **permissions policy** to the role. These are the only two actions the assessment calls:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       { "Effect": "Allow", "Action": ["tag:GetResources", "ce:GetCostAndUsage"], "Resource": "*" }
+     ]
+   }
+   ```
+
+3. Paste the role ARN (`arn:aws:iam::123456789012:role/infralift-readonly`) in the dashboard. To scan regions other than the default six (`us-east-1`, `us-east-2`, `us-west-1`, `us-west-2`, `eu-west-1`, `eu-central-1`), paste a JSON object instead: `{"roleArn": "...", "regions": ["ap-southeast-2"]}`, up to 10 regions. You do not paste the external ID: infralift always uses your organization's own, whatever the pasted JSON says.
+
+**How we verify:** infralift assumes the role with your external ID, then calls `sts:GetCallerIdentity` with the role's credentials. The connection is `valid` only if the role assumes and its account matches the account in the ARN. A refusal from AWS means the trust policy does not name infralift's account or does not require your external ID.
+
+**What we read:** the Resource Groups Tagging API (`tag:GetResources`) in each region, which lists resources that carry, or once carried, a tag; untagged resources do not appear. The inventory stops at 1,000 resources and the report says so when it does. From Cost Explorer, last full month's total unblended cost (`ce:GetCostAndUsage`, which AWS bills at $0.01 per request). If the role lacks `ce:GetCostAndUsage`, the report has no monthly spend and says why. Neither action can create, modify, or delete anything.
+
+**Availability:** AWS connections need infralift's own AWS principal configured on the server. Until it is, the Connections page says AWS isn't available yet and adding an AWS connection is refused.
 
 ## Firebase / Google Cloud
 

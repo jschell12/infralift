@@ -78,6 +78,19 @@ export interface ProviderConnectionSummary {
   expiresAt: string | null;
 }
 
+/** GET /connections/aws-setup: what the caller's org needs to create its AWS
+ *  role. `enabled` is false when this server has no AWS principal configured;
+ *  the other fields are then absent. */
+export interface AwsSetup {
+  enabled: boolean;
+  /** infralift's AWS account, the trust policy's principal. */
+  accountId?: string;
+  /** This org's sts:ExternalId. Never another org's. */
+  externalId?: string;
+  trustPolicy?: string;
+  permissionsPolicy?: string;
+}
+
 export interface ResourceInventoryItem {
   provider: Provider;
   /** Provider-specific resource type, e.g. "vercel:project", "heroku:dyno" */

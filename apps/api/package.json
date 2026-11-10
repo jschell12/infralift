@@ -22,6 +22,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
+    "@aws-sdk/client-cost-explorer": "^3.1166.0",
+    "@aws-sdk/client-resource-groups-tagging-api": "^3.1166.0",
+    "@aws-sdk/client-sts": "^3.1166.0",
     "@infralift/collectors": "workspace:*",
     "@infralift/shared": "workspace:*",
     "@prisma/client": "^6.2.0",

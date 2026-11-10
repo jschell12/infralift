@@ -1,0 +1,30 @@
+{
+  "_source": "Not captured from a live account. Each body is the example response in the AWS API reference for that action (STS AssumeRole and GetCallerIdentity, Resource Groups Tagging API GetResources, Cost Explorer GetCostAndUsage), trimmed to the fields infralift reads, in the shape the SDK v3 client returns. Replace with captured responses once infralift has an AWS principal.",
+  "AssumeRole": {
+    "Credentials": {
+      "AccessKeyId": "ASIAIOSFODNN7EXAMPLE",
+      "SecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYzEXAMPLEKEY",
+      "SessionToken": "AQoDYXdzEPT//////////wEXAMPLEtc764bNrC9SAPBSM22wDOk4x4HIZ8j4FZTwdQW",
+      "Expiration": "2026-11-10T12:15:00Z"
+    }
+  },
+  "GetCallerIdentity": {
+    "UserId": "AROA3XFRBF535PLBIFPI4:infralift-assessment",
+    "Account": "123456789012",
+    "Arn": "arn:aws:sts::123456789012:assumed-role/infralift-readonly/infralift-assessment"
+  },
+  "GetResources": {
+    "PaginationToken": "",
+    "ResourceTagMappingList": [
+      { "ResourceARN": "arn:aws:ec2:us-east-1:123456789012:instance/i-0abcd1234efgh5678", "Tags": [{ "Key": "Name", "Value": "web-1" }, { "Key": "env", "Value": "prod" }] },
+      { "ResourceARN": "arn:aws:s3:::example-assets-bucket", "Tags": [{ "Key": "env", "Value": "prod" }] },
+      { "ResourceARN": "arn:aws:lambda:us-east-1:123456789012:function:resize-images", "Tags": [{ "Key": "team", "Value": "media" }] },
+      { "ResourceARN": "arn:aws:rds:us-east-1:123456789012:db:orders-db", "Tags": [{ "Key": "Name", "Value": "orders" }] }
+    ]
+  },
+  "GetCostAndUsage": {
+    "ResultsByTime": [
+      { "TimePeriod": { "Start": "2026-10-01", "End": "2026-11-01" }, "Total": { "UnblendedCost": { "Amount": "412.3456789", "Unit": "USD" } }, "Estimated": false }
+    ]
+  }
+}

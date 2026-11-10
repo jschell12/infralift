@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 import { vercelConnector } from "./vercel.js";
 import { cloudflareConnector } from "./cloudflare.js";
 import { herokuConnector } from "./heroku.js";
-import { awsConnector } from "./aws.js";
 import { firebaseConnector } from "./firebase.js";
 import { githubConnector, parseGithubExpiration } from "./github.js";
 import { readFileSync } from "node:fs";
@@ -234,36 +233,6 @@ describe("heroku", () => {
     expect(result).not.toHaveProperty("estimatedMonthlySavingsCents");
     expect(result.findings.every((f) => f.monthlySavingsCents === undefined)).toBe(true);
     expect(result.findings.some((f) => f.title.includes("Heroku Postgres"))).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// AWS
-// ---------------------------------------------------------------------------
-
-describe("aws", () => {
-  const arn = "arn:aws:iam::123456789012:role/infralift-readonly";
-
-  it("verify accepts valid ARN", async () => {
-    expect(await awsConnector.verify(arn)).toBe(true);
-  });
-
-  it("verify accepts JSON payload", async () => {
-    expect(
-      await awsConnector.verify(JSON.stringify({ roleArn: arn }))
-    ).toBe(true);
-  });
-
-  it("verify rejects invalid ARN", async () => {
-    expect(await awsConnector.verify("not-an-arn")).toBe(false);
-  });
-
-  it("assess returns account inventory and guidance findings", async () => {
-    const result = await awsConnector.assess(arn);
-    expect(result.inventory).toHaveLength(1);
-    expect(result.inventory[0].type).toBe("aws:account");
-    expect(result.inventory[0].externalId).toBe("123456789012");
-    expect(result.findings.length).toBeGreaterThanOrEqual(2);
   });
 });
 

@@ -13,6 +13,7 @@ import { PROVIDERS } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
 import { decryptToken } from "../lib/crypto.js";
 import { getConnector } from "../connectors/index.js";
+import { connectionSecret } from "../services/aws-access.js";
 import type { ConnectorAssessment } from "../connectors/types.js";
 import {
   parseBundle,
@@ -146,6 +147,8 @@ assessmentsRouter.post("/run", handle(async (req, res) => {
   if (!(PROVIDERS as readonly string[]).includes(connection.provider)) {
     throw new InvalidInput(`${connection.provider} connections cannot be assessed`);
   }
+  // AWS: always the caller's org's external ID; 422 when AWS is off here.
+  const secret = await connectionSecret(connection.orgId, connection.provider, decryptToken(connection.encryptedToken));
 
   const assessment = await prisma.assessment.create({
     data: {
@@ -159,9 +162,7 @@ assessmentsRouter.post("/run", handle(async (req, res) => {
 
   try {
     const connector = getConnector(connection.provider as Provider);
-    const result = await connector.assess(
-      decryptToken(connection.encryptedToken)
-    );
+    const result = await connector.assess(secret);
 
     await persistAssessmentResult(assessment.id, result);
   } catch (err) {

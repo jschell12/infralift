@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   PROVIDERS,
   PROVIDER_LABELS,
+  type AwsSetup,
   type Provider,
   type ProviderConnectionSummary,
 } from "@infralift/shared";
@@ -68,7 +69,7 @@ const SCOPE_HELP: Record<Provider, string> = {
   heroku:
     "Generate an API key at dashboard.heroku.com/account, or run heroku authorizations:create for a scoped authorization. We only call read endpoints: apps, formation, add-ons.",
   aws:
-    "Create an IAM role with the AWS-managed ReadOnlyAccess policy plus ce:GetCostAndUsage, trusted to our account with the external ID shown above. ReadOnlyAccess cannot create, modify, or delete anything.",
+    "Create an IAM role with the trust policy and permissions policy above, then paste its ARN. The permissions are tag:GetResources and ce:GetCostAndUsage only: both read, neither can create, modify, or delete anything. To scan regions other than the default six, paste JSON instead: {\"roleArn\": \"…\", \"regions\": [\"ap-southeast-2\"]}.",
   firebase:
     "Create a service account at console.cloud.google.com/iam-admin/serviceaccounts with the Viewer role (or granular: Firebase Viewer, Cloud Functions Viewer, Cloud Datastore Viewer), generate a JSON key, and paste the full JSON. We inventory Hosting sites, Cloud Functions, and Firestore databases.",
   github:
@@ -319,6 +320,49 @@ function TfcConnectCard({ onAdded }: { onAdded: () => void }) {
   );
 }
 
+function CopyBlock({ title, text }: { title: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="mb-3">
+      <div className="mb-1 flex items-center justify-between">
+        <span className={LABEL}>{title}</span>
+        <button
+          type="button"
+          className="text-xs text-accent"
+          onClick={() => {
+            void navigator.clipboard.writeText(text).then(() => setCopied(true));
+          }}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-bg p-3 font-mono text-xs text-muted">
+        {text}
+      </pre>
+    </div>
+  );
+}
+
+/** The AWS add flow: this org's external ID and the policies to paste. */
+function AwsSetupPanel({ setup }: { setup: AwsSetup | null }) {
+  if (!setup) return <div className="mb-3 text-sm text-faint">Loading AWS setup...</div>;
+  if (!setup.enabled) {
+    return (
+      <div className="mb-3">
+        <Note>AWS isn&apos;t available yet on this server. Connect another provider for now.</Note>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-1">
+      <label className={LABEL}>Your external ID</label>
+      <div className="mb-3 break-all rounded-lg border border-border bg-bg p-2 font-mono text-xs">{setup.externalId}</div>
+      <CopyBlock title="Trust policy" text={setup.trustPolicy ?? ""} />
+      <CopyBlock title="Permissions policy" text={setup.permissionsPolicy ?? ""} />
+    </div>
+  );
+}
+
 export default function ConnectionsPage() {
   const [connections, setConnections] = useState<ProviderConnectionSummary[]>([]);
   const [provider, setProvider] = useState<Provider>("vercel");
@@ -326,6 +370,7 @@ export default function ConnectionsPage() {
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [awsSetup, setAwsSetup] = useState<AwsSetup | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -339,6 +384,13 @@ export default function ConnectionsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (provider !== "aws" || awsSetup) return;
+    api<AwsSetup>("/connections/aws-setup")
+      .then(setAwsSetup)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, [provider, awsSetup]);
 
   // deep link from the dashboard provider cards: /connections?provider=heroku
   useEffect(() => {
@@ -404,6 +456,8 @@ export default function ConnectionsPage() {
               required
             />
 
+            {provider === "aws" && <AwsSetupPanel setup={awsSetup} />}
+
             <label className={LABEL}>{field.label}</label>
             {field.kind === "json" ? (
               <textarea
@@ -437,7 +491,7 @@ export default function ConnectionsPage() {
               {SCOPE_HELP[provider]}
             </div>
 
-            <PrimaryButton disabled={busy}>
+            <PrimaryButton disabled={busy || (provider === "aws" && !awsSetup?.enabled)}>
               {busy ? "Verifying..." : "Connect & verify"}
             </PrimaryButton>
             {error && <div className="mt-2 text-sm text-danger">{error}</div>}
