@@ -10,6 +10,13 @@ name: infra
 #                  in the `production` environment. Add required reviewers
 #                  to the environment and the apply waits for one of them,
 #                  with the plan they are approving one click away.
+#   daily (06:41 UTC) the `infra drift` job: a read-only plan of main against
+#                  what is running. Never saved, uploaded or applied. It fails
+#                  when the plan would change anything, which means someone
+#                  changed infrastructure outside Terraform (or a merged change
+#                  is still waiting for its apply). infralift reads the result
+#                  and shows it on the project. Run it any time from the
+#                  Actions tab ("Run workflow" on main).
 #
 # Credentials are listed in deploy/README.md. Plans read repository secrets;
 # the apply job also sees the `production` environment's secrets, which win
@@ -22,6 +29,11 @@ on:
   push:
     branches: [main]
     paths: ["deploy/**", "infra/docker/**", "api/**", ".github/workflows/infra.yml"]
+  # Scheduled runs use the default branch only. Off the hour, when GitHub's
+  # scheduler is least loaded.
+  schedule:
+    - cron: "41 6 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -36,12 +48,15 @@ defaults:
 # Pushes to main share one group: a plan and its apply finish before the next
 # push plans, and nothing in progress is cancelled. Pull request plans are
 # read-only, so a newer push to the same pull request replaces the older one.
+# Drift checks get their own group: a pending drift run must never cancel a
+# pending push to main, which a shared group would do.
 concurrency:
-  group: ${{ github.event_name == 'push' && 'infra-main' || format('infra-pr-{0}', github.event.pull_request.number) }}
+  group: ${{ github.event_name == 'push' && 'infra-main' || (github.event_name == 'pull_request' && format('infra-pr-{0}', github.event.pull_request.number) || 'infra-drift') }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,6 +81,7 @@ jobs:
   box:
     # The box layer for real: build the images, deploy a preview through
     # Caddy, check routes, back up, restore, tear down. Docker only.
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -345,3 +361,109 @@ jobs:
             echo
             echo '````'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  drift:
+    name: infra drift
+    # Plans only. No -out, no artifact, no apply job depends on it, and the
+    # token can only read. Exit code 2 from -detailed-exitcode is drift.
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: State backend
+        id: backend
+        run: |
+          if grep -Eq '^[[:space:]]*cloud[[:space:]]*\{' deploy/infra/backend.tf; then
+            echo "kind=tfc" >> "$GITHUB_OUTPUT"
+          else
+            echo "kind=r2" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.backend.outputs.kind == 'r2'
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_wrapper: false
+      - if: steps.backend.outputs.kind == 'tfc'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: tofu plan (R2 state)
+        id: plan_r2
+        if: steps.backend.outputs.kind == 'r2'
+        working-directory: deploy/infra
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_R2_SECRET_ACCESS_KEY }}
+          TF_VAR_state_passphrase: ${{ secrets.TF_STATE_PASSPHRASE }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.INFRA_GIT_TOKEN }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          TF_VAR_r2_backup_access_key_id: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID }}
+          TF_VAR_r2_backup_secret_access_key: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY }}
+          TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_admin_emails: ${{ vars.ADMIN_EMAILS }}
+          TF_IN_AUTOMATION: "1"
+        run: |
+          if [ ! -f backend.r2.hcl ]; then
+            [[ "$TF_VAR_cloudflare_account_id" =~ ^[0-9a-f]{32}$ ]] || { echo "::error::vars.CLOUDFLARE_ACCOUNT_ID is not a Cloudflare account id"; exit 1; }
+            sed "s/<cloudflare-account-id>/$TF_VAR_cloudflare_account_id/" backend.r2.hcl.example > backend.r2.hcl
+          fi
+          tofu init -input=false -backend-config=backend.r2.hcl
+          set +e
+          tofu plan -input=false -no-color -lock=false -detailed-exitcode 2>&1 | tee plan.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+
+      - name: terraform plan (Terraform Cloud)
+        id: plan_tfc
+        if: steps.backend.outputs.kind == 'tfc'
+        working-directory: deploy/infra
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+          TF_IN_AUTOMATION: "1"
+        run: |
+          terraform init -input=false
+          # A speculative run: without -out, TFC cannot apply it.
+          set +e
+          terraform plan -input=false -no-color -detailed-exitcode 2>&1 | tee plan.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Result
+        if: always()
+        working-directory: deploy/infra
+        env:
+          CODE: ${{ steps.plan_r2.outputs.exitcode || steps.plan_tfc.outputs.exitcode }}
+        run: |
+          # These lines are what infralift reads back; keep the wording.
+          touch plan.txt
+          read -r add change destroy < <(
+            sed -nE 's/^Plan: (.*, )?([0-9]+) to add, ([0-9]+) to change, ([0-9]+) to destroy.*/\2 \3 \4/p' plan.txt | tail -1
+          ) || true
+          add=${add:-0} change=${change:-0} destroy=${destroy:-0}
+          if [ "$CODE" = 0 ]; then
+            title="No drift: the plan changes nothing."
+            echo "::notice title=infra drift::$title"
+          elif [ "$CODE" = 2 ]; then
+            title="Drift: $add to add, $change to change, $destroy to destroy. Something changed outside Terraform, or a merged change is not applied yet."
+            echo "::error title=infra drift::$title"
+          else
+            title="The drift plan failed, so drift is unknown. Check the secrets listed in deploy/README.md."
+            echo "::error title=infra drift::$title"
+          fi
+          {
+            echo "### infra drift"
+            echo
+            echo "$title"
+            echo
+            echo '````text'
+            head -c 60000 plan.txt
+            echo
+            echo '````'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$CODE" = 0 ]

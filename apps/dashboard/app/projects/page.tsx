@@ -6,6 +6,7 @@ import {
   PROVIDER_LABELS,
   type GitHost,
   type CodegenProject,
+  type DriftStatus,
   type ImportedProject,
   type MigrationSummary,
   type Project,
@@ -745,6 +746,35 @@ function NewProjectDrawer({
   );
 }
 
+const DRIFT_LOOK: Record<DriftStatus["state"], { tone: Tone; text: string }> = {
+  drift: { tone: "danger", text: "drift detected" },
+  none: { tone: "accent", text: "no drift" },
+  unknown: { tone: "muted", text: "drift unknown" },
+};
+
+/** What the daily drift check on the default branch last said, read by the
+ *  API's drift sweep. Nothing until it has been read once. */
+function DriftBadge({ drift }: { drift: DriftStatus | null }) {
+  if (!drift) return null;
+  const look = DRIFT_LOOK[drift.state] ?? DRIFT_LOOK.unknown;
+  return (
+    <div className="flex items-center gap-2 text-sm mb-2">
+      <Chip tone={look.tone}>{look.text}</Chip>
+      <span className="text-muted truncate" title={drift.message}>
+        {drift.message}
+      </span>
+      <span className="text-faint whitespace-nowrap">
+        last checked {new Date(drift.ranAt ?? drift.checkedAt).toLocaleString()}
+      </span>
+      {drift.checkUrl && (
+        <a className="ml-auto text-accent text-sm font-semibold whitespace-nowrap" href={drift.checkUrl}>
+          View check
+        </a>
+      )}
+    </div>
+  );
+}
+
 function SettingsDrawer({
   project,
   stack,
@@ -954,6 +984,7 @@ export default function ProjectsPage() {
                 <a href={`https://github.com/${p.destRepo}`}>{p.destRepo}</a>@{p.destBranch}
                 {p.destPath && ` · ${p.destPath}`}
               </div>
+              <DriftBadge drift={p.drift} />
               {/* Once the pull request exists, the check is what matters; the
                   job row stays only while it is running or if it failed. */}
               {latest && (!pr || latest.status !== "success") && (
@@ -1011,6 +1042,7 @@ export default function ProjectsPage() {
               {p.destRepo}@{p.destBranch} · https://{String(p.providerConfig.subdomain)}.
               {String(p.providerConfig.zone_name)}
             </div>
+            <DriftBadge drift={p.drift} />
             {latest ? (
               <div className="flex items-center gap-2 text-sm">
                 <Chip tone={STATUS_TONE[latest.status] ?? "muted"}>

@@ -1,6 +1,6 @@
 import { Document } from "yaml";
 import type { RootModule } from "./scan.js";
-import { CHECK_JOB_NAME, GENERATED_COMMIT_SUBJECT, OUTCOME } from "./contract.js";
+import { CHECK_JOB_NAME, DRIFT_JOB_NAME, GENERATED_COMMIT_SUBJECT, OUTCOME } from "./contract.js";
 
 // ---------------------------------------------------------------------------
 // The import check: a GitHub Actions workflow infralift adds to the customer's
@@ -128,7 +128,11 @@ const HEADER = [
   " Managed by infralift. Read-only: plans against this module's existing state",
   " and applies nothing. It passes when the plan changes nothing, which is when",
   " infralift can take the module over without touching what is running.",
+  " Daily, the same plan runs on the default branch as the drift check.",
 ].join("\n");
+
+/** 06:23 UTC daily. */
+export const DRIFT_CRON = "23 6 * * *";
 
 export function renderImportCheck(
   root: RootModule,
@@ -226,6 +230,16 @@ export function renderImportCheck(
     "fi"
   );
 
+  // Shared by the import job and the drift job: tool, sign-in, credentials, init.
+  const prepare: Step[] = [
+    tf === "tofu"
+      ? { uses: "opentofu/setup-opentofu@v1", with: { tofu_wrapper: false } }
+      : { uses: "hashicorp/setup-terraform@v3", with: { terraform_wrapper: false } },
+    ...oidcSteps,
+    { name: "Check the credentials are set", ...withCreds(oidcFlags), run: script(...checkLines) },
+    { name: "Init", ...withCreds(), run: `${tf} init -input=false${backendConfig}` },
+  ];
+
   const steps: Step[] = [
     {
       uses: "actions/checkout@v4",
@@ -236,12 +250,7 @@ export function renderImportCheck(
         ? { with: { ref: "${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref || '' }}" } }
         : {}),
     },
-    tf === "tofu"
-      ? { uses: "opentofu/setup-opentofu@v1", with: { tofu_wrapper: false } }
-      : { uses: "hashicorp/setup-terraform@v3", with: { terraform_wrapper: false } },
-    ...oidcSteps,
-    { name: "Check the credentials are set", ...withCreds(oidcFlags), run: script(...checkLines) },
-    { name: "Init", ...withCreds(), run: `${tf} init -input=false${backendConfig}` },
+    ...prepare,
   ];
 
   if (gen) {
@@ -266,7 +275,9 @@ export function renderImportCheck(
     });
   }
 
-  steps.push({
+  // The plan file stays on the runner: shown as JSON to count changes, never
+  // uploaded and never applied, by either job.
+  const gate = (drift: boolean): Step => ({
     name: "Plan (read-only, no lock)",
     id: "gate",
     ...withCreds(),
@@ -289,12 +300,16 @@ export function renderImportCheck(
       "drift=$(jq '[.resource_drift[]?] | length' plan.json)",
       "imports=$(jq '[.resource_changes[]? | select(.change.importing)] | length' plan.json)",
       "{",
-      '  echo "## infralift import check: $MODULE_LABEL"',
+      `  echo "## infralift ${drift ? "drift" : "import"} check: $MODULE_LABEL"`,
       '  echo ""',
       '  if [ "$changes" -eq 0 ]; then',
-      '    echo "No changes. All $total resources match the code, so infralift can take this module over without touching anything."',
+      drift
+        ? '    echo "No drift. All $total resources match the code on the default branch."'
+        : '    echo "No changes. All $total resources match the code, so infralift can take this module over without touching anything."',
       "  else",
-      '    echo "$changes of $total resources would change. infralift will not take this module over until this is 0."',
+      drift
+        ? '    echo "$changes of $total resources would change: something was changed outside Terraform, or a merged change is not applied yet."'
+        : '    echo "$changes of $total resources would change. infralift will not take this module over until this is 0."',
       '    echo ""',
       '    echo "| Action | Resource |"',
       '    echo "| --- | --- |"',
@@ -322,6 +337,7 @@ export function renderImportCheck(
       "fi"
     ),
   });
+  steps.push(gate(false));
 
   if (gen) {
     // Committed whether or not the plan passed: a failing plan is fixed by
@@ -352,10 +368,19 @@ export function renderImportCheck(
     });
   }
 
+  const jobEnv = {
+    TF_IN_AUTOMATION: "1",
+    TF_INPUT: "0",
+    MODULE_LABEL: label,
+    ...(opts.backendConfigFile ? { BACKEND_CONFIG: relativeTo(root.path, opts.backendConfigFile) } : {}),
+  };
   const workflow = {
     name: `infralift import check: ${label}`,
     on: {
       pull_request: { paths: [root.path ? `${root.path}/**` : "**/*.tf", file] },
+      // Daily drift check on the default branch (GitHub runs schedules only
+      // there). Off the hour, when GitHub's scheduler is least loaded.
+      schedule: [{ cron: DRIFT_CRON }],
       workflow_dispatch: {},
     },
     permissions: {
@@ -374,16 +399,26 @@ export function renderImportCheck(
     jobs: {
       plan: {
         name: CHECK_JOB_NAME,
+        // The schedule is the drift job's; this one answers for pull requests.
+        if: "github.event_name != 'schedule'",
         "runs-on": "ubuntu-latest",
         "timeout-minutes": 30,
         defaults: { run: { "working-directory": root.path || "." } },
-        env: {
-          TF_IN_AUTOMATION: "1",
-          TF_INPUT: "0",
-          MODULE_LABEL: label,
-          ...(opts.backendConfigFile ? { BACKEND_CONFIG: relativeTo(root.path, opts.backendConfigFile) } : {}),
-        },
+        env: jobEnv,
         steps,
+      },
+      // The same plan on the default branch, under its own name so it never
+      // stands in for a pull request's check. Plans only: no generated code,
+      // no commit, no artifact, and a token that can only read.
+      drift: {
+        name: DRIFT_JOB_NAME,
+        if: "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch)",
+        "runs-on": "ubuntu-latest",
+        "timeout-minutes": 30,
+        permissions: { contents: "read", ...(groups.length ? { "id-token": "write" } : {}) },
+        defaults: { run: { "working-directory": root.path || "." } },
+        env: jobEnv,
+        steps: [{ uses: "actions/checkout@v4" }, ...prepare, gate(true)],
       },
     },
   };

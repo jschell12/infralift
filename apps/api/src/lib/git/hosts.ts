@@ -76,6 +76,8 @@ export interface GitHostClient {
   }): Promise<{ subject: string; parentSha: string | null; files: string[] } | null>;
   /** The newest check run called `name` on `sha`, with its annotations. */
   getCheckRun(opts: { repo: string; sha: string; name: string }): Promise<CheckRun | null>;
+  /** The newest `limit` commit SHAs on `branch`, newest first. */
+  listCommits(opts: { repo: string; branch: string; limit: number }): Promise<string[]>;
   /** The repository, created empty (with an initial commit) if it does not
    *  exist. `created` says which. */
   ensureRepo(opts: {
@@ -241,6 +243,12 @@ function githubClient(token: string): GitHostClient {
       };
     },
 
+    async listCommits({ repo, branch, limit }) {
+      const res = await gh("GET", `/repos/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${limit}`);
+      if (!res.ok) throw new GitCommitError(`GitHub commit listing failed (${res.status}) for ${repo}@${branch}`);
+      return ((await res.json()) as { sha: string }[]).map((c) => c.sha);
+    },
+
     async createFromTemplate({ template, repo, private: isPrivate }) {
       const [owner, name] = repo.split("/");
       const res = await gh("POST", `/repos/${template}/generate`, {
@@ -381,6 +389,9 @@ function gitlabClient(token: string): GitHostClient {
     },
     async getCommit() {
       throw new GitCommitError("reading a merge request's checks is not built for GitLab yet");
+    },
+    async listCommits() {
+      throw new GitCommitError("reading pipeline results is not built for GitLab yet");
     },
 
     async createFromTemplate({ template, repo, private: isPrivate }) {
