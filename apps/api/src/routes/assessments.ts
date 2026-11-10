@@ -25,6 +25,7 @@ import { buildReportExtras } from "../lib/report-extras.js";
 import { buildMigrationPlan } from "../lib/migration-plan.js";
 import { InvalidInput, NotFound, Upstream, handle, parseBody } from "../lib/errors.js";
 import { assessmentSavings, setReportedSpend } from "../services/assessments.js";
+import { markInvalidOnAuthFailure } from "../services/connections.js";
 
 export const assessmentsRouter = Router();
 
@@ -172,6 +173,9 @@ assessmentsRouter.post("/run", handle(async (req, res) => {
         error: err instanceof Error ? err.message : String(err),
       },
     });
+    // A 401/403 means the stored credential no longer works; say so on the
+    // connection, where the customer can replace it. A 5xx does not.
+    await markInvalidOnAuthFailure(connection, err, "connector", "an assessment");
     throw new Upstream("Assessment failed", { detail: err instanceof Error ? err.message : String(err), assessmentId: assessment.id });
   }
 

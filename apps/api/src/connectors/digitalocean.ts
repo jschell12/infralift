@@ -1,5 +1,5 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
-import type { Connector, ConnectorAssessment } from "./types.js";
+import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 
 const API = "https://api.digitalocean.com/v2";
 
@@ -11,7 +11,7 @@ async function doFetch(token: string, path: string): Promise<any> {
     },
   });
   if (!res.ok) {
-    throw new Error(`DigitalOcean API ${path} -> ${res.status}`);
+    throw new ProviderHttpError(`DigitalOcean API ${path} -> ${res.status}`, res.status);
   }
   return res.json();
 }

@@ -1,5 +1,5 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
-import type { Connector, ConnectorAssessment } from "./types.js";
+import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 
 const API = "https://backboard.railway.com/graphql/v2";
 
@@ -17,7 +17,7 @@ async function gql(
     body: JSON.stringify({ query, variables }),
   });
   if (!res.ok) {
-    throw new Error(`Railway GraphQL -> ${res.status}`);
+    throw new ProviderHttpError(`Railway GraphQL -> ${res.status}`, res.status);
   }
   const body: any = await res.json();
   if (body.errors?.length) {

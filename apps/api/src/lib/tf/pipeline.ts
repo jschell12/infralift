@@ -19,6 +19,8 @@ import { generateHcl } from "./codegen.js";
 import { checkEnv, checkSetupLines, renderImportCheck } from "../import/check.js";
 import type { RootModule } from "../import/scan.js";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
+import { markInvalidOnAuthFailure } from "../../services/connections.js";
+import { PREFER_USABLE_CONNECTION } from "../connection-order.js";
 
 // Staged pipeline. Stages and statuses move only through the job state
 // machine (lib/jobs/state.ts); each runner holds one JobRun and reports to it.
@@ -39,7 +41,7 @@ async function getGithubToken(orgId: string): Promise<string | null> {
     // Prefer a connection that last verified successfully. findFirst on
     // createdAt alone happily hands back a token already known to be invalid,
     // and the failure then surfaces from the GitHub API instead of from here.
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    orderBy: PREFER_USABLE_CONNECTION,
   });
   return conn ? decryptToken(conn.encryptedToken) : null;
 }
@@ -353,12 +355,12 @@ async function getGitToken(
   orgId: string,
   host: GitHost,
   connectionId: string | null
-): Promise<string | null> {
+): Promise<{ token: string; connection: { id: string; provider: string } } | null> {
   const conn = await prisma.providerConnection.findFirst({
     where: { orgId, provider: host, ...(connectionId ? { id: connectionId } : {}) },
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    orderBy: PREFER_USABLE_CONNECTION,
   });
-  return conn ? decryptToken(conn.encryptedToken) : null;
+  return conn ? { token: decryptToken(conn.encryptedToken), connection: { id: conn.id, provider: conn.provider } } : null;
 }
 
 async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
@@ -366,6 +368,7 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
   const project = job.project;
   const host = (isGitHost(project.gitHost) ? project.gitHost : "github") as GitHost;
   let client: GitHostClient | null = null;
+  let gitConnection: { id: string; provider: string } | null = null;
   try {
     // -- render ------------------------------------------------------------
     await run.start("render");
@@ -396,7 +399,9 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
     };
     const rendered = renderStack(stack, args);
 
-    const token = await getGitToken(project.orgId, host, project.gitConnectionId);
+    const git = await getGitToken(project.orgId, host, project.gitConnectionId);
+    gitConnection = git?.connection ?? null;
+    const token = git?.token;
     if (!token) {
       await run.fail(`no ${PROVIDER_LABELS[host]} connection for this org: add one under Connections`, "repo");
       return;
@@ -538,6 +543,7 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
     // -- complete ----------------------------------------------------------
     await run.succeed(`${createdRepoNote}${openCr ? "updated" : "opened"} ${cr.url} (${files.length} files); ${workspaceNote}`);
   } catch (err) {
+    await markInvalidOnAuthFailure(gitConnection, err, "git", "a git job");
     await run.failSafely(err);
   }
 }
@@ -553,6 +559,7 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
   const run = jobRun(jobId);
   const project = job.project;
   let client: GitHostClient | null = null;
+  let gitConnection: { id: string; provider: string } | null = null;
   try {
     await run.start("render");
     const root = project.importJson as unknown as RootModule | null;
@@ -567,7 +574,9 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
     };
     const check = renderImportCheck(root, { backendConfigFile: args.backendConfigFile ?? null });
 
-    const token = await getGitToken(project.orgId, "github", project.gitConnectionId);
+    const git = await getGitToken(project.orgId, "github", project.gitConnectionId);
+    gitConnection = git?.connection ?? null;
+    const token = git?.token;
     if (!token) {
       await run.fail("no GitHub connection for this org: add one under Connections", "commit");
       return;
@@ -616,6 +625,7 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
       `${landed.outcome} ${landed.url}; ${env.length ? `add ${env.length} secret(s), then ` : ""}the check plans read-only`
     );
   } catch (err) {
+    await markInvalidOnAuthFailure(gitConnection, err, "git", "a git job");
     await run.failSafely(err);
   }
 }

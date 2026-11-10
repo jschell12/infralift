@@ -1,6 +1,6 @@
 import { createSign } from "node:crypto";
 import type { ResourceInventoryItem } from "@infralift/shared";
-import type { Connector, ConnectorAssessment } from "./types.js";
+import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 
 // Firebase/GCP assessment via a read-only service account. The connection
 // "token" is the service account JSON key (roles: Viewer or the granular
@@ -65,7 +65,7 @@ async function mintAccessToken(key: ServiceAccountKey): Promise<string> {
     }),
   });
   if (!res.ok) {
-    throw new Error(`GCP token exchange failed: ${res.status}`);
+    throw new ProviderHttpError(`GCP token exchange failed: ${res.status}`, res.status);
   }
   const body: any = await res.json();
   return body.access_token as string;
@@ -76,7 +76,7 @@ async function gFetch(accessToken: string, url: string): Promise<any> {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
-    throw new Error(`GCP API ${new URL(url).pathname} -> ${res.status}`);
+    throw new ProviderHttpError(`GCP API ${new URL(url).pathname} -> ${res.status}`, res.status);
   }
   return res.json();
 }

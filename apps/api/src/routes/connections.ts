@@ -1,10 +1,15 @@
 import { Router } from "express";
 import { z } from "zod";
-import { PROVIDERS, type Provider } from "@infralift/shared";
+import { PROVIDERS } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
-import { encryptToken, decryptToken } from "../lib/crypto.js";
-import { getConnector } from "../connectors/index.js";
-import { InvalidInput, NotFound, handle } from "../lib/errors.js";
+import { InvalidInput, handle, parseBody } from "../lib/errors.js";
+import {
+  createConnection,
+  deleteConnection,
+  rotateConnection,
+  toSummary,
+  verifyConnection,
+} from "../services/connections.js";
 
 export const connectionsRouter = Router();
 
@@ -14,23 +19,13 @@ const createSchema = z.object({
   token: z.string().min(1),
 });
 
-function toSummary(c: {
-  id: string;
-  provider: string;
-  label: string;
-  createdAt: Date;
-  lastVerifiedAt: Date | null;
-  status: string;
-}) {
-  return {
-    id: c.id,
-    provider: c.provider as Provider,
-    label: c.label,
-    createdAt: c.createdAt.toISOString(),
-    lastVerifiedAt: c.lastVerifiedAt?.toISOString() ?? null,
-    status: c.status,
-  };
-}
+// Replacing a credential: the same field(s) as adding one. organization and
+// hostname apply to Terraform Cloud connections only.
+const rotateSchema = z.object({
+  token: z.string().min(1),
+  organization: z.string().optional(),
+  hostname: z.string().optional(),
+});
 
 // List connections for the authenticated user's org.
 connectionsRouter.get("/", handle(async (req, res) => {
@@ -48,67 +43,23 @@ connectionsRouter.post("/", handle(async (req, res) => {
   if (!parsed.success) {
     throw new InvalidInput("Invalid request", { detail: parsed.error.message });
   }
-  const { provider, label, token } = parsed.data;
-  const { orgId } = req.user!;
-
-  const connector = getConnector(provider);
-  let valid = false;
-  try {
-    valid = await connector.verify(token);
-  } catch {
-    valid = false;
-  }
-
-  const connection = await prisma.providerConnection.create({
-    data: {
-      orgId,
-      provider,
-      label,
-      encryptedToken: encryptToken(token),
-      status: valid ? "valid" : "invalid",
-      lastVerifiedAt: valid ? new Date() : null,
-    },
-  });
-
-  res.status(201).json(toSummary(connection));
+  res.status(201).json(await createConnection(req.user!.orgId, parsed.data));
 }));
 
-// Re-verify an existing connection.
+// Re-verify an existing connection, Terraform Cloud included.
 connectionsRouter.post("/:id/verify", handle(async (req, res) => {
-  const connection = await prisma.providerConnection.findFirst({
-    where: { id: req.params.id, orgId: req.user!.orgId },
-  });
-  if (!connection) throw new NotFound("Not found");
-  // A Terraform Cloud connection ("tfc") stores JSON credentials and has no
-  // connector; without this it would be marked invalid by a TypeError.
-  if (!(PROVIDERS as readonly string[]).includes(connection.provider)) {
-    throw new InvalidInput(`${connection.provider} connections are verified where they were created`);
-  }
-
-  const connector = getConnector(connection.provider as Provider);
-  let valid = false;
-  try {
-    valid = await connector.verify(decryptToken(connection.encryptedToken));
-  } catch {
-    valid = false;
-  }
-
-  const updated = await prisma.providerConnection.update({
-    where: { id: connection.id },
-    data: {
-      status: valid ? "valid" : "invalid",
-      lastVerifiedAt: valid ? new Date() : connection.lastVerifiedAt,
-    },
-  });
-  res.json(toSummary(updated));
+  res.json(await verifyConnection(req.user!.orgId, String(req.params.id)));
 }));
 
-// Delete a connection (and its stored token).
+// Replace the credential. Verified first; a failure keeps the old one (400
+// with the provider's reason). The credential is never sent back.
+connectionsRouter.patch("/:id", handle(async (req, res) => {
+  const input = parseBody(rotateSchema, req.body);
+  res.json(await rotateConnection(req.user!.orgId, String(req.params.id), input));
+}));
+
+// Delete a connection (and its stored token). 409 while something uses it.
 connectionsRouter.delete("/:id", handle(async (req, res) => {
-  const connection = await prisma.providerConnection.findFirst({
-    where: { id: req.params.id, orgId: req.user!.orgId },
-  });
-  if (!connection) throw new NotFound("Not found");
-  await prisma.providerConnection.delete({ where: { id: connection.id } });
+  await deleteConnection(req.user!.orgId, String(req.params.id));
   res.status(204).end();
 }));

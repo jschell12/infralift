@@ -1,5 +1,5 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
-import type { Connector, ConnectorAssessment } from "./types.js";
+import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 
 // Azure assessment via a service principal (client credentials flow). The
 // connection "token" is a JSON object: { tenantId, clientId, clientSecret,
@@ -51,7 +51,7 @@ async function mintAccessToken(creds: AzureCredentials): Promise<string> {
     }
   );
   if (!res.ok) {
-    throw new Error(`Azure token exchange failed: ${res.status}`);
+    throw new ProviderHttpError(`Azure token exchange failed: ${res.status}`, res.status);
   }
   const body: any = await res.json();
   return body.access_token as string;
@@ -62,7 +62,7 @@ async function azFetch(accessToken: string, url: string): Promise<any> {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
-    throw new Error(`Azure API ${new URL(url).pathname} -> ${res.status}`);
+    throw new ProviderHttpError(`Azure API ${new URL(url).pathname} -> ${res.status}`, res.status);
   }
   return res.json();
 }
