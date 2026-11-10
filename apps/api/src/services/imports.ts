@@ -12,6 +12,7 @@ import { CHECK_JOB_NAME, GENERATED_COMMIT_SUBJECT } from "../lib/import/contract
 import { checkEnv, checkSetupLines, checkWorkflowPath } from "../lib/import/check.js";
 import { AdoptInputError, planAdoption, renderAdoption, type AdoptBackend } from "../lib/import/adopt.js";
 import { classifyCheck, type ImportCheckResult } from "../lib/import/result.js";
+import { PREFER_USABLE_CONNECTION } from "../lib/connection-order.js";
 
 // ---------------------------------------------------------------------------
 // Importing existing Terraform, and adopting resources built by hand.
@@ -31,7 +32,7 @@ import { classifyCheck, type ImportCheckResult } from "../lib/import/result.js";
 async function githubFor(orgId: string, connectionId?: string | null) {
   const conn = await prisma.providerConnection.findFirst({
     where: { orgId, provider: "github", ...(connectionId ? { id: connectionId } : {}) },
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    orderBy: PREFER_USABLE_CONNECTION,
   });
   if (!conn) throw new InvalidInput("connect GitHub under Connections first");
   return { conn, client: gitHostClient("github", decryptToken(conn.encryptedToken)) };

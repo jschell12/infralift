@@ -20,6 +20,7 @@ import { checkEnv, checkSetupLines, renderImportCheck } from "../import/check.js
 import type { RootModule } from "../import/scan.js";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { markInvalidOnAuthFailure } from "../../services/connections.js";
+import { PREFER_USABLE_CONNECTION } from "../connection-order.js";
 
 // Staged pipeline. Stages and statuses move only through the job state
 // machine (lib/jobs/state.ts); each runner holds one JobRun and reports to it.
@@ -40,7 +41,7 @@ async function getGithubToken(orgId: string): Promise<string | null> {
     // Prefer a connection that last verified successfully. findFirst on
     // createdAt alone happily hands back a token already known to be invalid,
     // and the failure then surfaces from the GitHub API instead of from here.
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    orderBy: PREFER_USABLE_CONNECTION,
   });
   return conn ? decryptToken(conn.encryptedToken) : null;
 }
@@ -357,7 +358,7 @@ async function getGitToken(
 ): Promise<{ token: string; connection: { id: string; provider: string } } | null> {
   const conn = await prisma.providerConnection.findFirst({
     where: { orgId, provider: host, ...(connectionId ? { id: connectionId } : {}) },
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    orderBy: PREFER_USABLE_CONNECTION,
   });
   return conn ? { token: decryptToken(conn.encryptedToken), connection: { id: conn.id, provider: conn.provider } } : null;
 }
