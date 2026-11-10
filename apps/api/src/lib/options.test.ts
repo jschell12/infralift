@@ -7,7 +7,7 @@ import {
 } from "./demo-fixture.js";
 import { DEFAULT_HOURLY_RATE_USD, opsBurden } from "./estimate.js";
 import { computeExitToll } from "./exit-toll.js";
-import { computeEffectivePricing } from "./pricing.js";
+import { computeEffectivePricing, PRICES_VERIFIED_AT } from "./pricing.js";
 import type { Recommendation, RecommendInput } from "./recommend.js";
 import { computeFootprint, sizeTarget } from "./sizing.js";
 
@@ -176,6 +176,8 @@ describe("buildMigrationOptions", () => {
     });
 
     expect(report.currentSpend).toEqual({ monthlyCents: null, source: "unknown" });
+    // The page dates the target costs even when it has no bill to compare.
+    expect(report.pricesVerifiedAt).toBe(PRICES_VERIFIED_AT);
     const sized = report.options.filter((o) => o.sizing);
     expect(sized.map((o) => o.slug).sort()).toEqual(["cloudflare", "hetzner"]);
     for (const o of report.options) {
@@ -282,6 +284,6 @@ describe("buildMigrationOptions", () => {
     // target's own price. Passing 12x a $3,229/mo Heroku bill qualified it
     // for Cloudflare's $36k/yr enterprise tier.
     const input = h.recommend.mock.calls[0][0] as RecommendInput;
-    expect(input.annualSpendCents).toBeUndefined();
+    expect(input).not.toHaveProperty("annualSpendCents");
   });
 });

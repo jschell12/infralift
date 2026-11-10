@@ -69,7 +69,6 @@ export const awsConnector: Connector = {
         },
       ],
       estimatedMonthlyCostCents: null,
-      estimatedMonthlySavingsCents: null,
     };
   },
 };

@@ -204,7 +204,10 @@ describe("heroku", () => {
     expect(result.inventory.some((i) => i.type === "heroku:dyno")).toBe(true);
     expect(result.inventory.some((i) => i.type === "heroku:addon")).toBe(true);
     expect(result.estimatedMonthlyCostCents).toBeGreaterThan(0);
-    expect(result.estimatedMonthlySavingsCents).toBeGreaterThan(0);
+    // The bill is priced; the saving is not. It comes from the sized
+    // comparison (services/assessments.ts), never from the connector.
+    expect(result).not.toHaveProperty("estimatedMonthlySavingsCents");
+    expect(result.findings.every((f) => f.monthlySavingsCents === undefined)).toBe(true);
     expect(result.findings.some((f) => f.title.includes("Heroku Postgres"))).toBe(true);
   });
 });
@@ -354,11 +357,10 @@ describe("render", () => {
     expect(types).toContain("render:redis");
     expect(types).toContain("render:env_group");
     expect(result.estimatedMonthlyCostCents).toBe(700);
-    expect(result.estimatedMonthlySavingsCents).toBe(0);
     expect(result.findings.some((f) => f.title.includes("Render Postgres"))).toBe(true);
   });
 
-  it("assess computes savings when cost exceeds VPS baseline", async () => {
+  it("assess prices the services and makes no savings claim of its own", async () => {
     mockRoute({
       "/services?": [
         { service: { id: "svc1", name: "api", type: "web_service", plan: "standard" } },
@@ -371,7 +373,12 @@ describe("render", () => {
 
     const result = await renderConnector.assess("tok");
     expect(result.estimatedMonthlyCostCents).toBe(5000);
-    expect(result.estimatedMonthlySavingsCents).toBe(3000);
+    // This used to be 3000: the bill minus a flat $20 VPS, whatever the
+    // workload. The cost finding still states the bill.
+    expect(result).not.toHaveProperty("estimatedMonthlySavingsCents");
+    const cost = result.findings.find((f) => f.category === "cost")!;
+    expect(cost.title).toContain("$50/mo");
+    expect(cost.monthlySavingsCents).toBeUndefined();
   });
 });
 

@@ -217,20 +217,16 @@ export const digitaloceanConnector: Connector = {
     }
 
     if (totalCostCents > 0) {
-      const vpsEstimate = 2000;
-      const savings = Math.max(0, totalCostCents - vpsEstimate);
       findings.push({
         category: "cost",
         severity: totalCostCents > 10000 ? "high" : "medium",
         title: `~$${(totalCostCents / 100).toFixed(0)}/mo on DigitalOcean`,
         detail: `Inventoried resources total roughly $${(totalCostCents / 100).toFixed(2)}/mo. Consolidating onto a Hetzner VPS ($5-$40/mo) or Cloudflare Workers reduces cost and complexity.`,
-        monthlySavingsCents: savings,
       });
       return {
         inventory,
         findings,
         estimatedMonthlyCostCents: totalCostCents,
-        estimatedMonthlySavingsCents: savings,
       };
     }
 
@@ -238,7 +234,6 @@ export const digitaloceanConnector: Connector = {
       inventory,
       findings,
       estimatedMonthlyCostCents: totalCostCents || null,
-      estimatedMonthlySavingsCents: null,
     };
   },
 };

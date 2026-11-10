@@ -3,6 +3,8 @@ import { z } from "zod";
 import type {
   AssessmentCostProjectionRow,
   AssessmentRecommendation,
+  AssessmentStatus,
+  AssessmentSummary,
   MigrationPlan,
   FindingSeverity,
   Provider,
@@ -22,7 +24,7 @@ import { buildMigrationOptions } from "../lib/options.js";
 import { buildReportExtras } from "../lib/report-extras.js";
 import { buildMigrationPlan } from "../lib/migration-plan.js";
 import { InvalidInput, NotFound, Upstream, handle, parseBody } from "../lib/errors.js";
-import { setReportedSpend } from "../services/assessments.js";
+import { assessmentSavings, setReportedSpend } from "../services/assessments.js";
 
 export const assessmentsRouter = Router();
 
@@ -32,12 +34,16 @@ const runSchema = z.object({
 
 // The customer's monthly bill in dollars, as read off an invoice; null clears
 // it. Capped like the public estimator's field, so a stray keystroke cannot
-// store a number no comparison should be made against.
+// store a number no comparison should be made against. Zero is refused: no
+// account that was worth assessing bills nothing, and a $0 bill turned every
+// target into a loss and the report into "stay put". Clearing is null. The
+// floor is a cent rather than "positive" because the service rounds to cents,
+// and $0.004 would round back to the zero this exists to keep out.
 const spendSchema = z.object({
-  monthlyUsd: z.number().min(0).max(10_000_000).nullable(),
+  monthlyUsd: z.number().min(0.01).max(10_000_000).nullable(),
 });
 
-async function summarize(assessmentId: string) {
+async function summarize(assessmentId: string): Promise<AssessmentSummary | null> {
   const a = await prisma.assessment.findUnique({
     where: { id: assessmentId },
     include: { findings: { select: { severity: true } } },
@@ -56,12 +62,12 @@ async function summarize(assessmentId: string) {
   return {
     id: a.id,
     provider: a.provider as Provider,
-    status: a.status,
+    status: a.status as AssessmentStatus,
     startedAt: a.startedAt?.toISOString() ?? null,
     completedAt: a.completedAt?.toISOString() ?? null,
     resourceCount: a.resourceCount,
     estimatedMonthlyCostCents: a.estimatedMonthlyCostCents,
-    estimatedMonthlySavingsCents: a.estimatedMonthlySavingsCents,
+    ...(await assessmentSavings(a)),
     findingCounts,
   };
 }
@@ -104,7 +110,6 @@ async function persistAssessmentResult(
         completedAt: new Date(),
         resourceCount: result.inventory.length,
         estimatedMonthlyCostCents: result.estimatedMonthlyCostCents,
-        estimatedMonthlySavingsCents: result.estimatedMonthlySavingsCents,
       },
     }),
   ]);

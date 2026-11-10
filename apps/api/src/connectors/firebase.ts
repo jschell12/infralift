@@ -217,7 +217,6 @@ export const firebaseConnector: Connector = {
       inventory,
       findings,
       estimatedMonthlyCostCents: null, // billing needs the Cloud Billing API + billing account scope
-      estimatedMonthlySavingsCents: null,
     };
   },
 };

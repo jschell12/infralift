@@ -8,6 +8,16 @@
 //   - steady state: best committed-spend tier the workload's annual spend
 //     qualifies for, or a published mechanism (auction) — applied to list.
 
+/** The day the hardcoded price tables were last checked against published
+ * pricing: the target models in sizing.ts (Hetzner, Cloudflare, Neon,
+ * Upstash) and the egress rates in exit-toll.ts. Both were recorded only as
+ * "August 2026"; the commits that wrote them are dated 2026-08-30 and
+ * 2026-08-31, so the first of the month is the date nobody can say is too
+ * fresh. Every savings figure is computed from these tables, so the options
+ * page and /estimate show this date, and pricing.test.ts fails once it is
+ * more than 120 days old. Re-verify the tables, then move it. */
+export const PRICES_VERIFIED_AT = "2026-08-01";
+
 export interface DiscountTierData {
   minAnnualCommitUsd: number;
   discountBps: number;

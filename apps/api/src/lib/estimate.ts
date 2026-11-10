@@ -23,6 +23,7 @@
 
 import type { OpsBurden, OptionSizing } from "@infralift/shared";
 import { compareTarget } from "./compare.js";
+import { PRICES_VERIFIED_AT } from "./pricing.js";
 import { planTarget, sizeTarget, type WorkloadFootprint } from "./sizing.js";
 
 export type { OpsBurden };
@@ -216,6 +217,8 @@ export interface EstimateResult {
   bestSlug: string | null;
   /** Plain-language statements the reader is entitled to argue with. */
   assumptions: string[];
+  /** ISO date the price tables behind every number here were last checked. */
+  pricesVerifiedAt: string;
 }
 
 const TARGET_NAMES: Record<string, string> = {
@@ -302,5 +305,5 @@ export function estimate(input: EstimateInput): EstimateResult {
     );
   }
 
-  return { targets, bestSlug, assumptions };
+  return { targets, bestSlug, assumptions, pricesVerifiedAt: PRICES_VERIFIED_AT };
 }

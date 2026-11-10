@@ -19,6 +19,7 @@ import { compareTarget } from "./compare.js";
 import { prisma } from "./db.js";
 import { DEFAULT_HOURLY_RATE_USD, opsBurden } from "./estimate.js";
 import { computeExitToll } from "./exit-toll.js";
+import { PRICES_VERIFIED_AT } from "./pricing.js";
 import { recommend, type RecommendInput } from "./recommend.js";
 import { computeFootprint, sizeTarget } from "./sizing.js";
 
@@ -396,5 +397,7 @@ export async function buildMigrationOptions(assessment: {
     // every buyer asks after seeing the monthly savings.
     exitToll,
     options,
+    pricesVerifiedAt: PRICES_VERIFIED_AT,
   };
 }
+

@@ -104,8 +104,15 @@ export interface AssessmentSummary {
   startedAt: string | null;
   completedAt: string | null;
   resourceCount: number;
+  /** the inventory at published list prices, as the connector priced it */
   estimatedMonthlyCostCents: number | null;
-  estimatedMonthlySavingsCents: number | null;
+  /** today's bill as the comparison uses it: the customer's own figure, else
+   *  the list-price estimate, else unknown */
+  currentSpend: CurrentSpend;
+  /** the best sized target's net monthly saving after operations work, from
+   *  the same comparison the options page makes. Null when the bill is
+   *  unknown or no target is sized; negative when staying put is cheaper */
+  netMonthlySavingsCents: number | null;
   findingCounts: Record<FindingSeverity, number>;
 }
 
@@ -339,6 +346,8 @@ export interface MigrationOptionsReport {
   /** what it costs once to get the data out, before any target is chosen */
   exitToll: ExitTollEstimate;
   options: MigrationOption[];
+  /** ISO date the sizing and exit-toll price tables were last checked */
+  pricesVerifiedAt: string;
 }
 
 export interface MigrationPhase {

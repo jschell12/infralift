@@ -12,8 +12,10 @@ export interface RecommendInput {
   budgetMonthlyCents: number;
   opsTolerance: number; // 0 wants zero devops … 3 happy to run servers
   trafficGbMonth: number;
-  // Current all-in annual spend (cents) — sizes committed-spend discounts
-  annualSpendCents?: number;
+  // No annual spend: committed-spend tiers qualify on what the customer would
+  // spend on each provider, which computeEffectivePricing derives from that
+  // provider's own price. This used to take today's bill, so a $3,000/mo
+  // account qualified for a $36,000/yr tier on a $15/mo target.
   startupCreditsEligible?: boolean;
 }
 
@@ -169,10 +171,7 @@ export async function recommend(
     pricing: computeEffectivePricing(
       r.typicalMonthlyCents,
       programsBySlug.get(r.slug) ?? [],
-      {
-        annualSpendCents: input.annualSpendCents,
-        startupCreditsEligible: input.startupCreditsEligible,
-      }
+      { startupCreditsEligible: input.startupCreditsEligible }
     ),
   }));
 }

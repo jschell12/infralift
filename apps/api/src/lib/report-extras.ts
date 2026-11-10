@@ -93,6 +93,18 @@ function dollars(cents: number): string {
   return "$" + Math.round(cents / 100).toLocaleString("en-US");
 }
 
+/** The one savings figure an assessment is summarized by: the top option's
+ * net monthly saving after the ops line. Options arrive ranked with sized
+ * targets first by net saving, so this is the best sized target, and it is
+ * null when the bill is unknown or the top option is unsized. The dashboard
+ * home, the projects list and the report's recommendation all read this, so
+ * none of them can quote a different number from the options page. */
+export function headlineNetSavings(
+  report: MigrationOptionsReport
+): number | null {
+  return report.options[0]?.netMonthlySavingsCents ?? null;
+}
+
 export function buildReportExtras(report: MigrationOptionsReport): {
   costProjection: AssessmentCostProjectionRow[];
   recommendation: AssessmentRecommendation | null;
@@ -128,7 +140,7 @@ export function buildReportExtras(report: MigrationOptionsReport): {
   if (!best) return { costProjection: rows, recommendation: null };
 
   // Net of the ops line, the same figure the options page and /estimate show.
-  const savings = best.netMonthlySavingsCents;
+  const savings = headlineNetSavings(report);
   const spendKnown = report.currentSpend.monthlyCents !== null;
   const opsNote = best.ops
     ? ` after ${dollars(best.ops.monthlyCents)}/mo of operations work`

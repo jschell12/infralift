@@ -13,7 +13,8 @@
 // Redis is excluded on purpose: a cache warms on the new side rather than
 // migrating, which is the same thing the migration doc tells customers.
 //
-// Egress rates verified against published pricing, August 2026.
+// Egress rates verified against published pricing on PRICES_VERIFIED_AT
+// (lib/pricing.ts).
 
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 

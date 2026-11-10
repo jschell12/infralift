@@ -8,7 +8,9 @@ export interface ConnectorAssessment {
   inventory: ResourceInventoryItem[];
   findings: Omit<AssessmentFinding, "id">[];
   estimatedMonthlyCostCents: number | null;
-  estimatedMonthlySavingsCents: number | null;
+  // No savings figure: connectors used to subtract a flat $20 VPS from the
+  // bill, which contradicted the sized comparison. Savings are computed from
+  // the inventory by buildMigrationOptions() (services/assessments.ts).
 }
 
 export interface Connector {

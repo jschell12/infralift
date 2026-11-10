@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeEffectivePricing, type DiscountProgramData } from "./pricing.js";
+import {
+  computeEffectivePricing,
+  PRICES_VERIFIED_AT,
+  type DiscountProgramData,
+} from "./pricing.js";
 
 // The programs below are the rows prisma/seed.ts writes for Cloudflare,
 // DigitalOcean and Hetzner, so these tests exercise the numbers the options
@@ -117,5 +121,51 @@ describe("startup credits", () => {
       Math.round((50_000_00 * 12 - 250_000_00) / 12)
     );
     expect(p.year1MonthlyCents).toBeLessThan(p.steadyStateMonthlyCents);
+  });
+});
+
+// The sizing and exit-toll tables are hand-copied from published pricing, and
+// providers change prices without telling us (Hetzner raised CCX prices in
+// June 2026). A date on the page is only honest if something forces it to be
+// renewed, so this fails the build once the tables are four months old.
+// With PRICES_VERIFIED_AT at 2026-08-01 it passes through 2026-11-29 and
+// fails from 2026-11-30.
+const MAX_PRICE_AGE_DAYS = 120;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function ageInDays(verifiedAtMs: number, nowMs: number): number {
+  return Math.floor((nowMs - verifiedAtMs) / DAY_MS);
+}
+
+describe("PRICES_VERIFIED_AT", () => {
+  it("is a real calendar date, not in the future", () => {
+    expect(PRICES_VERIFIED_AT).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const at = Date.parse(`${PRICES_VERIFIED_AT}T00:00:00Z`);
+    expect(new Date(at).toISOString().slice(0, 10)).toBe(PRICES_VERIFIED_AT);
+    expect(at).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("counts age in whole UTC days, so the cutoff lands where it says", () => {
+    // The arithmetic the next test relies on, checked on both sides of the
+    // cutoff rather than only on today's date.
+    const at = Date.parse("2026-08-01T00:00:00Z");
+    expect(ageInDays(at, Date.parse("2026-11-29T23:59:59Z"))).toBe(120);
+    expect(ageInDays(at, Date.parse("2026-11-30T00:00:00Z"))).toBe(121);
+  });
+
+  it(`is no more than ${MAX_PRICE_AGE_DAYS} days old`, () => {
+    const ageDays = ageInDays(
+      Date.parse(`${PRICES_VERIFIED_AT}T00:00:00Z`),
+      Date.now()
+    );
+    expect(
+      ageDays,
+      `PRICES_VERIFIED_AT (${PRICES_VERIFIED_AT}) is ${ageDays} days old. ` +
+        "Re-verify the price tables in apps/api/src/lib/sizing.ts and " +
+        "apps/api/src/lib/exit-toll.ts against each provider's published " +
+        "pricing, update any rate that moved, then set PRICES_VERIFIED_AT in " +
+        "apps/api/src/lib/pricing.ts to the day you checked. The options page " +
+        "and /estimate show this date to customers."
+    ).toBeLessThanOrEqual(MAX_PRICE_AGE_DAYS);
   });
 });

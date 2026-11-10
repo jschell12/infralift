@@ -7,7 +7,8 @@
 // Hetzner — the ones codegen can produce) from what the assessment actually
 // found; everything else returns null and the UI makes no savings claim.
 //
-// Prices verified against published pricing, August 2026:
+// Prices verified against published pricing on PRICES_VERIFIED_AT
+// (lib/pricing.ts), which the UI shows and a test keeps from going stale:
 //   - Hetzner CCX (dedicated vCPU), post-June-2026 increase, EUR list
 //     converted to USD cents (~1.1) and rounded up
 //   - Cloudflare Workers Paid: $5/mo incl 10M requests + 30M CPU-ms;
@@ -343,7 +344,8 @@ function dataLineItems(plan: TargetPlan): SizingLineItem[] {
 // Target models
 // ---------------------------------------------------------------------------
 
-// Hetzner dedicated-vCPU instances, USD cents/mo (EUR list ~+10%, Aug 2026).
+// Hetzner dedicated-vCPU instances, USD cents/mo (EUR list ~+10%, as of
+// PRICES_VERIFIED_AT).
 const HETZNER_CCX: { name: string; ramGb: number; vcpu: number; cents: number }[] = [
   { name: "CCX43", ramGb: 64, vcpu: 16, cents: 10700 },
   { name: "CCX33", ramGb: 32, vcpu: 8, cents: 5400 },
