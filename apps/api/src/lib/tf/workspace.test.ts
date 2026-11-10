@@ -32,7 +32,18 @@ describe("TfCloudWorkspaceAdapter.createWorkspace", () => {
       "vcs-repo": { identifier: "acme/app", "oauth-token-id": "ot-hmAyP66qk2AMVdbJ", branch: "main" },
       "queue-all-runs": true,
     });
-    expect(ws).toMatchObject({ vcsRepo: "acme/app", queueAllRuns: true, linkError: null });
+    expect(ws).toMatchObject({ vcsRepo: "acme/app", queueAllRuns: true, linkError: null, created: true, tfcWorkspaceId: "ws-noZcaGXsac6aZSJR" });
+  });
+
+  it("reports a workspace that already exists as reused, and sends nothing to change it", async () => {
+    const methods: string[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: { method: string }) => {
+      methods.push(init.method);
+      return { ok: true, status: 200, json: async () => JSON.parse(created), text: async () => created };
+    });
+    const ws = await new TfCloudWorkspaceAdapter("t", "acme", undefined, "ot-hmAyP66qk2AMVdbJ").createWorkspace({ ...opts, queueAllRuns: true });
+    expect(methods).toEqual(["GET"]);
+    expect(ws).toMatchObject({ created: false, tfcWorkspaceId: "ws-noZcaGXsac6aZSJR", vcsRepo: "acme/app", workingDirectory: "deploy/infra" });
   });
 
   it("without a VCS token sends neither vcs-repo nor queue-all-runs", async () => {

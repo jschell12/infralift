@@ -103,6 +103,8 @@ From a completed assessment, `POST /tf/imports/from-assessment` opens a PR with 
 
 A project with a Terraform Cloud backend names one of the org's TFC connections (`TfProject.tfcConnectionId`). The workspace is created in that connection's organization, and the generated `cloud {}` block names the same organization (`lib/tf/tfc-connection.ts`). infralift's own TFC organization is never used for a customer project.
 
+Each template, codegen and stack job records the workspace it created as a `managed` `Workspace` row, keyed on org and TFC workspace id, so it shows under Workspaces and in the runs drawer (`lib/tf/workspace-record.ts`). A workspace of that name that was already there is recorded as `adopted`, and infralift then leaves its settings alone, because nothing distinguishes one an earlier run made from one the customer made. Workspaces jobs created before these rows existed appear on the job's next run, as `adopted`, or by adopting them under Workspaces.
+
 ## Security model
 
 - This repository is public. Nothing in it can reach the production host: CI runs on GitHub-hosted runners, and deploys are pulled by a private repository ([ADR 0007](docs/adr/0007-public-repo-private-deploy.md)). Pull requests from forks never run on infrastructure we own.
