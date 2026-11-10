@@ -14,6 +14,7 @@
 import type {
   AssessmentCostProjectionRow,
   AssessmentRecommendation,
+  CurrentSpend,
   MigrationOptionsReport,
   PriceConfidence,
 } from "@infralift/shared";
@@ -23,12 +24,51 @@ import type {
 const TARGETS_SHOWN = 3;
 
 const CONFIDENCE_RANK: Record<PriceConfidence, number> = {
-  invoiced: 0,
-  corroborated: 1,
-  advisor: 2,
-  anecdote: 3,
-  unverified: 4,
+  reported: 0,
+  list_price: 1,
+  corroborated: 2,
+  advisor: 3,
+  anecdote: 4,
+  unverified: 5,
 };
+
+/** The current row says where its number came from. It used to say
+ * "invoiced" whatever the source, and no connector reads an invoice: the ones
+ * that price anything price the inventory at published list rates. */
+function currentRow(
+  provider: string,
+  spend: CurrentSpend
+): AssessmentCostProjectionRow {
+  const cents = spend.monthlyCents;
+  const base = {
+    stack: `Current: ${provider}`,
+    listCents: cents,
+    year1Cents: cents,
+    steadyStateCents: cents,
+    isCurrent: true,
+    source: spend.source,
+  };
+  switch (spend.source) {
+    case "customer_reported":
+      return {
+        ...base,
+        note: "The monthly bill you entered. No discount modelling applies to a bill you already pay.",
+        confidence: "reported",
+      };
+    case "inventory_list_price":
+      return {
+        ...base,
+        note: "The assessed resources at published list prices, not your invoice. Enter your actual bill for a closer comparison.",
+        confidence: "list_price",
+      };
+    case "unknown":
+      return {
+        ...base,
+        note: "This provider does not expose billing to us. Enter your monthly bill to compare.",
+        confidence: "unverified",
+      };
+  }
+}
 
 function isConfidence(value: string): value is PriceConfidence {
   return value in CONFIDENCE_RANK;
@@ -57,19 +97,9 @@ export function buildReportExtras(report: MigrationOptionsReport): {
   costProjection: AssessmentCostProjectionRow[];
   recommendation: AssessmentRecommendation | null;
 } {
-  const rows: AssessmentCostProjectionRow[] = [];
-
-  // The current stack, from the assessment's own inventory pricing. There is
-  // no discount modelling to apply to a bill the customer is already paying.
-  rows.push({
-    stack: `Current: ${report.provider}`,
-    note: "What the assessed resources cost today at the rates on your account.",
-    listCents: report.currentMonthlyCents,
-    year1Cents: report.currentMonthlyCents,
-    steadyStateCents: report.currentMonthlyCents,
-    confidence: "invoiced",
-    isCurrent: true,
-  });
+  const rows: AssessmentCostProjectionRow[] = [
+    currentRow(report.provider, report.currentSpend),
+  ];
 
   // Sized targets lead, because their number is defensible line by line. This
   // is the same ordering buildMigrationOptions already applied.
@@ -97,13 +127,24 @@ export function buildReportExtras(report: MigrationOptionsReport): {
   const best = report.options[0];
   if (!best) return { costProjection: rows, recommendation: null };
 
-  const savings = best.monthlySavingsCents;
-  const summary =
-    savings === null
+  // Net of the ops line, the same figure the options page and /estimate show.
+  const savings = best.netMonthlySavingsCents;
+  const spendKnown = report.currentSpend.monthlyCents !== null;
+  const opsNote = best.ops
+    ? ` after ${dollars(best.ops.monthlyCents)}/mo of operations work`
+    : "";
+  // An unknown bill is not a zero bill. Comparing against zero made every
+  // target look more expensive and told people to stay put on no evidence.
+  const sizedAt = best.sizing
+    ? `is sized at ${dollars(best.sizing.monthlyCents)}/mo for this workload${best.ops ? `, plus ${dollars(best.ops.monthlyCents)}/mo of operations work` : ""}`
+    : "is the closest fit for this workload";
+  const summary = !spendKnown
+    ? `Enter your monthly bill to compare. ${best.name} ${sizedAt}, but without your current bill there is no savings figure worth quoting.`
+    : savings === null
       ? `${best.name} is the closest fit for this workload. We have not sized it against your usage yet, so there is no savings figure here worth quoting.`
       : savings > 0
-        ? `${best.name} fits the workload and costs ${dollars(savings)}/mo less than the current stack, sized from what the assessment actually found.`
-        : `Staying put is the better call. ${best.name} is the closest alternative and it does not beat what you are paying now, so a migration would not pay for itself on cost.`;
+        ? `${best.name} fits the workload and costs ${dollars(savings)}/mo less than the current stack${opsNote}, sized from what the assessment actually found.`
+        : `Staying put is the better call. ${best.name} is the closest alternative and, once its operations work is counted, it does not beat what you are paying now, so a migration would not pay for itself on cost.`;
 
   const recRows: { label: string; value: string }[] = [
     { label: "Runtime", value: report.profile.runtime.replace(/_/g, " ") },
@@ -114,10 +155,19 @@ export function buildReportExtras(report: MigrationOptionsReport): {
     },
   ];
 
+  if (!spendKnown) {
+    recRows.push({ label: "Current bill", value: "not known yet" });
+  }
   if (best.sizing) {
     recRows.push({
       label: "Sized cost",
       value: `${dollars(best.sizing.monthlyCents)}/mo all-in`,
+    });
+  }
+  if (best.ops) {
+    recRows.push({
+      label: "Operations work",
+      value: `${dollars(best.ops.monthlyCents)}/mo (${best.ops.hoursPerMonth} hr at $${best.ops.hourlyRateUsd}/hr)`,
     });
   }
   if (savings !== null) {
@@ -127,6 +177,15 @@ export function buildReportExtras(report: MigrationOptionsReport): {
         savings > 0
           ? `${dollars(savings)} saved`
           : `${dollars(Math.abs(savings))} more`,
+    });
+  }
+  if (best.breakEvenMonths !== null) {
+    recRows.push({
+      label: "Break-even",
+      value:
+        best.breakEvenMonths === 0
+          ? "immediately, no exit toll"
+          : `${best.breakEvenMonths} months`,
     });
   }
   if (report.exitToll.confidence !== "none") {
@@ -143,6 +202,11 @@ export function buildReportExtras(report: MigrationOptionsReport): {
 
   return {
     costProjection: rows,
-    recommendation: { target: best.name, summary, rows: recRows },
+    recommendation: {
+      target: best.name,
+      summary,
+      rows: recRows,
+      netMonthlySavingsCents: savings,
+    },
   };
 }

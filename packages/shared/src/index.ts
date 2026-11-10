@@ -154,6 +154,29 @@ export interface OptionSizing {
   confidence: string;
 }
 
+/** Net-new operations work a target adds each month, priced at an hourly
+ * rate. The same shape the public estimator returns, so the two agree. */
+export interface OpsBurden {
+  hoursPerMonth: number;
+  monthlyCents: number;
+  hourlyRateUsd: number;
+  note: string;
+}
+
+/** Where today's monthly figure came from. A number the customer typed from
+ * their bill beats one we priced from the inventory at published rates, and
+ * either beats a guess; "unknown" means no claim is made against it. */
+export type CurrentSpendSource =
+  | "customer_reported"
+  | "inventory_list_price"
+  | "unknown";
+
+export interface CurrentSpend {
+  /** null when the provider exposes no billing and the customer has not said */
+  monthlyCents: number | null;
+  source: CurrentSpendSource;
+}
+
 export interface MigrationOption {
   slug: string;
   name: string;
@@ -162,9 +185,20 @@ export interface MigrationOption {
   pricing: OptionPricing;
   /** workload-sized estimate; null when this target has no sizing model */
   sizing: OptionSizing | null;
-  /** steady-state savings vs assessed spend; null when the target is unsized
-   *  (no claim beats an absurd claim) */
+  /** infrastructure-only savings vs current spend, before the ops line; null
+   *  when the target is unsized or current spend is unknown (no claim beats
+   *  an absurd claim) */
   monthlySavingsCents: number | null;
+  /** operations work the target adds; null for unsized targets */
+  ops: OpsBurden | null;
+  /** gross savings minus the ops line. The number that means something. */
+  netMonthlySavingsCents: number | null;
+  /** months for the net savings to repay the one-off exit toll (after any
+   *  waiver). 0 when there is no toll; null when nothing is saved or spend
+   *  is unknown */
+  breakEvenMonths: number | null;
+  /** twelve months of net savings minus the exit toll */
+  firstYearNetCents: number | null;
   benefits: string;
   drawbacks: string;
   managedLevel: number;
@@ -175,10 +209,13 @@ export interface MigrationOption {
   codegenTarget: "cloudflare" | "hetzner" | null;
 }
 
-/** How much to trust a price. "invoiced" is what the account actually bills;
- * everything below that is modelled, and the report says which. */
+/** How much to trust a price. "reported" is the bill the customer entered;
+ * "list_price" is the assessed inventory at published rates, which is not the
+ * account's invoice. Everything below that is modelled, and the report says
+ * which. Nothing here reads a billing API, so nothing claims "invoiced". */
 export type PriceConfidence =
-  | "invoiced"
+  | "reported"
+  | "list_price"
   | "corroborated"
   | "advisor"
   | "anecdote"
@@ -194,12 +231,17 @@ export interface AssessmentCostProjectionRow {
   sourceDate?: string;
   /** the stack being migrated away from */
   isCurrent?: boolean;
+  /** on the current row: where its number came from */
+  source?: CurrentSpendSource;
 }
 
 export interface AssessmentRecommendation {
   target: string;
   summary: string;
   rows: { label: string; value: string }[];
+  /** the recommended target's sized net savings (after ops); null when it is
+   *  unsized or current spend is unknown */
+  netMonthlySavingsCents: number | null;
 }
 
 /** Who does a step. A flat fee only survives if this is explicit, and half of
@@ -286,7 +328,7 @@ export interface ExitTollEstimate {
 export interface MigrationOptionsReport {
   assessmentId: string;
   provider: Provider;
-  currentMonthlyCents: number;
+  currentSpend: CurrentSpend;
   needs: InferredNeed[];
   profile: {
     runtime: string;
