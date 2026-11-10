@@ -1,7 +1,21 @@
 name: infra
 
 # Every change to the stack must validate under OpenTofu (the R2 backend)
-# and under Terraform (what a Terraform Cloud workspace runs).
+# and under Terraform (what a Terraform Cloud workspace runs). Then:
+#
+#   pull request   a read-only plan (-lock=false), rendered into the job
+#                  summary. Never applies. Pull requests from forks get no
+#                  secrets, so they get a notice instead of a plan.
+#   push to main   a plan saved to a file, then `apply` of exactly that file
+#                  in the `production` environment. Add required reviewers
+#                  to the environment and the apply waits for one of them,
+#                  with the plan they are approving one click away.
+#
+# Credentials are listed in deploy/README.md. Plans read repository secrets;
+# the apply job also sees the `production` environment's secrets, which win
+# over repository secrets of the same name. So read-only tokens can go on the
+# repository and write tokens on the environment, where only main can use
+# them once the environment is limited to that branch.
 on:
   pull_request:
     paths: ["deploy/**", "infra/docker/**", "api/**", ".github/workflows/infra.yml"]
@@ -11,6 +25,13 @@ on:
 
 permissions:
   contents: read
+
+# Pushes to main share one group: a plan and its apply finish before the next
+# push plans, and nothing in progress is cancelled. Pull request plans are
+# read-only, so a newer push to the same pull request replaces the older one.
+concurrency:
+  group: ${{ github.event_name == 'push' && 'infra-main' || format('infra-pr-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
@@ -42,3 +63,278 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: deploy/box/test-local.sh
+
+  plan-fork:
+    name: infra plan (fork)
+    # A fork's pull request runs without this repository's secrets, and state
+    # cannot be read without them. Say so rather than fail.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          msg="Pull requests from forks get no secrets, so there is no plan. A maintainer can push this branch to the repository to get one."
+          echo "::notice title=infra plan skipped::$msg"
+          echo "### infra plan skipped" >> "$GITHUB_STEP_SUMMARY"
+          echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+
+  plan:
+    name: infra plan
+    needs: validate
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.backend.outputs.kind }}
+      changes: ${{ steps.summary.outputs.changes }}
+    env:
+      # Only a push to main saves a plan. A pull request's plan is never
+      # written anywhere it could be applied from.
+      SAVE_PLAN: ${{ github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: State backend
+        id: backend
+        run: |
+          if grep -Eq '^[[:space:]]*cloud[[:space:]]*\{' deploy/infra/backend.tf; then
+            echo "kind=tfc" >> "$GITHUB_OUTPUT"
+          else
+            echo "kind=r2" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Credentials
+        id: creds
+        env:
+          BACKEND: ${{ steps.backend.outputs.kind }}
+          # Presence only; no value enters this step.
+          HAS_HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN != '' }}
+          HAS_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_INFRA_GIT_TOKEN: ${{ secrets.INFRA_GIT_TOKEN != '' }}
+          HAS_BACKUP_R2_ACCESS_KEY_ID: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID != '' }}
+          HAS_BACKUP_R2_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY != '' }}
+          HAS_TFSTATE_R2_ACCESS_KEY_ID: ${{ secrets.TFSTATE_R2_ACCESS_KEY_ID != '' }}
+          HAS_TFSTATE_R2_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_R2_SECRET_ACCESS_KEY != '' }}
+          HAS_TF_STATE_PASSPHRASE: ${{ secrets.TF_STATE_PASSPHRASE != '' }}
+          HAS_CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID != '' }}
+          HAS_ADMIN_EMAILS: ${{ vars.ADMIN_EMAILS != '' }}
+          HAS_TF_API_TOKEN: ${{ secrets.TF_API_TOKEN != '' }}
+        run: |
+          if [ "$BACKEND" = tfc ]; then
+            need="TF_API_TOKEN"
+          else
+            need="HCLOUD_TOKEN CLOUDFLARE_API_TOKEN INFRA_GIT_TOKEN BACKUP_R2_ACCESS_KEY_ID BACKUP_R2_SECRET_ACCESS_KEY TFSTATE_R2_ACCESS_KEY_ID TFSTATE_R2_SECRET_ACCESS_KEY TF_STATE_PASSPHRASE CLOUDFLARE_ACCOUNT_ID ADMIN_EMAILS"
+          fi
+          missing=""
+          for n in $need; do
+            has="HAS_$n"
+            [ "${!has}" = true ] || missing="$missing $n"
+          done
+          if [ -z "$missing" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+          msg="Not set for the $BACKEND backend:$missing. See deploy/README.md."
+          echo "::warning title=infra plan skipped::$msg"
+          { echo "### infra plan skipped"; echo "$msg"; } >> "$GITHUB_STEP_SUMMARY"
+
+      - if: steps.creds.outputs.ok == 'true' && steps.backend.outputs.kind == 'r2'
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_wrapper: false
+      - if: steps.creds.outputs.ok == 'true' && steps.backend.outputs.kind == 'tfc'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: tofu plan (R2 state)
+        id: plan_r2
+        if: steps.creds.outputs.ok == 'true' && steps.backend.outputs.kind == 'r2'
+        working-directory: deploy/infra
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_R2_SECRET_ACCESS_KEY }}
+          TF_VAR_state_passphrase: ${{ secrets.TF_STATE_PASSPHRASE }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.INFRA_GIT_TOKEN }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          TF_VAR_r2_backup_access_key_id: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID }}
+          TF_VAR_r2_backup_secret_access_key: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY }}
+          TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_admin_emails: ${{ vars.ADMIN_EMAILS }}
+          TF_IN_AUTOMATION: "1"
+        run: |
+          # backend.r2.hcl is per-account and git-ignored; the committed
+          # example names the bucket and key, the account id comes from vars.
+          if [ ! -f backend.r2.hcl ]; then
+            [[ "$TF_VAR_cloudflare_account_id" =~ ^[0-9a-f]{32}$ ]] || { echo "::error::vars.CLOUDFLARE_ACCOUNT_ID is not a Cloudflare account id"; exit 1; }
+            sed "s/<cloudflare-account-id>/$TF_VAR_cloudflare_account_id/" backend.r2.hcl.example > backend.r2.hcl
+          fi
+          tofu init -input=false -backend-config=backend.r2.hcl
+          args=(-input=false -no-color -lock=false -detailed-exitcode)
+          if [ "$SAVE_PLAN" = true ]; then args+=(-out=tfplan); fi
+          set +e
+          tofu plan "${args[@]}" 2>&1 | tee plan.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+
+      - name: terraform plan (Terraform Cloud)
+        id: plan_tfc
+        if: steps.creds.outputs.ok == 'true' && steps.backend.outputs.kind == 'tfc'
+        working-directory: deploy/infra
+        env:
+          # The run executes in the workspace, with the workspace's variables.
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+          TF_IN_AUTOMATION: "1"
+        run: |
+          terraform init -input=false
+          args=(-input=false -no-color -detailed-exitcode)
+          # Without -out this is a speculative run, which TFC cannot apply.
+          if [ "$SAVE_PLAN" = true ]; then args+=(-out=tfplan); fi
+          set +e
+          terraform plan "${args[@]}" 2>&1 | tee plan.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        id: summary
+        if: steps.creds.outputs.ok == 'true'
+        working-directory: deploy/infra
+        env:
+          CODE: ${{ steps.plan_r2.outputs.exitcode || steps.plan_tfc.outputs.exitcode }}
+          TOOL: ${{ steps.backend.outputs.kind == 'tfc' && 'terraform' || 'tofu' }}
+        run: |
+          # -detailed-exitcode: 0 no changes, 1 error, 2 changes.
+          read -r add change destroy < <(
+            sed -nE 's/^Plan: (.*, )?([0-9]+) to add, ([0-9]+) to change, ([0-9]+) to destroy.*/\2 \3 \4/p' plan.txt | tail -1
+          ) || true
+          add=${add:-0} change=${change:-0} destroy=${destroy:-0}
+          changes=false
+          if [ "$CODE" = 2 ] || [ $((add + change + destroy)) -gt 0 ]; then changes=true; fi
+          echo "changes=$changes" >> "$GITHUB_OUTPUT"
+
+          if [ "$CODE" = 1 ] || [ -z "$CODE" ]; then
+            title="infra plan failed"
+            echo "::error title=$title::$TOOL plan exited ${CODE:-without a code}; see the log"
+          elif [ "$changes" = false ]; then
+            title="infra plan: no changes"
+            echo "::notice title=infra plan::no changes"
+          else
+            title="infra plan: $add to add, $change to change, $destroy to destroy"
+            level=notice
+            if [ "$destroy" -gt 0 ]; then level=warning; fi
+            echo "::$level title=infra plan::$add to add, $change to change, $destroy to destroy"
+          fi
+
+          limit=60000
+          {
+            echo "### $title"
+            echo
+            echo "<details><summary>$TOOL plan output</summary>"
+            echo
+            echo '````text'
+            head -c "$limit" plan.txt
+            echo
+            echo '````'
+            if [ "$(wc -c < plan.txt)" -gt "$limit" ]; then
+              echo
+              echo "Truncated at $limit bytes; the whole plan is in this job's log."
+            fi
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$CODE" = 1 ] || [ -z "$CODE" ]; then exit 1; fi
+
+      # The saved plan is the thing the apply job runs, together with the
+      # provider lock it was made with. For R2 it is encrypted with the state
+      # passphrase; for Terraform Cloud it only names the run.
+      - name: Keep the plan for apply
+        if: steps.creds.outputs.ok == 'true' && github.event_name == 'push' && steps.summary.outputs.changes == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: infra-plan
+          path: |
+            deploy/infra/tfplan
+            deploy/infra/.terraform.lock.hcl
+            deploy/infra/plan.txt
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 5
+
+  apply:
+    name: infra apply
+    needs: plan
+    # Never on a pull request, and only when the plan changes something.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.changes == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: infra-plan
+          path: deploy/infra
+
+      - if: needs.plan.outputs.backend == 'r2'
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_wrapper: false
+      - if: needs.plan.outputs.backend == 'tfc'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: tofu apply (R2 state)
+        if: needs.plan.outputs.backend == 'r2'
+        working-directory: deploy/infra
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_R2_SECRET_ACCESS_KEY }}
+          TF_VAR_state_passphrase: ${{ secrets.TF_STATE_PASSPHRASE }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.INFRA_GIT_TOKEN }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          TF_VAR_r2_backup_access_key_id: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID }}
+          TF_VAR_r2_backup_secret_access_key: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY }}
+          TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_admin_emails: ${{ vars.ADMIN_EMAILS }}
+          TF_IN_AUTOMATION: "1"
+        run: |
+          if [ ! -f backend.r2.hcl ]; then
+            [[ "$TF_VAR_cloudflare_account_id" =~ ^[0-9a-f]{32}$ ]] || { echo "::error::vars.CLOUDFLARE_ACCOUNT_ID is not a Cloudflare account id"; exit 1; }
+            sed "s/<cloudflare-account-id>/$TF_VAR_cloudflare_account_id/" backend.r2.hcl.example > backend.r2.hcl
+          fi
+          tofu init -input=false -backend-config=backend.r2.hcl
+          # A saved plan applies as planned or not at all: tofu refuses it if
+          # state moved since, and this run takes the state lock.
+          tofu apply -input=false -no-color tfplan 2>&1 | tee apply.txt
+
+      - name: terraform apply (Terraform Cloud)
+        if: needs.plan.outputs.backend == 'tfc'
+        working-directory: deploy/infra
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+          TF_IN_AUTOMATION: "1"
+        run: |
+          terraform init -input=false
+          # Confirms the saved run the plan job made, nothing newer.
+          terraform apply -input=false -no-color tfplan 2>&1 | tee apply.txt
+
+      - name: Summary
+        if: always()
+        working-directory: deploy/infra
+        env:
+          STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "### infra apply: $STATUS"
+            echo
+            echo '````text'
+            if [ -f apply.txt ]; then tail -c 30000 apply.txt; else echo "apply did not start"; fi
+            echo
+            echo '````'
+          } >> "$GITHUB_STEP_SUMMARY"

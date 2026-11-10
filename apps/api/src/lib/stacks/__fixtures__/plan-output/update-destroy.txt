@@ -1,0 +1,31 @@
+terraform_data.b: Refreshing state... [id=c9f36734-9e05-05b4-56a5-46c853e7fdbd]
+terraform_data.a: Refreshing state... [id=6e6b8b5f-791d-70e2-215a-8704da468476]
+
+OpenTofu used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  ~ update in-place (current -> planned)
+  - destroy
+
+OpenTofu will perform the following actions:
+
+  # terraform_data.a will be updated in-place
+  ~ resource "terraform_data" "a" {
+        id     = "6e6b8b5f-791d-70e2-215a-8704da468476"
+      ~ input  = "1" -> "9"
+      ~ output = "1" -> (known after apply)
+    }
+
+  # terraform_data.b will be destroyed
+  # (because terraform_data.b is not in configuration)
+  - resource "terraform_data" "b" {
+      - id     = "c9f36734-9e05-05b4-56a5-46c853e7fdbd" -> null
+      - input  = "2" -> null
+      - output = "2" -> null
+    }
+
+Plan: 0 to add, 1 to change, 1 to destroy.
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so OpenTofu can't
+guarantee to take exactly these actions if you run "tofu apply" now.

@@ -1,0 +1,12 @@
+terraform_data.a: Refreshing state... [id=6e6b8b5f-791d-70e2-215a-8704da468476]
+
+Changes to Outputs:
+  ~ x = "y" -> "z"
+
+You can apply this plan to save these new output values to the OpenTofu
+state, without changing any real infrastructure.
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so OpenTofu can't
+guarantee to take exactly these actions if you run "tofu apply" now.
