@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { ImportCheckResult, ProviderConnectionSummary } from "@infralift/shared";
-import { api } from "../lib/api";
-import { Chip, INPUT, LABEL, MONO, Note, PrimaryButton, type Tone } from "./ui";
+import { api, errorText } from "../lib/api";
+import { Chip, INPUT, LABEL, MONO, Note, PrimaryButton, Skeleton, type Tone } from "./ui";
 
 // "From a Terraform repo": scan a GitHub repository for root modules and
 // import one. Importing adds a read-only plan check to the repository as a
@@ -76,6 +76,9 @@ export function ImportPanel({ onCreated }: { onCreated: () => void }) {
   const [scan, setScan] = useState<ScanResponse | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // False until connections answer: "Connect GitHub first" is wrong for a
+  // customer whose GitHub connection is still loading.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     api<ProviderConnectionSummary[]>("/connections")
@@ -83,8 +86,9 @@ export function ImportPanel({ onCreated }: { onCreated: () => void }) {
         const gh = c.filter((x) => x.provider === "github");
         setConns(gh);
         setConnectionId(gh[0]?.id ?? "");
+        setLoaded(true);
       })
-      .catch((e) => setError((e as Error).message));
+      .catch((e) => setError(errorText(e)));
   }, []);
 
   async function doScan() {
@@ -99,10 +103,20 @@ export function ImportPanel({ onCreated }: { onCreated: () => void }) {
         })
       );
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(null);
     }
+  }
+
+  if (!loaded && !error) {
+    return (
+      <div role="status" aria-label="Loading GitHub connections">
+        <Skeleton className="h-3 w-full mb-2" />
+        <Skeleton className="h-3 w-2/3 mb-4" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
   }
 
   if (!conns.length && !error) {
@@ -212,7 +226,7 @@ function RootCard({
       });
       onCreated();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -320,7 +334,7 @@ export function ImportCheckStatus({ projectId, last }: { projectId: string; last
     try {
       setResult(await api<ImportCheckResult>(`/tf/imports/${projectId}/check`));
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -389,7 +403,7 @@ export function AdoptCard({ assessmentId, provider }: { assessmentId: string; pr
       setSkipped(out.skipped);
       window.location.href = "/projects";
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { WorkspaceSummary } from "@infralift/shared";
-import { api } from "../../lib/api";
+import { api, errorText } from "../../lib/api";
 import { RunsDrawer } from "../../components/runs-drawer";
 
 export default function WorkspacesPage() {
@@ -13,7 +13,7 @@ export default function WorkspacesPage() {
   const load = useCallback(() => {
     api<WorkspaceSummary[]>(`/workspaces`)
       .then(setWorkspaces)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => setError(errorText(e)));
   }, []);
   useEffect(load, [load]);
   // Read from the list so a link or a run shows up after a reload.

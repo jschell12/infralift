@@ -6,16 +6,19 @@ import {
   type ProviderConnectionSummary,
   type AssessmentSummary,
 } from "@infralift/shared";
-import { api, formatCents, savingsNote } from "../lib/api";
+import { api, errorText, formatCents, savingsNote } from "../lib/api";
 import {
   Card,
   CardTitle,
   Chip,
+  ErrorState,
   H1,
   LEAD,
   NUM,
   Note,
   PrimaryButton,
+  Skeleton,
+  SkeletonCards,
   StatCard,
 } from "../components/ui";
 
@@ -97,9 +100,14 @@ export default function Dashboard() {
   );
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  // A failed load is said, with a retry. It used to be swallowed, which
+  // dropped a signed-in customer with connections into new-user onboarding.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const [u, c, a] = await Promise.all([
         api<AuthUser>("/auth/me"),
@@ -109,8 +117,8 @@ export default function Dashboard() {
       setUser(u);
       setConnections(c);
       setAssessments(a);
-    } catch {
-      // auth error handled gracefully
+    } catch (e) {
+      setLoadError(errorText(e));
     } finally {
       setLoading(false);
     }
@@ -122,8 +130,20 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center text-muted">
-        Loading...
+      <div>
+        <Skeleton className="h-8 w-2/3 max-w-[420px] mb-3" />
+        <Skeleton className="h-4 w-1/2 max-w-[320px] mb-7" />
+        <SkeletonCards count={3} label="Loading your dashboard" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div>
+        <h1 className={H1}>Dashboard</h1>
+        <p className={LEAD}>Your connections and assessments could not be loaded.</p>
+        <ErrorState message={loadError} onRetry={() => void load()} />
       </div>
     );
   }

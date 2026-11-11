@@ -9,17 +9,20 @@ import {
   type MigrationOptionsReport,
   type Provider,
 } from "@infralift/shared";
-import { api, formatCents, formatMonth } from "../../../../lib/api";
+import { api, formatCents, formatMonth, errorText } from "../../../../lib/api";
 import {
   Card,
   CardTitle,
   Chip,
   Drawer,
+  ErrorState,
   INPUT,
   LABEL,
   NUM,
   Note,
   PrimaryButton,
+  Skeleton,
+  SkeletonCards,
   StatCard,
   TableHead,
   TableRow,
@@ -100,7 +103,7 @@ function SpendForm({
       });
       onSaved();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -631,9 +634,10 @@ export default function MigrationOptionsPage({
   const [approved, setApproved] = useState<ApproveResult | null>(null);
 
   function load() {
+    setError(null);
     api<MigrationOptionsReport>(`/assessments/${id}/options`)
       .then(setReport)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => setError(errorText(e)));
   }
 
   useEffect(load, [id]);
@@ -655,14 +659,21 @@ export default function MigrationOptionsPage({
       setApproved(result);
       setApproving(null);
     } catch (e) {
-      setApproveError(e instanceof Error ? e.message : String(e));
+      setApproveError(errorText(e));
     } finally {
       setBusy(false);
     }
   }
 
-  if (error) return <div className="mt-2 text-sm text-danger">{error}</div>;
-  if (!report) return <p className="text-muted">Loading options...</p>;
+  if (error) return <ErrorState message={error} onRetry={load} />;
+  if (!report) {
+    return (
+      <div>
+        <Skeleton className="h-8 w-1/2 max-w-[360px] mb-7" />
+        <SkeletonCards count={3} label="Loading options" />
+      </div>
+    );
+  }
 
   // The API already ranks sized options first by net saving, so the top one
   // is the one whose number we can defend line by line.

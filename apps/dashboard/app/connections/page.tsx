@@ -8,17 +8,19 @@ import {
   type Provider,
   type ProviderConnectionSummary,
 } from "@infralift/shared";
-import { api } from "../../lib/api";
+import { api, errorText } from "../../lib/api";
 import {
   Card,
   CardTitle,
   Chip,
   Drawer,
+  ErrorState,
   H1,
   INPUT,
   LABEL,
   Note,
   PrimaryButton,
+  Skeleton,
   TableHead,
 } from "../../components/ui";
 
@@ -144,7 +146,7 @@ function ReplaceDrawer({
       });
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -207,7 +209,7 @@ function ConnectionRow({ c, onChanged }: { c: ProviderConnectionSummary; onChang
       setConfirming(false);
       onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -286,7 +288,7 @@ function TfcConnectCard({ onAdded }: { onAdded: () => void }) {
       setToken("");
       onAdded();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -371,13 +373,17 @@ export default function ConnectionsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [awsSetup, setAwsSetup] = useState<AwsSetup | null>(null);
+  // False until the list first answers, so "No connections yet" is not shown
+  // while connections are still loading.
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setConnections(await api<ProviderConnectionSummary[]>("/connections"));
       setError(null);
+      setLoaded(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
   }, []);
 
@@ -389,7 +395,7 @@ export default function ConnectionsPage() {
     if (provider !== "aws" || awsSetup) return;
     api<AwsSetup>("/connections/aws-setup")
       .then(setAwsSetup)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => setError(errorText(e)));
   }, [provider, awsSetup]);
 
   // deep link from the dashboard provider cards: /connections?provider=heroku
@@ -413,7 +419,7 @@ export default function ConnectionsPage() {
       setToken("");
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -500,11 +506,21 @@ export default function ConnectionsPage() {
 
         <Card>
           <CardTitle>Connected</CardTitle>
-          <p className="mb-3 text-[13px] text-faint">
-            {connections.length
-              ? "Each connection is assessed independently and combined into one report."
-              : "No connections yet."}
-          </p>
+          {loaded ? (
+            <p className="mb-3 text-[13px] text-faint">
+              {connections.length
+                ? "Each connection is assessed independently and combined into one report."
+                : "No connections yet."}
+            </p>
+          ) : error ? (
+            <ErrorState message={error} onRetry={() => void load()} />
+          ) : (
+            <div role="status" aria-label="Loading connections">
+              <Skeleton className="h-3 w-2/3 mb-4" />
+              <Skeleton className="h-10 w-full mb-2" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          )}
           {connections.length > 0 && (
             <>
               <TableHead cols={COLS}>

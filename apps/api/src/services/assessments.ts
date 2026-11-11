@@ -1,6 +1,6 @@
 import type { CurrentSpend, Provider } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
-import { NotFound } from "../lib/errors.js";
+import { Conflict, NotFound } from "../lib/errors.js";
 import { buildMigrationOptions, resolveCurrentSpend } from "../lib/options.js";
 import { headlineNetSavings } from "../lib/report-extras.js";
 
@@ -27,6 +27,43 @@ export async function setReportedSpend(
     },
     select: { id: true, reportedMonthlySpendCents: true },
   });
+}
+
+/** How long a run may sit in "running" or "pending" before a new run of the
+ *  same connection is allowed anyway. Runs are synchronous and finish in
+ *  seconds; one older than this was left behind by a process that died
+ *  mid-run (nothing marks it failed), and it must not lock the connection out
+ *  for good. */
+export const RUN_IN_FLIGHT_WINDOW_MS = 15 * 60 * 1000;
+
+/** Refuses a second run of a connection while one is still going: a double
+ *  tap, a second tab, or a retry while the first request is still waiting on
+ *  the provider. 409 with the running assessment's id.
+ *
+ *  This is a read before the insert, so two requests arriving within the same
+ *  few milliseconds can both pass it. The dashboard disables the button on
+ *  the first tap for that case; closing it on the server would need a lock or
+ *  a partial unique index, which a stuck run would then hold forever. */
+export async function refuseConcurrentRun(
+  orgId: string,
+  connectionId: string,
+  now: Date = new Date()
+): Promise<void> {
+  const running = await prisma.assessment.findFirst({
+    where: {
+      orgId,
+      connectionId,
+      status: { in: ["pending", "running"] },
+      createdAt: { gte: new Date(now.getTime() - RUN_IN_FLIGHT_WINDOW_MS) },
+    },
+    select: { id: true },
+  });
+  if (running) {
+    throw new Conflict(
+      "An assessment of this account is already running. Wait for it to finish, then try again.",
+      { assessmentId: running.id }
+    );
+  }
 }
 
 /** What an assessment summary says it would save, and the bill that saving is
