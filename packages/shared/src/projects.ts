@@ -37,8 +37,10 @@ interface ProjectCommon {
 
 /** Whether what is running still matches the code on the default branch,
  *  from the daily `infra drift` check. "unknown": the check has not run, is
- *  running, or failed before it could compare. */
-export type DriftState = "none" | "drift" | "unknown";
+ *  running, or failed before it could compare. "unapplied": an adopted
+ *  module's import blocks are merged but no apply has recorded them in state,
+ *  so there is nothing yet to drift from. */
+export type DriftState = "none" | "drift" | "unknown" | "unapplied";
 
 export interface DriftStatus {
   state: DriftState;

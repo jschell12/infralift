@@ -76,6 +76,8 @@ export function classifyDrift(
   const notices = by("notice");
   const errors = by("failure");
   if (run.conclusion === "success") {
+    const unapplied = notices.find(READ_DRIFT.unapplied);
+    if (unapplied) return { ...base, state: "unapplied", message: unapplied };
     const none = notices.find(READ_DRIFT.none);
     if (none) return { ...base, state: "none", message: none };
   }

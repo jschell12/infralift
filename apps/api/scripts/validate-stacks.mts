@@ -13,6 +13,9 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { listStacks, renderStack } from "../src/lib/stacks/index.js";
+import { renderImportCheck } from "../src/lib/import/check.js";
+import { renderApplyWorkflow } from "../src/lib/import/apply.js";
+import { scanRepo } from "../src/lib/import/scan.js";
 
 function run(cwd: string, cmd: string, args: string[]) {
   try {
@@ -90,6 +93,29 @@ for (const stack of listStacks()) {
     } finally {
       rmSync(out, { recursive: true, force: true });
     }
+  }
+}
+
+// An adoption's workflows as a customer gets them: the import check (which
+// generates code and guards it) and the apply. Lint only; they need a cloud.
+{
+  const out = mkdtempSync(join(tmpdir(), "import-workflows-"));
+  try {
+    const module = 'terraform {\n  backend "s3" {\n    bucket = "b"\n    key = "k"\n  }\n}\nresource "aws_s3_bucket" "b" {}\n';
+    const root = { ...scanRepo([{ path: "infra/main.tf", content: module }]).roots[0], generateConfig: true };
+    const files = [renderImportCheck(root), renderApplyWorkflow(root, { branch: "main", repo: "example/infra" })];
+    for (const f of files) {
+      mkdirSync(dirname(join(out, f.path)), { recursive: true });
+      writeFileSync(join(out, f.path), f.content);
+    }
+    if (has("actionlint")) run(out, "actionlint", files.map((f) => f.path));
+    else if (process.env.CI) throw new Error("actionlint is not installed, and CI must lint the rendered workflows");
+    console.log("ok   import check + apply workflows");
+  } catch (err) {
+    failures++;
+    console.error(`FAIL import check + apply workflows\n${(err as Error).message}`);
+  } finally {
+    rmSync(out, { recursive: true, force: true });
   }
 }
 process.exit(failures ? 1 : 0);

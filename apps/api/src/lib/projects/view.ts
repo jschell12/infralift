@@ -32,7 +32,7 @@ export class ProjectShapeError extends Error {
 const settings = (v: Prisma.JsonValue): Record<string, unknown> =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
-const DRIFT_STATES: readonly string[] = ["none", "drift", "unknown"];
+const DRIFT_STATES: readonly string[] = ["none", "drift", "unknown", "unapplied"];
 
 function driftOf(row: ProjectRow): DriftStatus | null {
   if (!row.driftState || !row.driftCheckedAt || !DRIFT_STATES.includes(row.driftState)) return null;

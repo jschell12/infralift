@@ -11,3 +11,4 @@ One page per decision that shaped infralift: what was decided, why, and what it 
 | [0005](0005-services-and-typed-errors.md) | Rules live in services; failures are typed errors | 2026-11-08 |
 | [0006](0006-job-queue-no-auto-retry.md) | Jobs are a queue in Postgres, and interrupted jobs are not retried | 2026-11-08 |
 | [0007](0007-public-repo-private-deploy.md) | The repository is public; deploys are pulled by a private repository | 2026-11-09 |
+| [0008](0008-adoption-applies-a-saved-plan.md) | An adoption is applied by a saved plan in the customer's CI | 2026-11-10 |

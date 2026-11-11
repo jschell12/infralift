@@ -750,6 +750,7 @@ const DRIFT_LOOK: Record<DriftStatus["state"], { tone: Tone; text: string }> = {
   drift: { tone: "danger", text: "drift detected" },
   none: { tone: "accent", text: "no drift" },
   unknown: { tone: "muted", text: "drift unknown" },
+  unapplied: { tone: "warn", text: "adopted, not yet applied" },
 };
 
 /** What the daily drift check on the default branch last said, read by the

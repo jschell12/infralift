@@ -440,7 +440,7 @@ model TfProject {
   // Last result of that check, read back from GitHub (lib/import/result.ts).
   importCheckJson   Json?
   // Drift on the default branch, from the daily `infra drift` check run, read
-  // by services/drift.ts. State: none | drift | unknown. RanAt is when the
+  // by services/drift.ts. State: none | drift | unknown | unapplied. RanAt is when the
   // plan ran; CheckedAt is when infralift last read it. See migration 0025.
   driftState        String?
   driftMessage      String?
