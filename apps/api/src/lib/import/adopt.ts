@@ -1,6 +1,7 @@
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
-import { importBlockFor, providerSource } from "../tf/codegen.js";
+import { providerSource } from "../tf/codegen.js";
 import { PROVIDER_ENV, type RootModule } from "./scan.js";
+import { adopterFor, isSkip, providerBlocks, providerSettings, regionAlias, type ProviderSettings } from "./adopters/index.js";
 import { attr, blank, block, comment, expr, file as hcl } from "../hcl/write.js";
 
 // ---------------------------------------------------------------------------
@@ -24,46 +25,25 @@ export interface AdoptBackend {
 }
 
 export interface AdoptPlan {
-  imports: { to: string; id: string; type: string; name: string }[];
+  /** `provider` is an alias address (aws.us_west_2) when the import is not on
+   *  the default provider. */
+  imports: { to: string; id: string; type: string; name: string; provider?: string }[];
   /** Inventory items left out, with the reason, so a partial adoption never
    *  reads as a whole one. */
   skipped: { type: string; name: string; reason: string }[];
+  /** What provider.tf needs: a project, region aliases. */
+  settings?: ProviderSettings;
 }
 
 export class AdoptInputError extends Error {}
 
-// Import mappings used for adoption only. They are kept out of codegen's
-// table because codegen writes resource blocks for everything it imports, and
-// an import block with no resource block is an error there. Here the resource
-// block is generated, so any resource with a known import id format works.
-const ADOPT_ONLY: Partial<Record<Provider, (item: ResourceInventoryItem) => { to: string; id: string } | null>> = {
-  cloudflare: (item) =>
-    item.type === "cloudflare:zone" ? { to: `cloudflare_zone.${tfName(item.name)}`, id: item.externalId } : null,
-  digitalocean: (item) =>
-    item.type === "digitalocean:domain" ? { to: `digitalocean_domain.${tfName(item.name)}`, id: item.externalId } : null,
-  gcp: (item) =>
-    item.type === "gcp:gcs_bucket" ? { to: `google_storage_bucket.${tfName(item.name)}`, id: item.externalId } : null,
-  azure: (item) => {
-    // azurerm imports by the full ARM resource id, which the connector stores.
-    const type: Record<string, string> = {
-      "azure:storage_account": "azurerm_storage_account",
-      "azure:app_service_plan": "azurerm_service_plan",
-      "azure:sql_server": "azurerm_mssql_server",
-      "azure:sql_database": "azurerm_mssql_database",
-    };
-    const t = type[item.type];
-    return t && item.externalId.startsWith("/subscriptions/") ? { to: `${t}.${tfName(item.name)}`, id: item.externalId } : null;
-  },
-};
+// Which inventory items map to which import blocks is each provider's
+// adopter (./adopters/). Adoption writes no resource code, so unlike codegen
+// any resource with a known import id format can be adopted.
 
 /** A name from the provider, for a one-line HCL comment. */
 function commentSafe(name: string): string {
   return name.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 200);
-}
-
-/** Same rule codegen uses for resource names. */
-function tfName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, "_").replace(/^[0-9]/, "_$&");
 }
 
 /** An import id goes into HCL inside quotes. Anything that could close the
@@ -74,11 +54,18 @@ export function planAdoption(provider: Provider, inventory: ResourceInventoryIte
   const imports: AdoptPlan["imports"] = [];
   const skipped: AdoptPlan["skipped"] = [];
   const taken = new Set<string>();
+  const regions = new Set<string>();
+  const adopter = adopterFor(provider);
+  const alias = providerSource(provider)?.name ?? provider;
   for (const item of inventory) {
     if (item.type.endsWith(":usage")) continue;
-    const block = importBlockFor(provider, item) ?? ADOPT_ONLY[provider]?.(item) ?? null;
+    const block = adopter.map(item);
     if (!block) {
       skipped.push({ type: item.type, name: item.name, reason: "no Terraform import mapping for this kind yet" });
+      continue;
+    }
+    if (isSkip(block)) {
+      skipped.push({ type: item.type, name: item.name, reason: block.skip });
       continue;
     }
     if (!SAFE_ID.test(block.id)) {
@@ -89,9 +76,16 @@ export function planAdoption(provider: Provider, inventory: ResourceInventoryIte
     let to = block.to;
     for (let n = 2; taken.has(to); n++) to = `${block.to}_${n}`;
     taken.add(to);
-    imports.push({ to, id: block.id, type: item.type, name: item.name });
+    if (block.region) {
+      regions.add(block.region);
+      imports.push({ to, id: block.id, type: item.type, name: item.name, provider: `${alias}.${regionAlias(block.region)}` });
+    } else {
+      imports.push({ to, id: block.id, type: item.type, name: item.name });
+    }
   }
-  return { imports, skipped };
+  const settings: ProviderSettings = { ...providerSettings(provider, inventory) };
+  if (regions.size) settings.regions = [...regions].sort();
+  return { imports, skipped, settings };
 }
 
 const BUCKET = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
@@ -170,7 +164,7 @@ export function renderAdoption(opts: {
         comment(
           `Managed by infralift. Credentials come from the environment, never from\nthis file: ${providerCredentials(provider).join(", ") || "see the provider's docs"}.`
         ),
-        block("provider", [src.name], []),
+        ...providerBlocks(provider, src.name, plan.settings).flatMap((b, i) => (i ? [blank, b] : [b])),
       ]),
     },
     {
@@ -188,7 +182,12 @@ export function renderAdoption(opts: {
           blank,
           comment(`${i.type}: ${commentSafe(i.name)}`),
           // `to` is a resource address, an expression; `id` is a string.
-          block("import", [], [attr("to", expr(i.to)), attr("id", i.id)]),
+          block("import", [], [
+            attr("to", expr(i.to)),
+            attr("id", i.id),
+            // Built from a validated region, never from provider text.
+            ...(i.provider ? [attr("provider", expr(i.provider))] : []),
+          ]),
         ]),
       ]),
     },

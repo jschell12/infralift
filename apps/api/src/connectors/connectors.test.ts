@@ -17,6 +17,7 @@ import { getConnector } from "./index.js";
 const cfVerify = JSON.parse(
   readFileSync(new URL("./__fixtures__/cloudflare-token-verify.json", import.meta.url), "utf8")
 );
+const cfApi = JSON.parse(readFileSync(new URL("./__fixtures__/cloudflare-api.json", import.meta.url), "utf8"));
 
 // ---------------------------------------------------------------------------
 // Shared fetch mock helpers
@@ -185,6 +186,44 @@ describe("cloudflare", () => {
     expect(types).toContain("cloudflare:r2_bucket");
     expect(types).toContain("cloudflare:zone");
     expect(result.findings.some((f) => f.category === "iac_standard")).toBe(true);
+  });
+
+  it("follows zone pages, records account ids, and lists DNS records per zone", async () => {
+    mockRoute({
+      "/accounts?": cfApi.accounts,
+      "/r2/buckets": cfApi.r2Buckets,
+      "/zones?per_page=50&page=1": cfApi.zonesPage1,
+      "/zones?per_page=50&page=2": cfApi.zonesPage2,
+      "/dns_records?": cfApi.dnsRecords,
+    });
+    const { inventory, findings } = await cloudflareConnector.assess("tok");
+    expect(inventory.filter((i) => i.type === "cloudflare:zone").map((i) => i.name)).toEqual(["example.com", "example.org"]);
+    const records = inventory.filter((i) => i.type === "cloudflare:dns_record");
+    expect(records.map((r) => r.metadata?.zoneId)).toEqual(["023e105f4ecef8ad9ca31a8372d0c353", "353c0d2783a8ac9da8fece4f501e320c"]);
+    expect(records[0]).toMatchObject({ externalId: "023e105f4ecef8ad9ca31a8372d0c353", name: "example.com", metadata: { recordType: "A" } });
+    expect(inventory.find((i) => i.type === "cloudflare:r2_bucket")?.metadata).toMatchObject({
+      accountId: "023e105f4ecef8ad9ca31a8372d0c353",
+      jurisdiction: "default",
+    });
+    expect(findings.some((f) => f.title === "Cloudflare inventory was cut off")).toBe(false);
+  });
+
+  it("says so when a list is cut off at its bound", async () => {
+    // Every page claims more pages follow, so the walk stops at MAX_PAGES.
+    const endless = { ...cfApi.zonesPage1, result_info: { ...cfApi.zonesPage1.result_info, total_pages: 999 } };
+    mockRoute({ "/accounts?": cfApi.accounts, "/zones?": endless });
+    const { inventory, findings } = await cloudflareConnector.assess("tok");
+    expect(inventory.filter((i) => i.type === "cloudflare:zone")).toHaveLength(20);
+    expect(findings.find((f) => f.title === "Cloudflare inventory was cut off")?.detail).toContain("zones (first 20)");
+  });
+
+  it("stops on an empty page even when result_info says more follow", async () => {
+    const empty = { ...cfApi.zonesPage1, result: [], result_info: { ...cfApi.zonesPage1.result_info, total_pages: 5 } };
+    mockRoute({ "/accounts?": cfApi.accounts, "/zones?": empty });
+    const { inventory, findings } = await cloudflareConnector.assess("tok");
+    expect(inventory.filter((i) => i.type === "cloudflare:zone")).toEqual([]);
+    expect(findings.some((f) => f.title === "Cloudflare inventory was cut off")).toBe(false);
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes("/zones?"))).toHaveLength(1);
   });
 });
 
