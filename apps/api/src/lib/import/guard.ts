@@ -29,11 +29,18 @@ export const SENSITIVE_WORDS = [
 ] as const;
 
 /** Names that carry a sensitive word but hold a reference or a setting:
- *  `secret_arn`, `kms_key_id`, `token_length`, `auth_enabled`. */
-const NOT_A_VALUE = "_(arn|arns|id|ids|name|names|version|versions|type|types|length|enabled|ttl|count|days|validity|units|mode|policy)$";
+ *  `secret_arn`, `kms_key_id`, `token_length`, `secret_version_stage`. */
+const NOT_A_VALUE = "_(arn|arns|id|ids|name|names|version|versions|type|types|length|enabled|ttl|count|days|validity|units|mode|policy|stage|stages)$";
 
 // POSIX awk, so it runs the same under mawk (ubuntu runners) and BSD awk.
 // No single quote anywhere: it is passed to awk in single quotes.
+//
+// Names are matched, so a secret under an innocent name (`description`, a map
+// key like `"x"`) gets past this scan; gitleaks is the backstop, and it finds
+// only known formats and high-entropy values. Two common shapes are covered:
+// quoted map keys (`"db-password" = ...`, dashes read as underscores) and
+// name/value pairs, as in ECS container definitions written as
+// `jsonencode([{ name = "DB_PASSWORD", value = "..." }])`.
 const AWK = [
   "function sensitive(n,   w, i) {",
   `  if (n ~ /${NOT_A_VALUE}/) return 0`,
@@ -48,8 +55,19 @@ const AWK = [
   '    t = $0; sub(/^[ \\t]+/, "", t)',
   '    if (t != "") { if (t !~ /^[]}]/) report(pendln, pend); pend = "" }',
   "  }",
-  "  if ($0 !~ /^[ \\t]*[A-Za-z0-9_]+[ \\t]*=/) next",
-  '  name = $0; sub(/^[ \\t]+/, "", name); sub(/[ \\t]*=.*/, "", name); name = tolower(name)',
+  // A sensitive name in a name/value pair holds the next value seen.
+  '  if (match($0, /(^|[^A-Za-z0-9_])name[ \\t]*=[ \\t]*"[^"]*"/)) {',
+  '    s = substr($0, RSTART, RLENGTH); sub(/^.*name[ \\t]*=[ \\t]*"/, "", s); sub(/"$/, "", s)',
+  '    s = tolower(s); gsub(/-/, "_", s); if (sensitive(s)) { nv = s; nvln = NR }',
+  "  }",
+  '  if (nv != "" && match($0, /(^|[^A-Za-z0-9_])value[ \\t]*=[ \\t]*[^ \\t,}]+/)) {',
+  '    s = substr($0, RSTART, RLENGTH); sub(/^.*value[ \\t]*=[ \\t]*/, "", s)',
+  '    if (s !~ /^(null|""|true|false)$/ && s !~ /^-?[0-9.]+$/) report(NR, nv)',
+  '    nv = ""',
+  "  }",
+  '  if ($0 ~ /}/) nv = ""',
+  '  if ($0 !~ /^[ \\t]*"?[A-Za-z0-9_-]+"?[ \\t]*=/) next',
+  '  name = $0; sub(/^[ \\t]+/, "", name); sub(/[ \\t]*=.*/, "", name); gsub(/"/, "", name); name = tolower(name); gsub(/-/, "_", name)',
   "  if (!sensitive(name)) next",
   '  v = $0; sub(/^[^=]*=[ \\t]*/, "", v); sub(/[ \\t]+$/, "", v)',
   // null (Terraform writes `null # sensitive`), empty, booleans, numbers.
@@ -60,10 +78,15 @@ const AWK = [
   'END { if (pend != "") report(pendln, pend); exit (found > 0) }',
 ].join("\n");
 
-/** Prints a JSON-lines plan log's error diagnostics, and nothing else. */
+/** Prints a JSON-lines plan log's error diagnostics, and nothing else. A
+ *  plan that fails before its JSON starts (bad flags, a crashed provider)
+ *  wrote plain text instead, which is Terraform's own stderr, so that is
+ *  printed. */
 export function printDiagnostics(log: string): string[] {
   return [
-    `jq -rR 'fromjson? | select(."@level" == "error") | .diagnostic | "Error: \\(.summary)\\(if .address then " (\\(.address))" else "" end)\\(if .detail then ": \\(.detail[0:300])" else "" end)"' ${log} | head -n 20 || true`,
+    `out=$(jq -rR 'fromjson? | select(."@level" == "error") | .diagnostic | "Error: \\(.summary)\\(if .address then " (\\(.address))" else "" end)\\(if .detail then ": \\(.detail[0:300])" else "" end)"' ${log} | head -n 20 || true)`,
+    `[ -n "$out" ] || out=$(grep -v '^{' ${log} | head -n 20 || true)`,
+    'printf "%s\\n" "${out:-Terraform printed no diagnostics.}"',
   ];
 }
 

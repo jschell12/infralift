@@ -28,7 +28,7 @@ const ADOPTED = {
   generateConfig: true,
 };
 
-type Wf = { on: Record<string, unknown>; jobs: Record<string, { steps: { run?: string; uses?: string; name?: string; id?: string; with?: Record<string, unknown> }[] } & Record<string, unknown>> } & Record<string, unknown>;
+type Wf = { on: Record<string, unknown>; jobs: Record<string, { steps: { run?: string; uses?: string; name?: string; id?: string; if?: string; with?: Record<string, unknown> }[] } & Record<string, unknown>> } & Record<string, unknown>;
 const apply = () => parse(renderApplyWorkflow(ADOPTED, { branch: "main", repo: "acme/infra" }).content) as Wf;
 
 const has = (cmd: string) => spawnSync("sh", ["-c", `command -v ${cmd}`]).status === 0;
@@ -55,34 +55,33 @@ describe("the apply workflow", () => {
     const wf = apply();
     expect(Object.keys(wf.on)).toEqual(["push"]);
     expect(wf.on.push).toEqual({ branches: ["main"], paths: ["infra/**", applyWorkflowPath("infra")] });
-    for (const job of Object.values(wf.jobs)) {
-      expect(job.if).toContain("github.event_name == 'push' && github.ref == 'refs/heads/main'");
-      // A fork's copy of the workflow never plans or applies.
-      expect(job.if).toContain("github.repository == 'acme/infra'");
-    }
+    // A fork's copy of the workflow never plans or applies.
+    expect(wf.jobs.apply.if).toBe("github.repository == 'acme/infra' && github.event_name == 'push' && github.ref == 'refs/heads/main'");
     // The import check gains no apply and no push trigger.
     const check = renderImportCheck(ADOPTED).content;
     expect(Object.keys(parse(check).on)).toEqual(["pull_request", "schedule", "workflow_dispatch"]);
     expect(check).not.toMatch(/\b(terraform|tofu) apply\b|upload-artifact|environment:/);
   });
 
-  it("applies exactly the saved plan, in production, with the lock file it was made with", () => {
+  it("plans and applies exactly that plan in one production job, and uploads nothing", () => {
     const wf = apply();
-    const { plan, apply: job } = wf.jobs;
+    expect(Object.keys(wf.jobs)).toEqual(["apply"]);
+    const job = wf.jobs.apply;
     expect(job.environment).toBe("production");
-    expect(plan).not.toHaveProperty("environment");
-    expect(job.needs).toBe("plan");
-    expect(job.if).toMatch(/^needs\.plan\.outputs\.apply == 'true' && /);
-    const planRun = plan.steps.find((s) => s.id === "plan")!.run!;
+    const steps = job.steps;
+    // The plan file holds state values in plaintext; it never leaves the runner.
+    expect(steps.map((s) => s.uses ?? "").filter((u) => /upload-artifact|download-artifact|cache/.test(u))).toEqual([]);
+    const planAt = steps.findIndex((s) => s.id === "plan");
+    const planRun = steps[planAt].run!;
     expect(planRun).toContain("terraform plan -input=false -no-color -json -out=infralift.tfplan");
     expect(planRun).not.toContain("-lock=false");
-    const upload = plan.steps.find((s) => s.uses === "actions/upload-artifact@v4")!;
-    expect(upload.with!.path).toBe("infra/infralift.tfplan\ninfra/.terraform.lock.hcl\n");
-    expect(upload.with!["include-hidden-files"]).toBe(true);
-    expect(job.steps.find((s) => s.uses === "actions/download-artifact@v4")!.with).toEqual({ name: "infralift-plan-infra", path: "infra" });
-    expect(job.steps.find((s) => s.name === "Init")!.run).toContain("terraform init -input=false -lockfile=readonly");
-    expect(job.steps.at(-1)!.run).toBe("terraform apply -input=false -no-color infralift.tfplan\n");
-    expect(Object.values(wf.jobs).flatMap((j) => j.steps.map((s) => s.run ?? "")).join("\n")).not.toContain("-auto-approve");
+    // The apply consumes the plan this job just made, and only one init ran.
+    const last = steps.at(-1)!;
+    expect(steps.indexOf(last)).toBeGreaterThan(planAt);
+    expect(last.if).toBe("steps.plan.outputs.apply == 'true'");
+    expect(last.run).toBe("terraform apply -input=false -no-color infralift.tfplan\n");
+    expect(steps.filter((s) => /\binit\b/.test(s.run ?? ""))).toHaveLength(1);
+    expect(steps.map((s) => s.run ?? "").join("\n")).not.toContain("-auto-approve");
   });
 
   it("runs bash with pipefail, reads only, and is never cancelled by anything", () => {
@@ -109,7 +108,7 @@ describe("the apply workflow", () => {
   });
 
   it("applies nothing when the plan imports and changes nothing", () => {
-    const step = apply().jobs.plan.steps.find((s) => s.id === "plan")!;
+    const step = apply().jobs.apply.steps.find((s) => s.id === "plan")!;
     const real = readFileSync(join(FIX, "plan-import-only.json"), "utf8");
     const dir = scratch();
     stubTerraform(dir, real);
@@ -166,6 +165,14 @@ describe("drift on an adopted module that was never applied", () => {
     expect(r.stdout).not.toContain("@message");
     expect(r.stdout).not.toContain("Plan: 0 to add");
   });
+
+  it("prints Terraform's stderr when the plan fails before its JSON starts", () => {
+    const dir = scratch();
+    stubTerraform(dir, "{}", 1, "Error: Invalid backend configuration\n");
+    const r = bash(driftGate(), dir, { MODULE_LABEL: "infra" });
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain("Error: Invalid backend configuration");
+  });
 });
 
 describe("the secret guard on generated.tf", () => {
@@ -197,7 +204,16 @@ describe("the secret guard on generated.tf", () => {
   });
 
   it("passes what Terraform writes for a sensitive attribute, and references to secrets", () => {
-    for (const line of ["  admin_password = null # sensitive", '  secret_arn = "arn:aws:secretsmanager:us-east-1:1:secret:x"', "  token_length = 32", '  password = ""']) {
+    for (const line of [
+      "  admin_password = null # sensitive",
+      '  secret_arn = "arn:aws:secretsmanager:us-east-1:1:secret:x"',
+      '  secret_version_stage = "AWSCURRENT"',
+      '  secret_name = "db"',
+      "  token_length = 32",
+      '  password = ""',
+      '  env = [{ name = "DB_HOST", value = "db.internal" }]',
+      '  env = [{ name = "DB_PASSWORD", value = null }]',
+    ]) {
       expect(scan(GENERATED.replace("  override_special = null", line)).status, line).toBe(0);
     }
   });
@@ -206,6 +222,29 @@ describe("the secret guard on generated.tf", () => {
     expect(scan(GENERATED.replace("  override_special = null", '  config_vars = {\n    DATABASE_URL = "x"\n  }')).status).toBe(1);
     expect(scan(GENERATED.replace("  override_special = null", '  config_vars = { A = "b" }')).status).toBe(1);
     expect(scan(GENERATED.replace("  override_special = null", "  config_vars = {\n  }")).status).toBe(0);
+  });
+
+  it("blocks quoted map keys and name/value pairs with credential-like names", () => {
+    // Hand-written shapes edited into the real file: a quoted map key, and an
+    // ECS container definition's environment as generate-config-out writes it.
+    const quoted = scan(GENERATED.replace("  override_special = null", '  tags = {\n    "db-password" = "hunter2"\n  }'));
+    expect(quoted.stdout).toBe("generated.tf:15: db_password holds a literal value\n");
+    const ecs = [
+      "  container_definitions = jsonencode([{",
+      "    environment = [{",
+      '      name  = "DB_PASSWORD"',
+      '      value = "hunter2"',
+      "      }, {",
+      '      name  = "DB_HOST"',
+      '      value = "db.internal"',
+      "    }]",
+      '    name = "web"',
+      "  }])",
+    ].join("\n");
+    const r = scan(GENERATED.replace("  override_special = null", ecs));
+    expect(r.stdout).toBe("generated.tf:17: db_password holds a literal value\n");
+    expect(r.stdout).not.toContain("hunter2");
+    expect(scan(GENERATED.replace("  override_special = null", '  env = [{ name = "API_TOKEN", value = "x" }]')).status).toBe(1);
   });
 
   it.skipIf(!has("gitleaks") || !has("jq"))("runs gitleaks too, and stops the commit on either finding", () => {

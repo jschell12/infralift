@@ -140,7 +140,7 @@ export const DRIFT_CRON = "23 6 * * *";
  *  the import check and by the adoption's apply workflow (apply.ts). */
 export function prepareModule(
   root: RootModule,
-  opts: { backendConfigFile?: string | null; initFlags?: string } = {}
+  opts: { backendConfigFile?: string | null } = {}
 ): { prepare: Step[]; withCreds: (extra?: Record<string, string>) => Pick<Step, "env">; groups: CredentialGroup[]; jobEnv: Record<string, string> } {
   const tf = root.tool;
   const env = checkEnv(root);
@@ -239,7 +239,7 @@ export function prepareModule(
       : { uses: "hashicorp/setup-terraform@v3", with: { terraform_wrapper: false } },
     ...oidcSteps,
     { name: "Check the credentials are set", ...withCreds(oidcFlags), run: script(...checkLines) },
-    { name: "Init", ...withCreds(), run: `${tf} init -input=false${opts.initFlags ?? ""}${backendConfig}` },
+    { name: "Init", ...withCreds(), run: `${tf} init -input=false${backendConfig}` },
   ];
 
   const jobEnv: Record<string, string> = {

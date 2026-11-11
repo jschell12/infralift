@@ -9,11 +9,14 @@ import { printDiagnostics } from "./guard.js";
 // pull requests and on the schedule; this workflow runs only on a push to the
 // branch the adoption merged into.
 //
-//   plan    `plan -out` with the state lock, then the plan file and the
-//           provider lock file it was made with are uploaded
-//   apply   in the `production` environment, `apply` of exactly that file.
-//           Terraform refuses a saved plan once state has moved since, so
-//           what is applied is what was planned or nothing.
+// One job, in the `production` environment: `plan -out` with the state lock,
+// then `apply` of exactly that file in the same job. The plan file never
+// leaves the runner. It holds state values in plaintext, sensitive ones
+// included, so an artifact would publish them to anyone who can read the
+// repository. And both the lock and the apply use the environment's
+// credentials, so the repository's secrets can stay read-only for the check.
+// The cost: a required reviewer approves before this run's plan exists. The
+// pull request's check already showed it.
 //
 // Its concurrency group is its own and never cancels a run in progress: an
 // apply stopped halfway leaves state locked. Every step runs under bash with
@@ -25,9 +28,10 @@ export function applyWorkflowPath(path: string): string {
 }
 
 const HEADER = [
-  " Managed by infralift. On a push to the default branch: plans this module,",
-  " saves the plan, and applies exactly that plan in the `production`",
-  " environment. That apply is what records adopted resources in state.",
+  " Managed by infralift. On a push to the default branch, in the `production`",
+  " environment: plans this module and applies exactly that plan, in one job,",
+  " so the plan file never leaves the runner. That apply is what records",
+  " adopted resources in state.",
   " Add required reviewers to the environment to hold each apply for one.",
   " Pull requests and the daily drift check are the import check's, which",
   " never applies.",
@@ -51,14 +55,10 @@ export function renderApplyWorkflow(
   const tf = root.tool;
   const dir = root.path || ".";
   if (!isSafePath(dir)) throw new Error(`refusing to write an apply workflow for the path ${JSON.stringify(dir)}`);
-  const at = (f: string) => (root.path ? `${root.path}/${f}` : f);
   const plan = prepareModule(root, { backendConfigFile: opts.backendConfigFile });
-  // The apply job inits against the lock file the plan was made with.
-  const apply = prepareModule(root, { backendConfigFile: opts.backendConfigFile, initFlags: " -lockfile=readonly" });
   const guard = `github.repository == '${opts.repo}' && github.event_name == 'push' && github.ref == 'refs/heads/${opts.branch}'`;
-  const artifact = `infralift-plan-${slug}`;
 
-  const planSteps: Step[] = [
+  const steps: Step[] = [
     { uses: "actions/checkout@v4" },
     ...plan.prepare,
     {
@@ -102,29 +102,9 @@ export function renderApplyWorkflow(
       ),
     },
     {
-      // The plan file can hold values from state. Kept for a day, for the
-      // apply job only.
-      name: "Keep the plan for the apply job",
+      name: "Apply the plan above",
       if: "steps.plan.outputs.apply == 'true'",
-      uses: "actions/upload-artifact@v4",
-      with: {
-        name: artifact,
-        path: `${at(PLAN)}\n${at(".terraform.lock.hcl")}\n`,
-        "include-hidden-files": true,
-        "if-no-files-found": "error",
-        "retention-days": "1",
-        overwrite: true,
-      },
-    },
-  ];
-
-  const applySteps: Step[] = [
-    { uses: "actions/checkout@v4" },
-    { uses: "actions/download-artifact@v4", with: { name: artifact, path: dir } },
-    ...apply.prepare,
-    {
-      name: "Apply the saved plan",
-      ...apply.withCreds(),
+      ...plan.withCreds(),
       run: script(`${tf} apply -input=false -no-color ${PLAN}`),
     },
   ];
@@ -145,26 +125,15 @@ export function renderApplyWorkflow(
     defaults: { run: { shell: "bash" } },
     concurrency: { group: `infralift-apply-${slug}`, "cancel-in-progress": false },
     jobs: {
-      plan: {
-        name: `infralift plan: ${slug}`,
-        if: guard,
-        "runs-on": "ubuntu-latest",
-        "timeout-minutes": 30,
-        defaults: jobDefaults,
-        env: plan.jobEnv,
-        outputs: { apply: "${{ steps.plan.outputs.apply }}" },
-        steps: planSteps,
-      },
       apply: {
         name: `infralift apply: ${slug}`,
-        needs: "plan",
-        if: `needs.plan.outputs.apply == 'true' && ${guard}`,
+        if: guard,
         "runs-on": "ubuntu-latest",
         "timeout-minutes": 60,
         environment: "production",
         defaults: jobDefaults,
-        env: apply.jobEnv,
-        steps: applySteps,
+        env: plan.jobEnv,
+        steps,
       },
     },
   };
