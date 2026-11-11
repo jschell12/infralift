@@ -8,3 +8,6 @@ against a live organization.
   included plan's attributes are the Show a Plan sample, api-docs/plans. The run ids,
   workspace id and the second (still planning) run are ours.
 - `workspace-vcs.json`: a workspace with a `vcs-repo`, api-docs/workspaces
+- `workspaces-page.json`: List Workspaces, api-docs/workspaces (read 2026-11-11); `links` and
+  `meta.pagination` verbatim, one workspace from the `workspace-vcs.json` sample. Tests set
+  `links.next` to walk pages.

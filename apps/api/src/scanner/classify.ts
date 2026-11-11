@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { HTTP_TIMEOUTS_MS } from "../lib/http.js";
 
-const client = new Anthropic();
+// The SDK's default timeout is ten minutes; a classification is 60 tokens.
+const client = new Anthropic({ timeout: HTTP_TIMEOUTS_MS.llm, maxRetries: 2 });
 
 const SYSTEM_PROMPT = `You classify developer community posts for a cloud infrastructure migration platform called infralift.
 

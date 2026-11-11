@@ -4,6 +4,7 @@ import {
   type VercelSnapshot,
 } from "@infralift/collectors/vercel";
 import type { Connector, ConnectorAssessment } from "./types.js";
+import { httpFetch } from "../lib/http.js";
 
 const API = "https://api.vercel.com";
 
@@ -109,13 +110,13 @@ export const vercelConnector: Connector = {
   provider: "vercel",
 
   async verify(token) {
-    const res = await fetch(`${API}/v2/user`, {
+    const res = await httpFetch(`${API}/v2/user`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return res.ok;
   },
 
   async assess(token): Promise<ConnectorAssessment> {
-    return analyzeVercel(await collectVercel({ token }));
+    return analyzeVercel(await collectVercel({ token, fetchImpl: httpFetch }));
   },
 };

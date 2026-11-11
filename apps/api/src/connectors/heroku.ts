@@ -4,6 +4,7 @@ import {
   type HerokuSnapshot,
 } from "@infralift/collectors/heroku";
 import type { Connector, ConnectorAssessment } from "./types.js";
+import { httpFetch } from "../lib/http.js";
 
 const API = "https://api.heroku.com";
 
@@ -108,7 +109,7 @@ export const herokuConnector: Connector = {
   provider: "heroku",
 
   async verify(token) {
-    const res = await fetch(`${API}/account`, {
+    const res = await httpFetch(`${API}/account`, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.heroku+json; version=3",
@@ -118,6 +119,6 @@ export const herokuConnector: Connector = {
   },
 
   async assess(token): Promise<ConnectorAssessment> {
-    return analyzeHeroku(await collectHeroku({ token }));
+    return analyzeHeroku(await collectHeroku({ token, fetchImpl: httpFetch }));
   },
 };

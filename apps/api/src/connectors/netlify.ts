@@ -1,10 +1,11 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
 import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
+import { httpFetch } from "../lib/http.js";
 
 const API = "https://api.netlify.com/api/v1";
 
 async function nfFetch(token: string, path: string): Promise<any> {
-  const res = await fetch(`${API}${path}`, {
+  const res = await httpFetch(`${API}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
@@ -17,7 +18,7 @@ export const netlifyConnector: Connector = {
   provider: "netlify",
 
   async verify(token) {
-    const res = await fetch(`${API}/user`, {
+    const res = await httpFetch(`${API}/user`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return res.ok;

@@ -20,10 +20,12 @@ const h = vi.hoisted(() => {
       const val = (r as unknown as Record<string, unknown>)[k];
       if (v === null) return val === null;
       if (v && typeof v === "object" && !(v instanceof Date)) {
+        // Every operator given must hold, as in a Prisma where clause.
         const op = v as { not?: unknown; in?: unknown[]; lt?: Date };
-        if ("not" in op) return op.not === null ? val !== null : val !== op.not;
-        if (op.in) return op.in.includes(val);
-        if (op.lt) return (val as Date) < op.lt;
+        if ("not" in op && !(op.not === null ? val !== null : val !== op.not)) return false;
+        if (op.in && !op.in.includes(val)) return false;
+        if (op.lt && !(val !== null && (val as Date) < op.lt)) return false;
+        return true;
       }
       return val === v;
     });
@@ -44,8 +46,10 @@ const h = vi.hoisted(() => {
 
 vi.mock("../db.js", () => ({ prisma: h.prisma }));
 vi.mock("../tf/pipeline.js", () => ({ runJob: h.runJob }));
+vi.mock("../../services/assessments.js", () => ({ failStuckAssessments: vi.fn(async () => 0) }));
 
-const { claim, claimAndRun, recoverInterrupted, sweep, INTERRUPTED } = await import("./queue.js");
+const { claim, claimAndRun, recoverInterrupted, sweep, failOverdueJobs, drainJobs, resetQueueForTests, INTERRUPTED, OVERDUE, JOB_TIME_LIMIT_MS } =
+  await import("./queue.js");
 
 const row = (over: Partial<Row>): Row => ({
   id: "j1",
@@ -61,6 +65,7 @@ const row = (over: Partial<Row>): Row => ({
 beforeEach(() => {
   h.rows.length = 0;
   vi.clearAllMocks();
+  resetQueueForTests();
 });
 
 describe("job queue", () => {
@@ -118,5 +123,60 @@ describe("job queue", () => {
       row({ id: "claimed", claimedAt: new Date(), claimedBy: "x" })
     );
     expect(await sweep(5, 10_000)).toEqual(["old"]);
+  });
+
+  it("fails a claimed job past the time limit, whoever holds it, and leaves a fresh one", async () => {
+    const now = new Date("2026-11-11T12:00:00Z");
+    const ago = (ms: number) => new Date(now.getTime() - ms);
+    h.rows.push(
+      row({ id: "overdue", stage: "commit", status: "running", claimedAt: ago(JOB_TIME_LIMIT_MS + 1_000), claimedBy: "me" }),
+      row({ id: "fresh", stage: "commit", status: "running", claimedAt: ago(JOB_TIME_LIMIT_MS - 1_000), claimedBy: "me" }),
+      row({ id: "old-but-done", stage: "complete", status: "success", claimedAt: ago(JOB_TIME_LIMIT_MS * 2), claimedBy: "me" }),
+      row({ id: "unclaimed", status: "pending", createdAt: ago(JOB_TIME_LIMIT_MS * 2) })
+    );
+    expect(await failOverdueJobs(now)).toBe(1);
+    const by = Object.fromEntries(h.rows.map((r) => [r.id, r]));
+    expect(by.overdue).toMatchObject({ stage: "commit", status: "errored", statusMessage: OVERDUE });
+    expect(by.fresh.status).toBe("running");
+    expect(by["old-but-done"].status).toBe("success");
+    expect(by.unclaimed.status).toBe("pending");
+  });
+});
+
+describe("shutdown drain", () => {
+  it("waits for a job already running before it reports drained", async () => {
+    h.rows.push(row({ id: "j1" }));
+    let finish!: () => void;
+    h.runJob.mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)));
+    const running = claimAndRun("j1");
+    await vi.waitFor(() => expect(h.runJob).toHaveBeenCalled());
+
+    let settled = false;
+    const drain = drainJobs(5_000).then((result) => {
+      settled = true;
+      return result;
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(settled).toBe(false);
+
+    finish();
+    await running;
+    expect(await drain).toEqual({ drained: true, stillRunning: 0 });
+  });
+
+  it("gives up at its bound and says how many were still running", async () => {
+    h.rows.push(row({ id: "j1" }));
+    h.runJob.mockImplementationOnce(() => new Promise<void>(() => {}));
+    void claimAndRun("j1");
+    await vi.waitFor(() => expect(h.runJob).toHaveBeenCalled());
+    expect(await drainJobs(20)).toEqual({ drained: false, stillRunning: 1 });
+  });
+
+  it("claims nothing once draining has started", async () => {
+    h.rows.push(row({ id: "j1" }));
+    await drainJobs(10);
+    await claimAndRun("j1");
+    expect(h.runJob).not.toHaveBeenCalled();
+    expect(h.rows[0]).toMatchObject({ status: "pending", claimedAt: null });
   });
 });

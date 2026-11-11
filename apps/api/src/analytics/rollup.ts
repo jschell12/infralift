@@ -14,6 +14,7 @@
  */
 import { prisma } from "../lib/db.js";
 import { channelFor } from "./channels.js";
+import { HTTP_TIMEOUTS_MS, httpFetch } from "../lib/http.js";
 
 const SITE = "infralift";
 const DATASET = "marketing_analytics";
@@ -36,13 +37,14 @@ interface TotalRow {
 async function waeQuery<T>(sql: string): Promise<T[]> {
   const accountId = process.env.CF_ACCOUNT_ID;
   const token = process.env.CF_ANALYTICS_TOKEN;
-  const res = await fetch(
+  const res = await httpFetch(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/analytics_engine/sql`,
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: sql,
-    }
+    },
+    { timeoutMs: HTTP_TIMEOUTS_MS.analyticsSql }
   );
   if (!res.ok) {
     const text = await res.text().catch(() => "");

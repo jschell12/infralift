@@ -1,4 +1,5 @@
 import type { Connector, ConnectorAssessment } from "./types.js";
+import { httpFetch } from "../lib/http.js";
 
 // GitHub is a destination connector (Terraform code generation commits into a
 // customer repo), not an assessment source — assess() reports nothing.
@@ -15,7 +16,7 @@ export const githubConnector: Connector = {
   // A personal access token with an expiry gets it back on every response in
   // github-authentication-token-expiration; a token without one gets no header.
   async check(token) {
-    const res = await fetch(`${API}/user`, {
+    const res = await httpFetch(`${API}/user`, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",

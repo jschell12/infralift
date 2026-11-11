@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "id": "ws-noZcaGXsac6aZSJR",
+      "type": "workspaces",
+      "attributes": {
+        "name": "app-foundry-demo",
+        "auto-apply": false,
+        "working-directory": "deploy/infra",
+        "created-at": "2021-05-24T07:30:00.000Z",
+        "updated-at": "2021-05-24T07:30:00.000Z",
+        "resource-count": 0
+      }
+    }
+  ],
+  "links": {
+    "first": "https://app.terraform.io/api/v2/workspaces?page%5Bnumber%5D=1&page%5Bsize%5D=20",
+    "last": "https://app.terraform.io/api/v2/workspaces?page%5Bnumber%5D=1&page%5Bsize%5D=20",
+    "next": null,
+    "prev": null,
+    "self": "https://app.terraform.io/api/v2/workspaces?page%5Bnumber%5D=1&page%5Bsize%5D=20"
+  },
+  "meta": {
+    "pagination": {
+      "current-page": 1,
+      "next-page": null,
+      "page-size": 20,
+      "prev-page": null,
+      "total-count": 1,
+      "total-pages": 1
+    }
+  }
+}

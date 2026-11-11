@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { TfcClient } from "./tfc-client.js";
+import { TFC_WORKSPACE_PAGES, TfcClient } from "./tfc-client.js";
 
 // Response shapes measured against app.terraform.io on 2026-10-08, not
 // taken from the docs. The docs suggested a 404 for a configuration version
@@ -143,5 +143,48 @@ describe("TfcClient runs and VCS links", () => {
       ["POST /runs/run-1/actions/apply", { comment: "ok" }],
       ["POST /runs/run-1/actions/discard", { comment: "no" }],
     ]);
+  });
+});
+
+describe("listWorkspacesCapped: pagination against a host we do not control", () => {
+  const page = (next: string | null) => {
+    const body = JSON.parse(fixture("workspaces-page.json"));
+    body.links.next = next;
+    return JSON.stringify(body);
+  };
+  const BASE = "https://app.terraform.io/api/v2";
+
+  function serve(nextFor: (n: number) => string | null) {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      urls.push(url);
+      const text = page(nextFor(urls.length));
+      return { ok: true, status: 200, json: async () => JSON.parse(text), text: async () => text };
+    });
+    return urls;
+  }
+
+  it("stops at TFC_WORKSPACE_PAGES when links.next never ends, and says it was truncated", async () => {
+    const urls = serve((n) => `${BASE}/organizations/acme/workspaces?page%5Bnumber%5D=${n + 1}&page%5Bsize%5D=100`);
+    const out = await client().listWorkspacesCapped();
+    expect(urls).toHaveLength(TFC_WORKSPACE_PAGES);
+    expect(out.truncated).toBe(true);
+    expect(out.workspaces).toHaveLength(TFC_WORKSPACE_PAGES);
+    expect(urls[1]).toBe(`${BASE}/organizations/acme/workspaces?page%5Bnumber%5D=2&page%5Bsize%5D=100`);
+  });
+
+  it("reads every page and is not truncated when links.next runs out", async () => {
+    const urls = serve((n) => (n < 3 ? `${BASE}/organizations/acme/workspaces?page%5Bnumber%5D=${n + 1}&page%5Bsize%5D=100` : null));
+    const out = await client().listWorkspacesCapped();
+    expect(urls).toHaveLength(3);
+    expect(out).toMatchObject({ truncated: false });
+    expect(out.workspaces[0]).toMatchObject({ id: "ws-noZcaGXsac6aZSJR", name: "app-foundry-demo" });
+  });
+
+  it("does not follow links.next to another host", async () => {
+    const urls = serve(() => "https://elsewhere.example/api/v2/organizations/acme/workspaces?page%5Bnumber%5D=2");
+    const out = await client().listWorkspacesCapped();
+    expect(urls).toHaveLength(1);
+    expect(out.truncated).toBe(true);
   });
 });

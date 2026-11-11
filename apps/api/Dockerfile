@@ -38,4 +38,6 @@ COPY --from=builder /app ./
 ENV NODE_ENV=production
 EXPOSE 4000
 
-CMD ["sh", "-c", "cd apps/api && npx prisma migrate deploy && node dist/server.js"]
+# `exec` makes node replace the shell as PID 1, so the SIGTERM Nomad sends on
+# a deploy reaches server.ts and it can drain (sh does not forward signals).
+CMD ["sh", "-c", "cd apps/api && npx prisma migrate deploy && exec node dist/server.js"]

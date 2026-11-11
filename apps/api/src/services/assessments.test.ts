@@ -17,11 +17,22 @@ import type { Recommendation } from "../lib/recommend.js";
 const h = vi.hoisted(() => ({
   inventory: vi.fn(),
   recommend: vi.fn(),
+  assessments: [] as { id: string; status: string; startedAt: Date | null; error: string | null; completedAt: Date | null }[],
 }));
 
 vi.mock("../lib/db.js", () => ({
   prisma: {
     inventoryItem: { findMany: h.inventory },
+    // Honours the conditional update failStuckAssessments makes.
+    assessment: {
+      updateMany: async ({ where, data }: { where: { status: string; startedAt: { lt: Date } }; data: object }) => {
+        const hit = h.assessments.filter(
+          (a) => a.status === where.status && a.startedAt !== null && a.startedAt < where.startedAt.lt
+        );
+        hit.forEach((a) => Object.assign(a, data));
+        return { count: hit.length };
+      },
+    },
     providerCapability: { findMany: async () => [] },
   },
 }));
@@ -167,5 +178,25 @@ describe("assessmentSavings", () => {
     expect(currentSpend.monthlyCents).toBe(322900);
     expect(error).toHaveBeenCalled();
     error.mockRestore();
+  });
+});
+
+describe("failStuckAssessments", () => {
+  it("fails an assessment running past the limit and leaves a fresh or finished one", async () => {
+    const { failStuckAssessments, ASSESSMENT_TIME_LIMIT_MS, ASSESSMENT_TIMED_OUT } = await import("./assessments.js");
+    const now = new Date("2026-11-11T12:00:00Z");
+    const ago = (ms: number) => new Date(now.getTime() - ms);
+    const base = { error: null, completedAt: null };
+    h.assessments.push(
+      { ...base, id: "stuck", status: "running", startedAt: ago(ASSESSMENT_TIME_LIMIT_MS + 1_000) },
+      { ...base, id: "fresh", status: "running", startedAt: ago(ASSESSMENT_TIME_LIMIT_MS - 1_000) },
+      { ...base, id: "done", status: "completed", startedAt: ago(ASSESSMENT_TIME_LIMIT_MS * 2) }
+    );
+    expect(await failStuckAssessments(now)).toBe(1);
+    const by = Object.fromEntries(h.assessments.map((a) => [a.id, a]));
+    expect(by.stuck).toMatchObject({ status: "failed", error: ASSESSMENT_TIMED_OUT, completedAt: now });
+    expect(ASSESSMENT_TIMED_OUT).toMatch(/run it again$/);
+    expect(by.fresh).toMatchObject({ status: "running", error: null });
+    expect(by.done.status).toBe("completed");
   });
 });

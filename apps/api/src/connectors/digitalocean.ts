@@ -1,10 +1,11 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
 import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
+import { httpFetch } from "../lib/http.js";
 
 const API = "https://api.digitalocean.com/v2";
 
 async function doFetch(token: string, path: string): Promise<any> {
-  const res = await fetch(`${API}${path}`, {
+  const res = await httpFetch(`${API}${path}`, {
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -34,7 +35,7 @@ export const digitaloceanConnector: Connector = {
   provider: "digitalocean",
 
   async verify(token) {
-    const res = await fetch(`${API}/account`, {
+    const res = await httpFetch(`${API}/account`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return res.ok;

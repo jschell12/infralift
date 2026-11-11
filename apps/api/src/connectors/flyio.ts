@@ -1,5 +1,6 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
 import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
+import { httpFetch } from "../lib/http.js";
 
 // Fly.io Machines API (REST). The legacy platform API at api.fly.io has been
 // superseded by the Machines API at api.machines.dev for app/machine management.
@@ -8,7 +9,7 @@ const MACHINES_API = "https://api.machines.dev/v1";
 const FLAPS_API = "https://api.fly.io";
 
 async function flyFetch(token: string, url: string): Promise<any> {
-  const res = await fetch(url, {
+  const res = await httpFetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
@@ -36,7 +37,7 @@ export const flyioConnector: Connector = {
 
   async verify(token) {
     // Use the GraphQL API for auth verification (lightweight)
-    const res = await fetch("https://api.fly.io/graphql", {
+    const res = await httpFetch("https://api.fly.io/graphql", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -57,7 +58,7 @@ export const flyioConnector: Connector = {
     // List apps via the platform GraphQL API (Machines API has no list-all-apps)
     let apps: any[] = [];
     try {
-      const res = await fetch("https://api.fly.io/graphql", {
+      const res = await httpFetch("https://api.fly.io/graphql", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

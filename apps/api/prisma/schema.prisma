@@ -37,20 +37,7 @@ model User {
   orgId     String
   createdAt DateTime @default(now())
 
-  org         Org          @relation(fields: [orgId], references: [id])
-  loginTokens LoginToken[]
-}
-
-// Magic-link auth: short-lived single-use tokens.
-model LoginToken {
-  id        String    @id @default(cuid())
-  userId    String
-  token     String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id])
+  org Org @relation(fields: [orgId], references: [id])
 }
 
 // Read-only provider credentials. Token stored encrypted at rest

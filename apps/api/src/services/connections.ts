@@ -7,6 +7,7 @@ import { AppError, Conflict, InvalidBody, InvalidInput, NotFound, Unprocessable 
 import { AwsNotEnabledError } from "../connectors/aws.js";
 import { connectionSecret } from "./aws-access.js";
 import { GitCommitError } from "../lib/git/errors.js";
+import { HttpTimeoutError } from "../lib/http.js";
 import { TfcClient, TfcClientError, tfcBaseUrl } from "../lib/tf/tfc-client.js";
 import { TFC_PROVIDER } from "../lib/tf/tfc-connection.js";
 import { UnsafeHostError, assertPublicHost, tfcCredentialSchema } from "../lib/tf/extensions.js";
@@ -64,6 +65,13 @@ async function checkTfc(secret: string): Promise<VerifyResult> {
     : { valid: false, reason: `this token cannot read the organization ${cred.organization}`, expiresAt: null };
 }
 
+/** httpFetch's deadline (HttpTimeoutError), a body read past it, or an AWS
+ *  SDK request timeout. */
+function isTimeout(err: unknown): boolean {
+  const name = (err as { name?: unknown } | null)?.name;
+  return err instanceof HttpTimeoutError || name === "TimeoutError" || name === "RequestTimeout";
+}
+
 /** Asks the provider whether a credential works. Never throws, except when
  *  AWS is off on this server (422): a failure that is not the provider
  *  answering (a network error, a malformed key) becomes a reason that names
@@ -81,6 +89,10 @@ export async function checkCredential(provider: string, secret: string): Promise
     return { valid, reason: valid ? null : `${label} did not accept this credential`, expiresAt: null };
   } catch (err) {
     if (err instanceof AwsNotEnabledError) throw new Unprocessable(err.message);
+    // A timeout says nothing about the credential: report it, mark nothing.
+    if (isTimeout(err)) {
+      return { valid: false, reason: `${label} did not answer in time; try again`, expiresAt: null, timedOut: true };
+    }
     // JSON.parse and zod messages can quote the input, which is the secret.
     const status = err instanceof ProviderHttpError ? err.status : err instanceof TfcClientError ? err.statusCode : null;
     return {
@@ -109,7 +121,7 @@ export async function createConnection(
       provider: input.provider,
       label: input.label,
       encryptedToken: encryptToken(secret),
-      status: outcome.valid ? "valid" : "invalid",
+      status: outcome.valid ? "valid" : outcome.timedOut ? "unverified" : "invalid",
       lastVerifiedAt: outcome.valid ? new Date() : null,
       lastError: outcome.reason,
       expiresAt: outcome.expiresAt,
@@ -127,7 +139,9 @@ export async function verifyConnection(orgId: string, id: string): Promise<Provi
     where: { id: connection.id },
     data: outcome.valid
       ? { status: "valid", lastVerifiedAt: new Date(), lastError: null, expiresAt: outcome.expiresAt }
-      : { status: "invalid", lastError: outcome.reason },
+      : outcome.timedOut
+        ? { lastError: outcome.reason }
+        : { status: "invalid", lastError: outcome.reason },
   });
   return toSummary(updated);
 }

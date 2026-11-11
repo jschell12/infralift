@@ -1,4 +1,5 @@
 import type { ScrapedPost } from "../index.js";
+import { httpFetch } from "../../lib/http.js";
 
 const KEYWORDS = /\b(billing|cost|expensive|pricing|migrate|migration|moved from|switched from|alternative to|self[- ]host|egress|overcharge|surprise bill)\b/i;
 const USER_AGENT = "infralift-scanner/1.0 (community lead discovery)";
@@ -8,7 +9,7 @@ export async function scrapeReddit(
   since: Date
 ): Promise<ScrapedPost[]> {
   const url = `https://www.reddit.com/r/${subreddit}/new.json?limit=50`;
-  const res = await fetch(url, {
+  const res = await httpFetch(url, {
     headers: { "User-Agent": USER_AGENT },
   });
   if (!res.ok) {

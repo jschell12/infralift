@@ -170,14 +170,17 @@ workspacesRouter.get("/remote", handle(async (req, res) => {
   const { orgId } = req.user!;
   const tfc = await loadTfc(orgId, String(req.query.connectionId ?? ""));
   try {
-    const [remote, local] = await Promise.all([
-      tfc.client.listWorkspaces(),
+    const [{ workspaces: remote, truncated }, local] = await Promise.all([
+      tfc.client.listWorkspacesCapped(),
       prisma.workspace.findMany({
         where: { orgId, connectionId: tfc.conn.id },
         select: { id: true, tfcWorkspaceId: true, kind: true },
       }),
     ]);
     const byTfcId = new Map(local.map((w) => [w.tfcWorkspaceId, w]));
+    // The body stays a plain array for the dashboard; a listing cut off at
+    // TFC_WORKSPACE_PAGES says so in a header.
+    if (truncated) res.setHeader("Infralift-Truncated", "true");
     res.json(
       remote.map((w) => ({
         tfcWorkspaceId: w.id,

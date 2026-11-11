@@ -63,10 +63,13 @@ Each is a well-known pattern, used under its usual name.
 | **Discriminated union** | `Project` kinds (above) | Each kind carries only its own fields |
 | **State machine** | [`lib/jobs/state.ts`](apps/api/src/lib/jobs/state.ts): `transition()` over `start` / `fail` / `succeed` | A job's stages can only move forward and end once |
 | **Template method** | [`lib/git/deliver.ts`](apps/api/src/lib/git/deliver.ts): `deliverChangeRequest()` | Every job that opens a PR follows the same steps, written once |
-| **Command + queue** | [`lib/jobs/queue.ts`](apps/api/src/lib/jobs/queue.ts): a `TfJob` row is claimed by one process, swept if left pending, marked interrupted if its process died | Jobs survive restarts and never run twice, as long as one API process runs at a time (see below) |
+| **Command + queue** | [`lib/jobs/queue.ts`](apps/api/src/lib/jobs/queue.ts): a `TfJob` row is claimed by one process, swept if left pending, marked interrupted if its process died, failed if still running past its time limit | Jobs survive restarts and never run twice, as long as one API process runs at a time (see below) |
 | **Builder + serializer** | [`lib/import/check.ts`](apps/api/src/lib/import/check.ts) (a typed workflow object, written by the `yaml` library); [`lib/hcl/write.ts`](apps/api/src/lib/hcl/write.ts) (HCL blocks and attributes, printed as `terraform fmt` would) | Generated files are data; quoting and escaping happen in one place |
 | **Specification** | Stack rules as JSON Schema in each `apps/api/stacks/<slug>/stack.json`; import readiness in `lib/import/scan.ts` | Rules are data, not branches |
-| **Typed errors** | [`lib/errors.ts`](apps/api/src/lib/errors.ts): `InvalidInput` and `InvalidBody` 400, `Unauthorized` 401, `NotFound` 404, `Conflict` 409, `Unprocessable` 422, `TooManyRequests` 429, `Upstream` 502 | Services throw; one place turns errors into responses |
+| **Typed errors** | [`lib/errors.ts`](apps/api/src/lib/errors.ts): `InvalidInput` and `InvalidBody` 400, `Unauthorized` 401, `NotFound` 404, `Conflict` 409, `Unprocessable` 422, `TooManyRequests` 429, `Upstream` 502, `ServiceUnavailable` 503 | Services throw; one place turns errors into responses |
+| **Compare-and-set** | The queue's claim (`lib/jobs/queue.ts`), the drift claim (`services/drift.ts`), the stuck-work sweeps: an `updateMany` whose `WHERE` is the expected state, and the row count says who won | Two processes, or a sweep and a runner, cannot both act on one row |
+| **Sliding-window rate limiter** | [`lib/rate-limit.ts`](apps/api/src/lib/rate-limit.ts) `createRateLimiter()`, used by `/intake/lead`, `/intake/estimate` and codegen (`services/codegen.ts`) | One implementation of the window, the sweep and the per-caller bucket |
+| **Bulkhead (worker pool)** | [`lib/stacks/team.ts`](apps/api/src/lib/stacks/team.ts): `acquireRenderSlot()` caps concurrent team-stack trial renders and the queue behind them | A burst of stack checks cannot take every core |
 | **Shared contract** | [`lib/import/contract.ts`](apps/api/src/lib/import/contract.ts): the messages the import workflow writes and infralift reads back | Writer and reader cannot drift; a test fails if one changes alone |
 
 ## Flows
@@ -107,6 +110,34 @@ A project with a Terraform Cloud backend names one of the org's TFC connections 
 
 Each template, codegen and stack job records the workspace it created as a `managed` `Workspace` row, keyed on org and TFC workspace id, so it shows under Workspaces and in the runs drawer (`lib/tf/workspace-record.ts`). A workspace of that name that was already there is recorded as `adopted`, and infralift then leaves its settings alone, because nothing distinguishes one an earlier run made from one the customer made. Workspaces jobs created before these rows existed appear on the job's next run, as `adopted`, or by adopting them under Workspaces.
 
+### Background work in the API process
+
+Besides the job worker, the API process runs two timers, both started in `server.ts` after `listen()`:
+
+- **Drift sweep** (`services/drift.ts`, every 15 minutes): for each project with a GitHub repository, reads the newest `infra drift` check run the customer's CI produced and records it on the project and its workspaces. infralift plans nothing itself. A 401/403 from GitHub marks the connection invalid.
+- **Analytics rollup** (`analytics/rollup.ts`, hourly): rolls complete UTC days of marketing-site page views from Workers Analytics Engine into `AnalyticsDaily`. Off unless `CF_ACCOUNT_ID` and `CF_ANALYTICS_TOKEN` are set.
+
+The **community scanner** (`scanner/`) is a separate script, not part of the server: it scrapes Reddit, Hacker News, dev.to, Stack Exchange and Lobsters for posts about hosting costs, and classifies each with a small Claude model (`scanner/classify.ts`, Anthropic SDK, `ANTHROPIC_API_KEY`). Results feed the admin-only `/communities` pages.
+
+### Public routes
+
+Two routes sit above `cfAuth` in `app.ts`, so they have no tenant and no session: `POST /intake/lead` (the marketing site's lead form, with a honeypot field) and `POST /intake/estimate` (the public cost estimator). Each has its own sliding-window limiter keyed on the client IP (`CF-Connecting-IP` behind the tunnel), 5 and 20 per hour. The limiter is in-process, so a second replica would mean a second bucket.
+
+### First login
+
+There is no sign-up form. The first time Cloudflare Access lets an email through, `cfAuth` (`lib/cf-auth.ts`) creates a user and an org named after it ("<name>'s workspace"). Everything after that is scoped to that org.
+
+## Failure modes
+
+What happens when something infralift depends on is slow, down or restarts.
+
+- **Outbound timeouts.** Every HTTP call to another system goes through `httpFetch()` (`lib/http.ts`), with the deadlines in one table there: 15s by default, 30s for GitHub and GitLab, 60s for the analytics SQL API. AWS SDK clients get a 5s connection and 30s request timeout and at most 3 attempts (`connectors/aws.ts`); the scanner's LLM client gets 60s. A timeout fails the call with an error naming the host. It never marks a connection invalid: only a 401 or 403 from the provider does (`services/connections.ts`). Re-verifying a connection that times out records the reason and keeps its status.
+- **Paged lists from customer-supplied hosts.** Terraform Cloud/Enterprise workspace listings stop after `TFC_WORKSPACE_PAGES` (50 pages of 100) or at a `links.next` pointing at another host, and say they were truncated (`Infralift-Truncated` header on `GET /workspaces/remote`). GitLab tree listings stop at `GITLAB_TREE_PAGES`; Cloudflare lists at `MAX_PAGES`.
+- **Stuck jobs.** The job worker's sweep (every 15s) fails any claimed job still unfinished 30 minutes after its claim (`failOverdueJobs`, "timed out ... start it again"). If the job was only slow and later finishes, the runner's own write replaces that message.
+- **Stuck assessments.** A token assessment runs inside its HTTP request. The same sweep fails assessments still `running` 30 minutes after they started (`failStuckAssessments` in `services/assessments.ts`, "timed out ... run it again"), which covers a request that died with its process.
+- **Shutdown.** On SIGTERM or SIGINT, `server.ts` stops accepting connections, stops claiming jobs (`drainJobs`), and waits up to `SHUTDOWN_DRAIN_MS` (default 25s) for in-flight requests and jobs before exiting. The orchestrator's kill timeout must be longer than that, or the process is killed mid-wait. A job cut off is marked "interrupted" by the next process at boot; an assessment cut off is failed by the sweep above.
+- **Not retried automatically:** jobs (they write to customers' repositories, so a person decides), assessments (the customer runs them again), timed-out HTTP calls inside jobs and assessments. The drift sweep and the analytics rollup simply try again on their next tick.
+
 ## Security model
 
 - This repository is public. Nothing in it can reach the production host: CI runs on GitHub-hosted runners, and deploys are pulled by a private repository ([ADR 0007](docs/adr/0007-public-repo-private-deploy.md)). Pull requests from forks never run on infrastructure we own.
@@ -114,7 +145,7 @@ Each template, codegen and stack job records the workspace it created as a `mana
 - Customer credentials are stored encrypted (`lib/crypto.ts`) and scoped to their org. A query that forgets the org is a bug; route tests check isolation.
 - infralift never reads a customer's Terraform state and never holds the cloud credentials an import check uses. Those run in the customer's CI.
 - Strings that reach generated YAML, HCL or shell are validated or escaped in one place: `isSafePath` and `isSafeEnvName` (`lib/import/check.ts`), and `quote()` (`lib/hcl/write.ts`). Values reach shell scripts only through environment variables.
-- The dashboard and API sit behind Cloudflare Access; the API also verifies the Access token itself (`lib/cf-auth.ts`).
+- The dashboard and API sit behind Cloudflare Access; the API also verifies the Access token itself (`lib/cf-auth.ts`). There is no other sign-in path.
 
 ## Running and deploying
 

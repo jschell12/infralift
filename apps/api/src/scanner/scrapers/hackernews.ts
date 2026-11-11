@@ -1,4 +1,5 @@
 import type { ScrapedPost } from "../index.js";
+import { httpFetch } from "../../lib/http.js";
 
 const SEARCH_QUERIES = [
   "vercel expensive OR pricing OR bill",
@@ -19,7 +20,7 @@ export async function scrapeHackerNews(
   for (const query of SEARCH_QUERIES) {
     const url = `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(query)}&tags=story&numericFilters=created_at_i>${sinceUnix}&hitsPerPage=20`;
     try {
-      const res = await fetch(url);
+      const res = await httpFetch(url);
       if (!res.ok) continue;
       const data: any = await res.json();
 

@@ -1,5 +1,8 @@
-// Lightweight Terraform Cloud API client. Uses fetch directly (no SDK).
+// Lightweight Terraform Cloud API client. Uses httpFetch (lib/http.ts), so
+// every request has a deadline; no SDK.
 // All TFC responses use JSON:API format ({ data: { id, type, attributes } }).
+
+import { httpFetch } from "../http.js";
 
 const TFC_BASE = process.env.TFC_API_URL ?? "https://app.terraform.io/api/v2";
 
@@ -12,6 +15,10 @@ export function tfcBaseUrl(hostname?: string | null): string {
 // ---------------------------------------------------------------------------
 // Response types (mapped from JSON:API attributes to flat objects)
 // ---------------------------------------------------------------------------
+
+/** Pages of 100 workspaces read before a listing counts as truncated. The host
+ *  can be customer-supplied (TFE), so its links.next is not trusted to end. */
+export const TFC_WORKSPACE_PAGES = 50;
 
 export interface TfcWorkspace {
   id: string;
@@ -125,7 +132,7 @@ export class TfcClient {
   // -- internal helpers -----------------------------------------------------
 
   private async request<T = unknown>(method: string, path: string, body?: object): Promise<T> {
-    const res = await fetch(`${this.base}${path}`, {
+    const res = await httpFetch(`${this.base}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${this.token}`,
@@ -207,27 +214,37 @@ export class TfcClient {
 
   // -- workspaces -----------------------------------------------------------
 
-  /** List all workspaces in the organization. Follows pagination. */
-  async listWorkspaces(): Promise<TfcWorkspace[]> {
-    const results: TfcWorkspace[] = [];
-    let path: string | null = `/organizations/${encodeURIComponent(this.org)}/workspaces?page%5Bsize%5D=100`;
+  /** Every workspace in the organization, up to TFC_WORKSPACE_PAGES pages.
+   *  `truncated` when there were more, or when links.next pointed off this
+   *  host, which a well-behaved server never does. */
+  async listWorkspacesCapped(): Promise<{ workspaces: TfcWorkspace[]; truncated: boolean }> {
+    const workspaces: TfcWorkspace[] = [];
+    let path = `/organizations/${encodeURIComponent(this.org)}/workspaces?page%5Bsize%5D=100`;
 
-    while (path) {
+    for (let page = 1; page <= TFC_WORKSPACE_PAGES; page++) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const json: any = await this.request("GET", path);
       for (const d of json.data ?? []) {
-        results.push(TfcClient.mapWorkspace(d));
+        workspaces.push(TfcClient.mapWorkspace(d));
       }
-      // JSON:API pagination: next page URL is absolute; strip the base.
+      // JSON:API pagination: the next page URL is usually absolute.
       const nextUrl: string | null = json.links?.next ?? null;
-      if (nextUrl) {
-        path = nextUrl.startsWith("http") ? nextUrl.replace(this.base, "") : nextUrl;
-      } else {
-        path = null;
-      }
+      if (!nextUrl) return { workspaces, truncated: false };
+      if (nextUrl.startsWith(this.base)) path = nextUrl.slice(this.base.length);
+      else if (nextUrl.startsWith("/")) path = nextUrl;
+      else return { workspaces, truncated: true };
     }
+    return { workspaces, truncated: true };
+  }
 
-    return results;
+  /** listWorkspacesCapped() for callers that only show the list; a truncated
+   *  listing is logged. */
+  async listWorkspaces(): Promise<TfcWorkspace[]> {
+    const { workspaces, truncated } = await this.listWorkspacesCapped();
+    if (truncated) {
+      console.warn(`TFC workspace listing for ${this.org} stopped after ${workspaces.length} workspaces (${TFC_WORKSPACE_PAGES} pages)`);
+    }
+    return workspaces;
   }
 
   /** Get a single workspace by its id (ws-...). */

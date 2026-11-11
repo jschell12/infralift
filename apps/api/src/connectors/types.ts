@@ -30,6 +30,9 @@ export interface VerifyResult {
   reason: string | null;
   /** When the provider says the credential expires, if it said. */
   expiresAt: Date | null;
+  /** The provider did not answer in time, so nothing was learned about the
+   *  credential. A caller keeps the connection's status as it was. */
+  timedOut?: boolean;
 }
 
 export interface Connector {

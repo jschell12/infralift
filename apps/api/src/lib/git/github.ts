@@ -4,6 +4,7 @@
 // branch is a no-op.
 
 import { GitCommitError } from "./errors.js";
+import { HTTP_TIMEOUTS_MS, httpFetch } from "../http.js";
 export { GitCommitError } from "./errors.js";
 
 const GITHUB_API = "https://api.github.com";
@@ -20,16 +21,20 @@ async function gh(
   path: string,
   body?: object
 ): Promise<Response> {
-  return fetch(`${GITHUB_API}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      ...(body ? { "Content-Type": "application/json" } : {}),
+  return httpFetch(
+    `${GITHUB_API}${path}`,
+    {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
     },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+    { timeoutMs: HTTP_TIMEOUTS_MS.gitHost }
+  );
 }
 
 async function getExistingFile(
