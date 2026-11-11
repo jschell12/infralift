@@ -6,18 +6,13 @@
   --color-border: #1f2a36;
   --color-text: #e6edf3;
   --color-muted: #8b98a5;
-  --color-faint: #5b6672;
+  /* 5.0:1 on surface, 5.4:1 on bg: AA for small text. It was #5b6672 (3.1:1). */
+  --color-faint: #7d8996;
   --color-accent: #4cc38a;
   --color-accent-dim: #1c3a2c;
   --color-danger: #e5534b;
   --color-danger-bright: #ff6b6b;
   --color-warn: #d4a72c;
-  --color-info: #7c8aff;
-  --color-info-dim: #1a1a2e;
-  --color-tag-heroku: #c084fc;
-  --color-tag-heroku-dim: #2a1a2e;
-  --color-tag-both: #fbbf24;
-  --color-tag-both-dim: #2a2a1a;
 }
 
 html,
@@ -44,6 +39,7 @@ a:not([class*="text-"]) {
   .docs-article {
     max-width: 760px;
     font-size: 16px;
+    overflow-wrap: break-word;
   }
   .docs-article h1 {
     font-size: 34px;
@@ -86,8 +82,12 @@ a:not([class*="text-"]) {
     font-size: 14px;
     color: var(--color-text);
   }
+  /* Wide tables and code scroll inside the article instead of widening the
+     page on a phone. display:block is what lets a table take overflow. */
   .docs-article table {
-    width: 100%;
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
     border-collapse: collapse;
     margin: 16px 0 20px;
     font-size: 15px;
@@ -102,6 +102,23 @@ a:not([class*="text-"]) {
   .docs-article th {
     color: var(--color-text);
     background: var(--color-surface);
+  }
+  .docs-article pre {
+    max-width: 100%;
+    overflow-x: auto;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 16px 0 20px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .docs-article pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+    overflow-wrap: normal;
   }
   .docs-article blockquote {
     border-left: 3px solid var(--color-accent);
