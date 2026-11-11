@@ -33,7 +33,11 @@ describe("team stack review is admin-only", () => {
     ["POST", "/admin/stacks/src_1/approve"],
     ["POST", "/admin/stacks/src_1/revoke"],
   ])("%s %s answers 403 to a customer and touches nothing", async (method, path) => {
-    const res = await fetch(url + path, { method });
+    const res = await fetch(url + path, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: method === "POST" ? JSON.stringify({ versionId: "ver_1" }) : undefined,
+    });
     expect(res.status).toBe(403);
     expect(updateMany).not.toHaveBeenCalled();
   });

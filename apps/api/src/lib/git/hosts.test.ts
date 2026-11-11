@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { gitBlobSha, gitHostClient, REPO_READY } from "./hosts.js";
+import { GITLAB_TREE_PAGES, gitBlobSha, gitHostClient, REPO_READY } from "./hosts.js";
 
 // The GitLab client and GitHub's create-from-template, against fakes that
 // answer only the endpoints each call should touch.
@@ -324,5 +324,36 @@ describe("resolveRef and listTree", () => {
       { path: "s/stack.json", type: "blob", mode: "100644", size: null },
       { path: "s/files/link", type: "blob", mode: "120000", size: null },
     ]);
+  });
+});
+
+describe("bounded reads for team stacks", () => {
+  const P = "/projects/acme%2Fstacks";
+
+  it("GitLab: a listing still paging at the cap is truncated, not complete", async () => {
+    fake("https://gitlab.com/api/v4", [
+      (c) =>
+        c.path.startsWith(`${P}/repository/tree`)
+          ? json([{ path: "s/stack.json", type: "blob", id: "1", mode: "100644" }], 200, { "x-next-page": "2" })
+          : undefined,
+    ]);
+    const out = await gitHostClient("gitlab", "t").listTree({ repo: "acme/stacks", ref: "c0ffee" });
+    expect(out.truncated).toBe(true);
+    expect(out.entries).toHaveLength(GITLAB_TREE_PAGES);
+  });
+
+  it("stops reading a file past maxBytes, with or without a content-length", async () => {
+    const big = "x".repeat(1000);
+    fake("https://gitlab.com/api/v4", [
+      (c) => (c.path.endsWith("/declared/raw") ? new Response(big, { headers: { "content-length": "1000" } }) : undefined),
+      (c) => (c.path.endsWith("/streamed/raw") ? new Response(new Blob([big]).stream()) : undefined),
+      (c) => (c.path.endsWith("/small/raw") ? new Response("ok") : undefined),
+    ]);
+    const gl = gitHostClient("gitlab", "t");
+    for (const path of ["declared", "streamed"]) {
+      await expect(gl.readFile({ repo: "acme/stacks", path, ref: "c", maxBytes: 999 })).rejects.toThrow(/over 999 bytes/);
+    }
+    expect(await gl.readFile({ repo: "acme/stacks", path: "small", ref: "c", maxBytes: 999 })).toBe("ok");
+    expect(await gl.readFile({ repo: "acme/stacks", path: "declared", ref: "c" })).toBe(big);
   });
 });

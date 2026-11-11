@@ -66,6 +66,7 @@ const prisma = {
       db.stackVersion.push(v);
       return v;
     },
+    count: async ({ where }: Row) => db.stackVersion.filter((r) => matches(r, where)).length,
     findFirst: async ({ where }: Row) =>
       db.stackVersion.filter((r) => matches(r, where)).sort((a, b) => b.createdAt - a.createdAt)[0] ?? null,
   },
@@ -93,6 +94,9 @@ const OTHER = "org_other";
 async function acmeStack(ref = "v1") {
   return svc.registerStack(ACME, { connectionId: "conn_acme", repo: "acme/stacks", ref, path: "web" }, client);
 }
+/** The version the admin queue shows for a stack (or a stale id when none). */
+const pendingVersion = (sourceId: string) =>
+  db.stackSource.find((s) => s.id === sourceId)?.publishedVersionId ?? db.stackVersion[0]?.id ?? "ver_none";
 const otherSees = async () => (await svc.listVisibleStacks(OTHER)).filter((s) => s.origin !== "infralift");
 
 beforeEach(() => {
@@ -154,7 +158,7 @@ describe("visibility", () => {
     await svc.requestPublish(ACME, s.id, {});
     expect(await otherSees()).toEqual([]);
 
-    await svc.approveStack(s.id, "admin@example.com");
+    await svc.approveStack(s.id, pendingVersion(s.id), "admin@example.com");
     // A version added after review is the owner's, not the community's.
     await svc.addStackVersion(ACME, s.id, { ref: "v2" }, client);
     const seen = await otherSees();
@@ -163,7 +167,7 @@ describe("visibility", () => {
     expect(seen[0]).not.toHaveProperty("visibility");
     expect((await svc.getTeamStack(OTHER, s.id)).versions.map((v) => v.resolvedSha)).toEqual(["a".repeat(40)]);
 
-    await svc.revokeStack(s.id, "admin@example.com");
+    await svc.revokeStack(s.id, pendingVersion(s.id), "admin@example.com");
     expect(await otherSees()).toEqual([]);
     await expect(svc.getTeamStack(OTHER, s.id)).rejects.toThrow("stack not found");
     // The owner keeps it.
@@ -173,7 +177,7 @@ describe("visibility", () => {
   it("withdrawing takes a public stack back to private", async () => {
     const s = await acmeStack();
     await svc.requestPublish(ACME, s.id, {});
-    await svc.approveStack(s.id, "admin@example.com");
+    await svc.approveStack(s.id, pendingVersion(s.id), "admin@example.com");
     await svc.withdrawStack(ACME, s.id);
     expect(await otherSees()).toEqual([]);
     expect(db.stackSource[0]).toMatchObject({ visibility: "private", publishedVersionId: null });
@@ -188,14 +192,46 @@ describe("visibility", () => {
 describe("review transitions", () => {
   it("approve and revoke only move from states they may", async () => {
     const s = await acmeStack();
-    await expect(svc.approveStack(s.id, "a@x")).rejects.toThrow(/private, so it cannot be approved/);
-    await expect(svc.revokeStack(s.id, "a@x")).rejects.toThrow(/cannot be revoked/);
-    await expect(svc.approveStack("src_missing", "a@x")).rejects.toThrow("stack not found");
+    await expect(svc.approveStack(s.id, pendingVersion(s.id), "a@x")).rejects.toThrow(/private, so it cannot be approved/);
+    await expect(svc.revokeStack(s.id, pendingVersion(s.id), "a@x")).rejects.toThrow(/cannot be revoked/);
+    await expect(svc.approveStack("src_missing", "ver_x", "a@x")).rejects.toThrow("stack not found");
     await svc.requestPublish(ACME, s.id, {});
     expect(await svc.listPendingStacks()).toMatchObject([{ id: s.id, orgId: ACME, version: { ref: "v1" } }]);
-    await svc.revokeStack(s.id, "a@x");
+    await svc.revokeStack(s.id, pendingVersion(s.id), "a@x");
     await expect(svc.requestPublish(ACME, s.id, {})).rejects.toThrow(/revoked, so it cannot be published/);
     expect(db.stackSource[0]).toMatchObject({ reviewedBy: "a@x" });
+  });
+});
+
+describe("approval is bound to the version reviewed", () => {
+  it("an owner who withdraws and re-requests with another version voids the open review", async () => {
+    const s = await acmeStack();
+    await svc.requestPublish(ACME, s.id, {});
+    const [queued] = await svc.listPendingStacks();
+    expect(queued.versionId).toBe(s.versions[0].id);
+
+    // Between the admin opening the queue and clicking approve:
+    const v2 = await svc.addStackVersion(ACME, s.id, { ref: "v2" }, client);
+    await svc.withdrawStack(ACME, s.id);
+    await svc.requestPublish(ACME, s.id, { versionId: v2.id });
+
+    await expect(svc.approveStack(s.id, queued.versionId!, "a@x")).rejects.toThrow(/version under review changed/);
+    await expect(svc.revokeStack(s.id, queued.versionId!, "a@x")).rejects.toThrow(/version under review changed/);
+    expect(db.stackSource[0]).toMatchObject({ visibility: "pending_public", publishedVersionId: v2.id, reviewedBy: null });
+    expect(await otherSees()).toEqual([]);
+
+    await svc.approveStack(s.id, v2.id, "a@x");
+    expect((await otherSees())[0]).toMatchObject({ version: { id: v2.id } });
+  });
+});
+
+describe("version cap", () => {
+  it("refuses a version past the cap before reading the repository", async () => {
+    const s = await acmeStack();
+    for (let i = 1; i < svc.MAX_VERSIONS_PER_STACK; i++) {
+      db.stackVersion.push({ ...db.stackVersion[0], id: `ver_fill_${i}`, resolvedSha: `${i}`.padStart(40, "0") });
+    }
+    await expect(svc.addStackVersion(ACME, s.id, { ref: "v2" }, client)).rejects.toThrow(/50 versions/);
   });
 });
 
@@ -206,7 +242,7 @@ describe("tenant isolation", () => {
     await expect(svc.addStackVersion(OTHER, s.id, { ref: "v2" }, client)).rejects.toThrow("stack not found");
     await expect(svc.requestPublish(OTHER, s.id, {})).rejects.toThrow("stack not found");
     await svc.requestPublish(ACME, s.id, {});
-    await svc.approveStack(s.id, "a@x");
+    await svc.approveStack(s.id, pendingVersion(s.id), "a@x");
     await expect(svc.withdrawStack(OTHER, s.id)).rejects.toThrow("stack not found");
     await expect(svc.requestPublish(OTHER, s.id, { versionId: db.stackVersion[0].id })).rejects.toThrow("stack not found");
     expect(db.stackSource[0].visibility).toBe("public");

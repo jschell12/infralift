@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { GitHostClient, TreeEntry } from "../git/hosts.js";
 import { getStack, renderStack } from "./index.js";
-import { checkManifest, isStackPath, loadTeamStack, selectStackEntries, TEAM_STACK_LIMITS } from "./team.js";
+import { GitFileTooLarge } from "../git/errors.js";
+import { checkInputSchema, checkManifest, isStackPath, loadTeamStack, selectStackEntries, TEAM_STACK_LIMITS } from "./team.js";
 
 // A team stack is checked without running anything: path and size limits on
 // the tree, the manifest against its schema, and a render of its example.
@@ -19,8 +20,18 @@ function walk(dir: string): string[] {
   );
 }
 
+/** A manifest's input schema without `pattern`, which team stacks may not use
+ *  (checkInputSchema). The catalog's own schema has seven. */
+function withoutPatterns<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(withoutPatterns) as T;
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).filter(([k]) => k !== "pattern").map(([k, v]) => [k, withoutPatterns(v)])
+  ) as T;
+}
+
 /** The catalog stack as a repository holding it at `dir`, with GitHub's tree
- *  entry shape (mode, type, size). */
+ *  entry shape (mode, type, size), and its input schema made team-legal. */
 function catalogRepo(dir: string) {
   const files = new Map<string, { content: string; mode: string }>();
   for (const full of walk(CATALOG)) {
@@ -30,6 +41,9 @@ function catalogRepo(dir: string) {
       mode: statSync(full).mode & 0o111 ? "100755" : "100644",
     });
   }
+  const manifest = JSON.parse(files.get(`${dir}/stack.json`)!.content);
+  manifest.inputSchema = withoutPatterns(manifest.inputSchema);
+  files.set(`${dir}/stack.json`, { content: JSON.stringify(manifest, null, 2), mode: "100644" });
   return files;
 }
 
@@ -111,10 +125,14 @@ describe("checkManifest", () => {
   const catalog = JSON.parse(readFileSync(join(CATALOG, "stack.json"), "utf8"));
   const paths = new Set<string>(catalog.rendered.map((r: { template: string }) => `templates/${r.template}`));
 
-  it("accepts the catalog manifest as it is, with and without modules", () => {
-    expect(checkManifest(catalog, paths)).toEqual([]);
+  it("accepts the catalog manifest's shape, with and without modules, refusing only its patterns", () => {
+    const refused = checkManifest(catalog, paths);
+    expect(refused.length).toBeGreaterThan(0);
+    expect(refused.every((e) => e.includes('uses "pattern"'))).toBe(true);
+    const teamLegal = { ...catalog, inputSchema: withoutPatterns(catalog.inputSchema) };
+    expect(checkManifest(teamLegal, paths)).toEqual([]);
     const withModules = {
-      ...catalog,
+      ...teamLegal,
       modules: [{ name: "server", path: "deploy/infra", anchor: "hcloud_server", outputs: ["ipv4"] }],
     };
     expect(checkManifest(withModules, paths)).toEqual([]);
@@ -173,6 +191,63 @@ describe("loadTeamStack", () => {
     expect(loaded.valid).toBe(false);
     if (loaded.valid) return;
     expect(loaded.errors.join()).toMatch(/^example /);
+  });
+
+  it("refuses a catastrophic pattern before any regex runs, and quickly", async () => {
+    // ^(a+)+$ against "aaaa…!" doubles in time per character in a
+    // backtracking engine; at 40 characters it would hold the event loop for hours.
+    const repo = catalogRepo("s");
+    const manifest = JSON.parse(repo.get("s/stack.json")!.content);
+    manifest.inputSchema.properties.name = { type: "string", pattern: "^(a+)+$" };
+    manifest.example = { ...manifest.example, name: `${"a".repeat(40)}!` };
+    repo.set("s/stack.json", { content: JSON.stringify(manifest), mode: "100644" });
+    const { client } = fakeHost({ [SHA_A]: repo }, { main: SHA_A });
+    const started = performance.now();
+    const loaded = await loadTeamStack(client, { repo: "acme/stacks", dir: "s", ref: "main" });
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(loaded.valid).toBe(false);
+    if (loaded.valid) return;
+    expect(loaded.errors.join("\n")).toMatch(/inputSchema\/properties\/name uses "pattern"/);
+  });
+
+  it("refuses patternProperties and format anywhere, but not a property named pattern", async () => {
+    const schema = {
+      type: "object",
+      properties: { pattern: { type: "string", enum: ["format"] }, tags: { type: "object", patternProperties: { "^x": {} } } },
+      $defs: { email: { type: "string", format: "email" } },
+    };
+    expect(checkInputSchema(schema)).toEqual([
+      'stack.json inputSchema/properties/tags uses "patternProperties", which team stacks may not use (regexes run on infralift\'s servers)',
+      'stack.json inputSchema/$defs/email uses "format", which team stacks may not use (regexes run on infralift\'s servers)',
+    ]);
+  });
+
+  it("compiles each team schema on its own, so another org's $id cannot break a registration", async () => {
+    const withId = () => {
+      const repo = catalogRepo("s");
+      const manifest = JSON.parse(repo.get("s/stack.json")!.content);
+      manifest.inputSchema.$id = "https://example.com/taken";
+      repo.set("s/stack.json", { content: JSON.stringify(manifest), mode: "100644" });
+      return fakeHost({ [SHA_A]: repo }, { main: SHA_A }).client;
+    };
+    const first = await loadTeamStack(withId(), { repo: "org-a/stacks", dir: "s", ref: "main" });
+    const second = await loadTeamStack(withId(), { repo: "org-b/stacks", dir: "s", ref: "main" });
+    expect([first.valid, second.valid]).toEqual([true, true]);
+  });
+
+  it("records a file the host reports as too big while reading it", async () => {
+    const { client } = fakeHost({ [SHA_A]: catalogRepo("s") }, { main: SHA_A });
+    const capped = {
+      ...client,
+      readFile: async (o: { path: string; maxBytes?: number }) => {
+        if (o.path === "s/stack.json") throw new GitFileTooLarge(o.path, o.maxBytes!);
+        return client.readFile(o as never);
+      },
+    } as GitHostClient;
+    const loaded = await loadTeamStack(capped, { repo: "acme/stacks", dir: "s", ref: "main" });
+    expect(loaded.valid).toBe(false);
+    if (loaded.valid) return;
+    expect(loaded.errors).toEqual([`stack.json is over ${TEAM_STACK_LIMITS.maxFileBytes} bytes`]);
   });
 
   it("throws when the ref does not exist, rather than recording a version", async () => {

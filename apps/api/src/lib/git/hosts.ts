@@ -11,6 +11,7 @@ import {
   openPullRequest,
 } from "./github.js";
 import { GITLAB_API } from "../../connectors/gitlab.js";
+import { GitFileTooLarge } from "./errors.js";
 
 // ---------------------------------------------------------------------------
 // One interface over GitHub and GitLab for what a stack job does to a
@@ -80,8 +81,9 @@ export interface GitHostClient {
   /** Every file and submodule on `ref`, with its mode, so a caller can refuse
    *  symlinks. `truncated` when the host cut the listing short. */
   listTree(opts: { repo: string; ref: string }): Promise<{ entries: TreeEntry[]; truncated: boolean }>;
-  /** A file's text on `ref`, or null when it does not exist. */
-  readFile(opts: { repo: string; path: string; ref: string }): Promise<string | null>;
+  /** A file's text on `ref`, or null when it does not exist. With maxBytes,
+   *  stops reading past that and throws GitFileTooLarge. */
+  readFile(opts: { repo: string; path: string; ref: string; maxBytes?: number }): Promise<string | null>;
   /** A pull request's current head and state, by number. */
   getChangeRequest(opts: { repo: string; number: number }): Promise<ChangeRequestState | null>;
   /** A commit's subject line and first parent. */
@@ -128,6 +130,32 @@ export interface GitHostClient {
 
 export function gitHostClient(host: GitHost, token: string): GitHostClient {
   return host === "gitlab" ? gitlabClient(token) : githubClient(token);
+}
+
+/** A response body as text, abandoned as soon as it passes maxBytes, so a
+ *  host that does not report sizes (GitLab's tree) cannot make us buffer an
+ *  arbitrarily large file. */
+async function readCapped(res: Response, path: string, maxBytes?: number): Promise<string> {
+  if (maxBytes === undefined) return res.text();
+  if (Number(res.headers.get("content-length") ?? 0) > maxBytes) {
+    await res.body?.cancel();
+    throw new GitFileTooLarge(path, maxBytes);
+  }
+  const reader = res.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let read = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    read += value.byteLength;
+    if (read > maxBytes) {
+      await reader.cancel();
+      throw new GitFileTooLarge(path, maxBytes);
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -213,7 +241,7 @@ function githubClient(token: string): GitHostClient {
       return { entries, truncated: body.truncated };
     },
 
-    async readFile({ repo, path, ref }) {
+    async readFile({ repo, path, ref, maxBytes }) {
       const res = await fetch(
         `https://api.github.com/repos/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`,
         {
@@ -226,7 +254,7 @@ function githubClient(token: string): GitHostClient {
       );
       if (res.status === 404) return null;
       if (!res.ok) throw new GitCommitError(`GitHub file read failed (${res.status}) for ${repo}/${path}`);
-      return res.text();
+      return readCapped(res, path, maxBytes);
     },
 
     async getChangeRequest({ repo, number }) {
@@ -366,6 +394,9 @@ export function gitBlobSha(content: string): string {
     .digest("hex");
 }
 
+/** Pages of 100 tree entries read before a GitLab listing counts as truncated. */
+export const GITLAB_TREE_PAGES = 99;
+
 function gitlabClient(token: string): GitHostClient {
   const gl = (method: string, path: string, body?: object) =>
     fetch(`${GITLAB_API}${path}`, {
@@ -382,25 +413,26 @@ function gitlabClient(token: string): GitHostClient {
     throw new GitCommitError(`GitLab ${what} failed (${res.status}): ${text.slice(0, 200)}`);
   };
 
-  /** Every file and submodule on `branch`, as GitLab lists them. */
+  /** Every file and submodule on `branch`, as GitLab lists them. `truncated`
+   *  when there were more pages than we read. */
   async function items(repo: string, branch: string) {
     const out: { path: string; type: string; id: string; mode: string }[] = [];
-    for (let page = 1; page < 100; page++) {
+    for (let page = 1; page <= GITLAB_TREE_PAGES; page++) {
       const res = await gl(
         "GET",
         `/projects/${pid(repo)}/repository/tree?ref=${encodeURIComponent(branch)}&recursive=true&per_page=100&page=${page}`
       );
       if (!res.ok) return fail(`tree listing for ${repo}@${branch}`, res);
       out.push(...((await res.json()) as typeof out));
-      if (!res.headers.get("x-next-page")) break;
+      if (!res.headers.get("x-next-page")) return { items: out, truncated: false };
     }
-    return out;
+    return { items: out, truncated: true };
   }
 
   /** path -> { blob sha, mode } for every file on `branch`. */
   async function tree(repo: string, branch: string) {
     const out = new Map<string, { sha: string; mode: string }>();
-    for (const it of await items(repo, branch)) if (it.type === "blob") out.set(it.path, { sha: it.id, mode: it.mode });
+    for (const it of (await items(repo, branch)).items) if (it.type === "blob") out.set(it.path, { sha: it.id, mode: it.mode });
     return out;
   }
 
@@ -433,23 +465,24 @@ function gitlabClient(token: string): GitHostClient {
     },
 
     async listTree({ repo, ref }) {
+      const listed = await items(repo, ref);
       const entries: TreeEntry[] = [];
-      for (const it of await items(repo, ref)) {
+      for (const it of listed.items) {
         if (it.type === "blob" || it.type === "commit") {
           entries.push({ path: it.path, type: it.type, mode: it.mode, size: null });
         }
       }
-      return { entries, truncated: false };
+      return { entries, truncated: listed.truncated };
     },
 
-    async readFile({ repo, path, ref }) {
+    async readFile({ repo, path, ref, maxBytes }) {
       const res = await gl(
         "GET",
         `/projects/${pid(repo)}/repository/files/${encodeURIComponent(path)}/raw?ref=${encodeURIComponent(ref)}`
       );
       if (res.status === 404) return null;
       if (!res.ok) return fail(`file read for ${repo}/${path}`, res);
-      return res.text();
+      return readCapped(res, path, maxBytes);
     },
 
     // Codegen repositories are GitHub-only today.

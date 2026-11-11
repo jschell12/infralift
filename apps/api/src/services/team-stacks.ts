@@ -27,6 +27,9 @@ import {
 //   listPendingStacks / approveStack / revokeStack   the admin's side
 // ---------------------------------------------------------------------------
 
+/** Versions one stack may keep. Each holds up to 2 MiB of files. */
+export const MAX_VERSIONS_PER_STACK = 50;
+
 export type ClientFor = (host: "github" | "gitlab", token: string) => GitHostClient;
 const defaultClient: ClientFor = (host, token) => gitHostClient(host, token);
 
@@ -149,6 +152,10 @@ export async function registerStack(orgId: string, input: RegisterInput, clientF
 export async function addStackVersion(orgId: string, sourceId: string, input: { ref: string }, clientFor = defaultClient) {
   const source = await prisma.stackSource.findFirst({ where: { id: sourceId, orgId } });
   if (!source) throw new NotFound("stack not found");
+  const count = await prisma.stackVersion.count({ where: { stackSourceId: source.id } });
+  if (count >= MAX_VERSIONS_PER_STACK) {
+    throw new Conflict(`this stack has ${count} versions, the most one stack keeps (${MAX_VERSIONS_PER_STACK}); register the newer ones as a new stack`);
+  }
   const { gitHost, client } = await connectionClient(orgId, source.connectionId, clientFor);
   if (gitHost !== source.gitHost) throw new InvalidInput("the stack's connection no longer points at its git host");
   const loaded = await load(client, source.repo, source.path, input.ref);
@@ -250,16 +257,28 @@ const DONE: Record<VisibilityAction, string> = {
 async function transition(
   where: { id: string; orgId?: string },
   action: VisibilityAction,
-  data: Prisma.StackSourceUpdateManyMutationInput
+  data: Prisma.StackSourceUpdateManyMutationInput,
+  /** For a review: the version the admin looked at. The update applies only
+   *  while that exact version is the one under review. */
+  reviewedVersionId?: string
 ) {
   const t = transitionFor(action);
   const res = await prisma.stackSource.updateMany({
-    where: { ...where, visibility: { in: t.from } },
+    where: {
+      ...where,
+      visibility: { in: t.from },
+      ...(reviewedVersionId ? { publishedVersionId: reviewedVersionId } : {}),
+    },
     data: { ...data, visibility: t.to },
   });
   if (res.count === 0) {
-    const current = await prisma.stackSource.findFirst({ where, select: { visibility: true } });
+    const current = await prisma.stackSource.findFirst({ where, select: { visibility: true, publishedVersionId: true } });
     if (!current) throw new NotFound("stack not found");
+    if (reviewedVersionId && t.from.includes(current.visibility as never) && current.publishedVersionId !== reviewedVersionId) {
+      throw new Conflict("the version under review changed since you opened it; reload the queue and review the new one", {
+        versionId: current.publishedVersionId,
+      });
+    }
     throw new Conflict(`the stack is ${current.visibility.replace("_", " ")}, so it cannot be ${DONE[action]}`);
   }
   return { id: where.id, visibility: t.to };
@@ -299,14 +318,17 @@ export async function listPendingStacks() {
   });
   return sources.map((s) => {
     const v = s.versions.find((x) => x.id === s.publishedVersionId);
-    return { ...sourceView(s, "org"), orgId: s.orgId, version: v ? versionView(v) : null };
+    return { ...sourceView(s, "org"), orgId: s.orgId, versionId: s.publishedVersionId, version: v ? versionView(v) : null };
   });
 }
 
-export async function approveStack(id: string, reviewer: string) {
-  return transition({ id }, "approve", { reviewedBy: reviewer, reviewedAt: new Date() });
+/** Approves `versionId`, and only if it is still the version under review:
+ *  an owner who withdraws and re-requests with another version in between
+ *  gets a new review, not this one. */
+export async function approveStack(id: string, versionId: string, reviewer: string) {
+  return transition({ id }, "approve", { reviewedBy: reviewer, reviewedAt: new Date() }, versionId);
 }
 
-export async function revokeStack(id: string, reviewer: string) {
-  return transition({ id }, "revoke", { reviewedBy: reviewer, reviewedAt: new Date() });
+export async function revokeStack(id: string, versionId: string, reviewer: string) {
+  return transition({ id }, "revoke", { reviewedBy: reviewer, reviewedAt: new Date() }, versionId);
 }

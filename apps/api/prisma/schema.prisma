@@ -27,6 +27,7 @@ model Org {
   migrations  Migration[]
   workspaces  Workspace[]
   templates   TfTemplate[]
+  stackSources StackSource[]
 }
 
 model User {
@@ -77,6 +78,7 @@ model ProviderConnection {
   org         Org          @relation(fields: [orgId], references: [id])
   assessments Assessment[]
   workspaces  Workspace[]
+  stackSources StackSource[]
 
   @@unique([orgId, provider, label])
 }
@@ -502,7 +504,10 @@ model StackSource {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  versions StackVersion[]
+  org        Org                @relation(fields: [orgId], references: [id])
+  // Restrict: deleteConnection refuses while a stack still reads through it.
+  connection ProviderConnection @relation(fields: [connectionId], references: [id])
+  versions   StackVersion[]
 
   @@unique([orgId, gitHost, repo, path])
   @@index([visibility])

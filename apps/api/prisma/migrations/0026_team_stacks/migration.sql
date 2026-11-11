@@ -38,6 +38,9 @@ CREATE UNIQUE INDEX "StackSource_orgId_gitHost_repo_path_key" ON "StackSource"("
 CREATE INDEX "StackSource_visibility_idx" ON "StackSource"("visibility");
 CREATE UNIQUE INDEX "StackVersion_stackSourceId_resolvedSha_key" ON "StackVersion"("stackSourceId", "resolvedSha");
 
+ALTER TABLE "StackSource" ADD CONSTRAINT "StackSource_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "Org"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "StackSource" ADD CONSTRAINT "StackSource_connectionId_fkey" FOREIGN KEY ("connectionId") REFERENCES "ProviderConnection"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
 ALTER TABLE "StackVersion" ADD CONSTRAINT "StackVersion_stackSourceId_fkey" FOREIGN KEY ("stackSourceId") REFERENCES "StackSource"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- Projects made from a team stack render from one pinned version.

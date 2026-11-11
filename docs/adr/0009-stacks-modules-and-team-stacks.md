@@ -10,13 +10,14 @@
 
 **Pinning.** A ref is resolved once, when a version is added, and the version records the commit SHA. Files are read at that SHA, never at the ref, and stored with the version together with a sha256 index. A tag moved afterwards changes nothing that exists; registering the ref again adds a new version. Projects record the version they render from (`TfProject.stackVersionId`); catalog projects keep `stackSlug`.
 
-**Visibility.** A team stack is private to its org. The org can ask to publish one version to every infralift org; it is `pending_public` and invisible to others until an infralift admin approves it in the admin app, after which other orgs see that version only. The owner can withdraw at any time, back to `private`. An admin can revoke a pending or public stack; a revoked stack stays usable by its owner and hidden from everyone else. Another org sees where a published stack comes from (host, repository, directory) and nothing about its review.
+**Visibility.** A team stack is private to its org. The org can ask to publish one version to every infralift org; it is `pending_public` and invisible to others until an infralift admin approves it in the admin app, after which other orgs see that version only. The admin approves or revokes a version by id, and the change applies only while that exact version is the one under review, so a withdraw and re-request in between voids the review rather than inheriting it. The owner can withdraw at any time, back to `private`. An admin can revoke a pending or public stack; a revoked stack stays usable by its owner and hidden from everyone else. Another org sees where a published stack comes from (host, repository, directory) and nothing about its review.
 
 **No team Terraform runs on infralift's servers.** `tofu init` downloads whatever providers and modules the code names, and `validate` runs them; that is arbitrary code. Server side, infralift only reads and checks:
 
 - fetches files at the pinned SHA through the org's own git connection (`GitHostClient`);
-- refuses symlinks, submodules, absolute paths, `..` segments, more than 300 files, a file over 256 KiB or more than 2 MiB in all, and a truncated listing;
+- refuses symlinks, submodules, absolute paths, `..` segments, more than 300 files, a file over 256 KiB (reading stops there, whether or not the host reported a size) or more than 2 MiB in all, and a truncated listing; keeps at most 50 versions per stack;
 - validates `stack.json` against its JSON Schema (`lib/stacks/manifest-schema.ts`) and checks every rendered template is a file in `templates/` and every output path is relative;
+- refuses `pattern`, `patternProperties` and `format` anywhere in a team's input schema. Ajv runs them with JavaScript's backtracking regex engine, on the API's one event loop, against an example the same team wrote, so `^(a+)+$` could stall every request. Each team schema is compiled by its own Ajv instance, so one org's `$id` cannot collide with another's;
 - renders the manifest's `example` with the logic-less `{{var}}` renderer, the same code that renders catalog stacks, through a `StackTree` that reads from disk or from memory.
 
 Real validation (`tofu validate`, plans) runs as CI in the customer's repository, through the delivery CI the stack already carries.
@@ -28,5 +29,7 @@ Teams already keep infrastructure in git, with review and history. Pointing at a
 Review before publishing exists because a published stack writes CI workflows into other orgs' repositories. Review by version, not by stack, stops a reviewed stack from changing under its users.
 
 ## Cost
+
+Team input schemas cannot constrain strings by pattern; the catalog's can, because we write those. Allowing patterns again needs a linear-time engine (Ajv's `code.regExp` with `re2`), which is a native addon the API image does not build today.
 
 Stored file contents take up to 2 MiB per version in Postgres. A stack that only renders correctly with inputs other than its `example` passes registration and fails in the customer's CI instead. Reading files one request each makes registering a large stack slow, up to 300 calls. The visibility column is a string checked in code (`lib/stacks/visibility.ts`), like the other state columns in the schema, rather than a database enum.

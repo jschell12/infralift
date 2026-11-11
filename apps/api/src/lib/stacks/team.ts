@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { Ajv2020 as Ajv } from "ajv/dist/2020.js";
+import { GitFileTooLarge } from "../git/errors.js";
 import type { GitHostClient, TreeEntry } from "../git/hosts.js";
 import { TfInputValidationError } from "../tf/render.js";
-import { memoryTree, renderStack, type StackFile, type StackManifest } from "./index.js";
+import { memoryTree, newSchemaCompiler, renderStack, type StackFile, type StackManifest } from "./index.js";
 import { STACK_MANIFEST_SCHEMA } from "./manifest-schema.js";
 
 // ---------------------------------------------------------------------------
@@ -101,6 +102,35 @@ export function selectStackEntries(entries: TreeEntry[], dir: string) {
 const ajv = new Ajv({ allErrors: true, strict: false });
 const validateManifest = ajv.compile(STACK_MANIFEST_SCHEMA);
 
+/**
+ * Keywords a team's input schema may not use. Ajv runs `pattern` and
+ * `patternProperties` with JavaScript's backtracking regex engine, on the one
+ * event loop the API has, against values the same team wrote: `^(a+)+$` with a
+ * long enough example stalls every request for hours. `format` is refused with
+ * them because its validators are regexes too wherever formats are installed.
+ * A linear-time engine (re2) would allow them again; it is a native addon this
+ * image cannot build, so refusing is the safe default.
+ */
+const REGEX_KEYWORDS = ["pattern", "patternProperties", "format"];
+/** Keywords whose value maps names to subschemas: the names are data. */
+const SCHEMA_MAPS = new Set(["properties", "$defs", "definitions", "dependentSchemas", "patternProperties"]);
+/** Keywords whose value is data, never a schema. */
+const DATA = new Set(["enum", "const", "default", "examples", "required"]);
+
+export function checkInputSchema(schema: unknown, at = "inputSchema"): string[] {
+  if (Array.isArray(schema)) return schema.flatMap((s, i) => checkInputSchema(s, `${at}/${i}`));
+  if (!schema || typeof schema !== "object") return [];
+  const errors: string[] = [];
+  for (const [k, v] of Object.entries(schema)) {
+    if (REGEX_KEYWORDS.includes(k)) errors.push(`stack.json ${at} uses "${k}", which team stacks may not use (regexes run on infralift's servers)`);
+    if (DATA.has(k)) continue;
+    if (SCHEMA_MAPS.has(k) && v && typeof v === "object") {
+      for (const [name, sub] of Object.entries(v)) errors.push(...checkInputSchema(sub, `${at}/${k}/${name}`));
+    } else errors.push(...checkInputSchema(v, `${at}/${k}`));
+  }
+  return errors;
+}
+
 /** Schema errors, plus references the schema cannot see: every output path is
  *  safe, every rendered template is a file in templates/. */
 export function checkManifest(raw: unknown, paths: Set<string>): string[] {
@@ -108,7 +138,7 @@ export function checkManifest(raw: unknown, paths: Set<string>): string[] {
     return (validateManifest.errors ?? []).map((e) => `stack.json${e.instancePath} ${e.message ?? "invalid"}`);
   }
   const m = raw as unknown as StackManifest;
-  const errors: string[] = [];
+  const errors: string[] = checkInputSchema(m.inputSchema);
   const outputs = [...m.rendered.map((r) => r.path), ...(m.seed ?? []), ...(m.modules ?? []).map((x) => x.path)];
   for (const p of outputs) if (!isStackPath(p)) errors.push(`stack.json names an unsafe path ${JSON.stringify(p)}`);
   for (const r of m.rendered) {
@@ -140,7 +170,14 @@ export async function loadTeamStack(
   let total = 0;
   for (const f of selected.files) {
     const full = opts.dir ? `${opts.dir}/${f.path}` : f.path;
-    const content = await client.readFile({ repo: opts.repo, path: full, ref: sha });
+    let content: string | null;
+    try {
+      content = await client.readFile({ repo: opts.repo, path: full, ref: sha, maxBytes: TEAM_STACK_LIMITS.maxFileBytes });
+    } catch (err) {
+      if (!(err instanceof GitFileTooLarge)) throw err;
+      errors.push(`${f.path} is over ${TEAM_STACK_LIMITS.maxFileBytes} bytes`);
+      continue;
+    }
     if (content === null) throw new StackFetchError(`${full} disappeared from ${opts.repo}@${sha.slice(0, 7)}`);
     const bytes = Buffer.byteLength(content, "utf8");
     total += bytes;
@@ -163,7 +200,9 @@ export async function loadTeamStack(
   const manifest = raw as StackManifest;
 
   try {
-    const rendered = renderStack(manifest, manifest.example, memoryTree(contents));
+    // A compiler of its own: a team schema's $id cannot collide with another
+    // org's, and nothing it compiles outlives this load.
+    const rendered = renderStack(manifest, manifest.example, memoryTree(contents), newSchemaCompiler());
     const text = Object.fromEntries([...contents].map(([p, f]) => [p, f.content]));
     return { valid: true, sha, manifest, files, contents: text, renderedFiles: rendered.length };
   } catch (err) {

@@ -78,16 +78,22 @@ adminStacksRouter.get(
   })
 );
 
+// The admin names the version they reviewed; a different one under review
+// answers 409.
+const reviewSchema = z.object({ versionId: z.string().min(1) });
+
 adminStacksRouter.post(
   "/:id/approve",
   handle(async (req, res) => {
-    res.json(await approveStack(req.params.id, req.user!.email));
+    const { versionId } = parseBody(reviewSchema, req.body);
+    res.json(await approveStack(req.params.id, versionId, req.user!.email));
   })
 );
 
 adminStacksRouter.post(
   "/:id/revoke",
   handle(async (req, res) => {
-    res.json(await revokeStack(req.params.id, req.user!.email));
+    const { versionId } = parseBody(reviewSchema, req.body);
+    res.json(await revokeStack(req.params.id, versionId, req.user!.email));
   })
 );

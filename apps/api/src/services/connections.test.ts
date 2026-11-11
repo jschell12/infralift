@@ -15,12 +15,14 @@ const updateMany = vi.fn(async () => ({ count: 1 }));
 const del = vi.fn(async () => ({}));
 const assessmentCount = vi.fn(async () => 0);
 const projectFindMany = vi.fn(async (): Promise<{ name: string }[]> => []);
+const stackCount = vi.fn(async () => 0);
 
 vi.mock("../lib/db.js", () => ({
   prisma: {
     providerConnection: { findFirst, update, updateMany, delete: del },
     assessment: { count: assessmentCount },
     tfProject: { findMany: projectFindMany },
+    stackSource: { count: stackCount },
   },
 }));
 
@@ -152,6 +154,15 @@ describe("deleteConnection", () => {
     const err = await svc.deleteConnection("org_mine", "conn_1").catch((e) => e);
     expect(err.status).toBe(409);
     expect(err.message).toContain('"deploy bot" is still used by 2 assessments and project shop');
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it("refuses while a team stack reads through it, scoped to the org", async () => {
+    stackCount.mockResolvedValueOnce(1);
+    const err = await svc.deleteConnection("org_mine", "conn_1").catch((e) => e);
+    expect(err.status).toBe(409);
+    expect(err.message).toContain('"deploy bot" is still used by 1 stack');
+    expect(stackCount).toHaveBeenCalledWith({ where: { orgId: "org_mine", connectionId: "conn_1" } });
     expect(del).not.toHaveBeenCalled();
   });
 

@@ -151,7 +151,11 @@ export function memoryTree(files: Map<string, { content: string; mode: StackFile
   };
 }
 
-const ajv = new Ajv({ allErrors: true, strict: false, useDefaults: true });
+/** Compiles input schemas. The catalog shares this one; a team stack gets its
+ *  own (lib/stacks/team.ts), so its schema ids and cache are not shared state. */
+export type SchemaCompiler = InstanceType<typeof Ajv>;
+export const newSchemaCompiler = (): SchemaCompiler => new Ajv({ allErrors: true, strict: false, useDefaults: true });
+const ajv = newSchemaCompiler();
 
 export function listStacks(dir = STACKS_DIR): StackManifest[] {
   return readdirSync(dir, { withFileTypes: true })
@@ -183,10 +187,11 @@ function loadManifest(slug: string, dir: string): StackManifest {
  * Returns a new object; the caller's is not modified. */
 export function resolveStackInputs(
   manifest: StackManifest,
-  inputs: TfArguments
+  inputs: TfArguments,
+  compiler: SchemaCompiler = ajv
 ): TfArguments {
   const resolved: TfArguments = { ...inputs };
-  const validate = ajv.compile(manifest.inputSchema);
+  const validate = compiler.compile(manifest.inputSchema);
   if (!validate(resolved)) {
     throw new TfInputValidationError(
       (validate.errors ?? []).map(
@@ -208,9 +213,10 @@ function matches(when: When | undefined, args: TfArguments): boolean {
 export function renderStack(
   manifest: StackManifest,
   inputs: TfArguments,
-  tree: StackTree = diskTree(join(STACKS_DIR, manifest.slug))
+  tree: StackTree = diskTree(join(STACKS_DIR, manifest.slug)),
+  compiler: SchemaCompiler = ajv
 ): StackFile[] {
-  const args = resolveStackInputs(manifest, inputs);
+  const args = resolveStackInputs(manifest, inputs, compiler);
   // Flags for {{#if}} blocks, which test presence rather than value.
   const delivery = manifest.deliveries.find((d) => d.slug === args.delivery);
   if (!delivery) {
