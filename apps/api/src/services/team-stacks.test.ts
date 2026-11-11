@@ -81,6 +81,10 @@ vi.mock("../lib/stacks/team.js", async (orig) => ({
   loadTeamStack: async (_c: unknown, { ref }: { ref: string }) => {
     const sha = refs[ref];
     if (ref === "broken") return { valid: false, sha: "f".repeat(40), manifest: null, files: [], errors: ["no stack.json in s"] };
+    if (ref === "busy" || ref === "crashed") {
+      const { StackCheckUnavailable } = await orig<typeof import("../lib/stacks/team.js")>();
+      throw new StackCheckUnavailable("try again", ref === "busy" ? "busy" : "failed");
+    }
     const manifest = { slug: "team-web", name: "Team web", description: "d", target: { slug: "aws", name: "AWS" }, runtime: { slug: "ecs", name: "ECS" }, deliveries: [{ slug: "gha", name: "GitHub Actions", gitHost: "github" }] };
     return { valid: true, sha, manifest, files: [{ path: "stack.json", mode: "100644", bytes: 2, sha256: "0".repeat(64) }], contents: { "stack.json": "{}" }, renderedFiles: 3 };
   },
@@ -246,6 +250,19 @@ describe("tenant isolation", () => {
     await expect(svc.withdrawStack(OTHER, s.id)).rejects.toThrow("stack not found");
     await expect(svc.requestPublish(OTHER, s.id, { versionId: db.stackVersion[0].id })).rejects.toThrow("stack not found");
     expect(db.stackSource[0].visibility).toBe("public");
+    expect(db.stackVersion).toHaveLength(1);
+  });
+});
+
+describe("a check that could not run", () => {
+  it("records nothing and answers 429 or 503, so the same commit can be tried again", async () => {
+    await expect(acmeStack("busy")).rejects.toMatchObject({ status: 429 });
+    await expect(acmeStack("crashed")).rejects.toMatchObject({ status: 503 });
+    expect(db.stackSource).toHaveLength(0);
+    expect(db.stackVersion).toHaveLength(0);
+    refs.v1 = "a".repeat(40);
+    const s = await acmeStack("v1");
+    await expect(svc.addStackVersion(ACME, s.id, { ref: "busy" }, client)).rejects.toMatchObject({ status: 429 });
     expect(db.stackVersion).toHaveLength(1);
   });
 });

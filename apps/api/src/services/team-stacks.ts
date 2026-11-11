@@ -2,11 +2,11 @@ import { Prisma } from "@prisma/client";
 import { isGitHost, PROVIDER_LABELS } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
 import { decryptToken } from "../lib/crypto.js";
-import { Conflict, InvalidInput, NotFound, Upstream } from "../lib/errors.js";
+import { Conflict, InvalidInput, NotFound, ServiceUnavailable, TooManyRequests, Upstream } from "../lib/errors.js";
 import { GitCommitError } from "../lib/git/errors.js";
 import { gitHostClient, type GitHostClient } from "../lib/git/hosts.js";
 import { listStacks, stackGitHosts, type StackManifest } from "../lib/stacks/index.js";
-import { isStackDir, loadTeamStack, StackFetchError, type TeamStackLoad } from "../lib/stacks/team.js";
+import { isStackDir, loadTeamStack, StackCheckUnavailable, StackFetchError, type TeamStackLoad } from "../lib/stacks/team.js";
 import {
   originFor,
   transitionFor,
@@ -96,6 +96,11 @@ async function load(client: GitHostClient, repo: string, dir: string, ref: strin
     return await loadTeamStack(client, { repo, dir, ref });
   } catch (err) {
     if (err instanceof StackFetchError) throw new InvalidInput(err.message);
+    // Our failure, not the stack's: record nothing, so the same commit can be
+    // tried again.
+    if (err instanceof StackCheckUnavailable) {
+      throw err.reason === "busy" ? new TooManyRequests(err.message) : new ServiceUnavailable(err.message);
+    }
     if (err instanceof GitCommitError) throw new Upstream(err.message);
     throw err;
   }

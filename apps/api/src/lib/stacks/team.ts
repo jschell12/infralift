@@ -63,6 +63,20 @@ export type TeamStackLoad =
 
 export class StackFetchError extends Error {}
 
+/** The check itself could not run (queue full, thread failed): nothing was
+ *  learned about the stack, so nothing is recorded and the same commit can be
+ *  tried again. */
+export class StackCheckUnavailable extends Error {
+  constructor(
+    message: string,
+    readonly reason: "busy" | "failed"
+  ) {
+    super(message);
+  }
+}
+
+type TrialResult = RenderResult | { ok: false; error: string; retry: "busy" | "failed" };
+
 /** A relative path that stays inside the tree: no leading slash, no "." or
  *  ".." segment, no backslash, nothing a shell or a filesystem reads twice. */
 export function isStackPath(path: string): boolean {
@@ -217,9 +231,9 @@ export async function trialRender(
   manifest: StackManifest,
   contents: Map<string, { content: string; mode: StackFile["mode"] }>,
   opts: { timeoutMs?: number; onWorker?: (w: Worker) => void } = {}
-): Promise<RenderResult> {
+): Promise<TrialResult> {
   if (!(await acquireRenderSlot())) {
-    return { ok: false, error: "too many stacks are being checked right now; try again in a minute" };
+    return { ok: false, error: "too many stacks are being checked right now; try again in a minute", retry: "busy" };
   }
   try {
     return await runTrialRender(manifest, contents, opts);
@@ -232,7 +246,7 @@ function runTrialRender(
   manifest: StackManifest,
   contents: Map<string, { content: string; mode: StackFile["mode"] }>,
   opts: { timeoutMs?: number; onWorker?: (w: Worker) => void }
-): Promise<RenderResult> {
+): Promise<TrialResult> {
   const timeoutMs = opts.timeoutMs ?? TEAM_STACK_LIMITS.renderTimeoutMs;
   const { url, execArgv } = renderWorker();
   const worker = new Worker(url, {
@@ -240,10 +254,10 @@ function runTrialRender(
     resourceLimits: { maxOldGenerationSizeMb: TEAM_STACK_LIMITS.renderHeapMb, maxYoungGenerationSizeMb: 32 },
   });
   opts.onWorker?.(worker);
-  return new Promise<RenderResult>((resolve) => {
+  return new Promise<TrialResult>((resolve) => {
     let timer: NodeJS.Timeout | undefined;
     let settled = false;
-    const finish = (result: RenderResult) => {
+    const finish = (result: TrialResult) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -253,7 +267,7 @@ function runTrialRender(
     };
     // Loading the thread is ours to pay for, not the team's: a generous
     // limit for that, then the real budget once it says it is ready.
-    timer = setTimeout(() => finish({ ok: false, error: CHECK_FAILED }), 30_000);
+    timer = setTimeout(() => finish({ ok: false, error: CHECK_FAILED, retry: "failed" }), 30_000);
     worker.on("message", (msg: "ready" | RenderResult) => {
       if (msg === "ready") {
         clearTimeout(timer);
@@ -268,9 +282,13 @@ function runTrialRender(
     // Running out of heap is the schema's doing; any other thread failure
     // (it failed to load, it crashed) is ours, and says so.
     worker.on("error", (err) =>
-      finish({ ok: false, error: /memory/i.test(err.message) ? `${TOO_COMPLEX}: it ran out of memory` : CHECK_FAILED })
+      finish(
+        /memory/i.test(err.message)
+          ? { ok: false, error: `${TOO_COMPLEX}: it ran out of memory` }
+          : { ok: false, error: CHECK_FAILED, retry: "failed" }
+      )
     );
-    worker.on("exit", () => finish({ ok: false, error: CHECK_FAILED }));
+    worker.on("exit", () => finish({ ok: false, error: CHECK_FAILED, retry: "failed" }));
   });
 }
 
@@ -343,6 +361,7 @@ export async function loadTeamStack(
   const manifest = raw as StackManifest;
 
   const rendered = await trialRender(manifest, contents);
+  if (!rendered.ok && "retry" in rendered) throw new StackCheckUnavailable(rendered.error, rendered.retry);
   if (!rendered.ok) return { valid: false, sha, manifest, files, errors: [rendered.error] };
   const text = Object.fromEntries([...contents].map(([p, f]) => [p, f.content]));
   return { valid: true, sha, manifest, files, contents: text, renderedFiles: rendered.renderedFiles };
