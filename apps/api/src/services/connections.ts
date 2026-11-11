@@ -181,22 +181,24 @@ export async function rotateConnection(orgId: string, id: string, input: RotateI
  *  projects by id), naming what to change first. */
 export async function deleteConnection(orgId: string, id: string): Promise<void> {
   const connection = await findOwned(orgId, id);
-  const [assessments, projects] = await Promise.all([
+  const [assessments, projects, stacks] = await Promise.all([
     prisma.assessment.count({ where: { connectionId: connection.id } }),
     prisma.tfProject.findMany({
       where: { orgId, OR: [{ gitConnectionId: connection.id }, { tfcConnectionId: connection.id }] },
       select: { name: true },
       take: 5,
     }),
+    prisma.stackSource.count({ where: { orgId, connectionId: connection.id } }),
   ]);
-  if (assessments || projects.length) {
+  if (assessments || projects.length || stacks) {
     const uses = [
       assessments ? `${assessments} assessment${assessments === 1 ? "" : "s"}` : null,
+      stacks ? `${stacks} stack${stacks === 1 ? "" : "s"}` : null,
       projects.length ? `project${projects.length === 1 ? "" : "s"} ${projects.map((p) => p.name).join(", ")}` : null,
     ].filter(Boolean);
     throw new Conflict(
       `"${connection.label}" is still used by ${uses.join(" and ")}. Replace its credential instead, or point those at another connection first.`,
-      { assessments, projects: projects.map((p) => p.name) }
+      { assessments, stacks, projects: projects.map((p) => p.name) }
     );
   }
   await prisma.providerConnection.delete({ where: { id: connection.id } });

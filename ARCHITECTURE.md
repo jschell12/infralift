@@ -136,7 +136,8 @@ A merge to `main` runs CI on GitHub-hosted runners. The marketing site (`apps/we
 
 ## Glossary
 
-- **Stack:** a template app plus a target, runtime and delivery, rendered into a repository.
+- **Stack:** a collection of modules plus wiring, an input schema and a delivery, rendered into a repository. From the catalog on disk, or a team's own repository pinned to a commit ([ADR 0009](docs/adr/0009-stacks-modules-and-team-stacks.md)).
+- **Module:** what manages one important resource, such as a database, plus what exists only to serve it.
 - **Delivery:** the CI system that deploys a stack (GitHub Actions, GitLab CI).
 - **Import:** bringing existing Terraform under infralift, behind the zero-change check.
 - **Adopt:** bringing resources built by hand under Terraform, with generated code. (A TFC workspace "adopted" in `routes/workspaces.ts` is the older meaning.)

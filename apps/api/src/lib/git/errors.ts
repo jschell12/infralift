@@ -1,5 +1,13 @@
 import { Upstream } from "../errors.js";
 
+/** A file was bigger than the caller said it would read. Not a host failure:
+ *  the caller decides what it means (lib/stacks/team.ts records it). */
+export class GitFileTooLarge extends Error {
+  constructor(readonly path: string, readonly maxBytes: number) {
+    super(`${path} is over ${maxBytes} bytes`);
+  }
+}
+
 /** A git host (GitHub, GitLab) refused or failed a request. The message names
  *  the operation, repository and status, never a token. A request that hits
  *  one answers 502 with that message. */
