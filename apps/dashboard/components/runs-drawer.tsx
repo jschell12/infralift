@@ -7,7 +7,7 @@ import {
   type TfcRunSummary,
   type WorkspaceSummary,
 } from "@infralift/shared";
-import { api } from "../lib/api";
+import { api, errorText } from "../lib/api";
 import { Chip, Drawer, INPUT, LABEL, PrimaryButton, type Tone } from "./ui";
 
 const POLL_MS = 5000;
@@ -57,7 +57,7 @@ export function RunsDrawer({
           setRuns(r);
           setError(null);
         })
-        .catch((e) => setError(e instanceof Error ? e.message : String(e))),
+        .catch((e) => setError(errorText(e))),
     [base]
   );
 
@@ -84,7 +84,7 @@ export function RunsDrawer({
       await load();
       onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -101,7 +101,7 @@ export function RunsDrawer({
       setTokenId(r.selected ?? r.tokens[0]?.id ?? "");
     } catch (e) {
       setLinking(false);
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
   }
 
@@ -122,7 +122,7 @@ export function RunsDrawer({
       setLinking(false);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorText(err));
     } finally {
       setBusy(false);
     }

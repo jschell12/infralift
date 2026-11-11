@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import {
   PROVIDER_LABELS,
   type AssessmentCostProjectionRow,
@@ -11,15 +11,18 @@ import {
   type PriceConfidence,
   MigrationPlan,
 } from "@infralift/shared";
-import { api, formatCents } from "../../../lib/api";
+import { api, formatCents, errorText } from "../../../lib/api";
 import { AdoptCard } from "../../../components/import-panel";
 import {
   Card,
   CardTitle,
   Chip,
+  ErrorState,
   NUM,
   Note,
   PrimaryButton,
+  Skeleton,
+  SkeletonCards,
   StatCard,
   TableHead,
   TableRow,
@@ -113,23 +116,32 @@ export default function AssessmentReportPage({
   // rendering three files and letting someone think that is all there is.
   const [codegenLocked, setCodegenLocked] = useState<CodegenLock | null>(null);
   const [codegenBusy, setCodegenBusy] = useState(false);
+  // A failed generation is said in the codegen card; the report above it is
+  // still good and stays on screen.
+  const [codegenError, setCodegenError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadReport = useCallback(() => {
+    setError(null);
     api<AssessmentReport & ReportExtras>(`/assessments/${id}`)
       .then(setReport)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => setError(errorText(e)));
+  }, [id]);
+
+  useEffect(() => {
+    loadReport();
     // Deep link from the options page: /assessments/:id?codegen=hetzner#codegen
     const target = new URLSearchParams(window.location.search).get("codegen");
     if (target === "cloudflare" || target === "hetzner") {
       setCodegenTarget(target);
     }
-  }, [id]);
+  }, [loadReport]);
 
   async function runCodegen() {
     if (!report) return;
     setCodegenBusy(true);
     setCodegenFiles(null);
     setCodegenLocked(null);
+    setCodegenError(null);
     try {
       const result = await api<CodegenResponse>(
         "/tf/codegen",
@@ -149,14 +161,21 @@ export default function AssessmentReportPage({
           : null
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setCodegenError(errorText(e));
     } finally {
       setCodegenBusy(false);
     }
   }
 
-  if (error) return <div className="mt-2 text-sm text-danger">{error}</div>;
-  if (!report) return <p className="text-muted">Loading report...</p>;
+  if (error) return <ErrorState message={error} onRetry={loadReport} />;
+  if (!report) {
+    return (
+      <div>
+        <Skeleton className="h-8 w-1/2 max-w-[360px] mb-7" />
+        <SkeletonCards count={3} label="Loading report" />
+      </div>
+    );
+  }
 
   const projection = report.costProjection ?? [];
   const inventory = report.inventory.slice(0, 8);
@@ -397,6 +416,12 @@ export default function AssessmentReportPage({
             </PrimaryButton>
           </div>
         </div>
+
+        {codegenError && (
+          <p role="alert" className="mb-4 text-sm text-danger">
+            {codegenError}
+          </p>
+        )}
 
         {codegenFiles && (
           <div className="space-y-3">

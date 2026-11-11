@@ -13,7 +13,7 @@ import {
   type ProviderConnectionSummary,
   type StackProject,
 } from "@infralift/shared";
-import { api } from "../../lib/api";
+import { api, errorText } from "../../lib/api";
 import { AssessPanel } from "../../components/assess-panel";
 import { ImportCheckStatus, ImportPanel } from "../../components/import-panel";
 import { MigrationCard } from "../../components/migration-card";
@@ -21,11 +21,13 @@ import {
   CARD,
   Chip,
   Drawer,
+  ErrorState,
   INPUT,
   LABEL,
   MONO,
   Note,
   PrimaryButton,
+  SkeletonCards,
   type Tone,
 } from "../../components/ui";
 
@@ -454,7 +456,7 @@ function NewProjectDrawer({
       setPreview(out.files);
     } catch (e) {
       setPreview(null);
-      setError((e as Error).message);
+      setError(errorText(e));
     }
   }
 
@@ -479,7 +481,7 @@ function NewProjectDrawer({
       });
       onCreated();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -808,7 +810,7 @@ function SettingsDrawer({
       });
       onSaved();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -848,6 +850,9 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState<null | { start: Start; highlight: string | null }>(null);
   const [editing, setEditing] = useState<StackProject | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // False until the first load answers, so "No projects yet" is never shown
+  // to a customer whose projects are still on their way.
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     const [s, p, m] = await Promise.all([
@@ -864,11 +869,15 @@ export default function ProjectsPage() {
       mine.map(async (x) => [x.id, await api<Job[]>(`/tf/jobs?projectId=${x.id}`)] as const)
     );
     setJobs(Object.fromEntries(entries));
+    setLoaded(true);
   }, []);
 
-  useEffect(() => {
-    load().catch((e) => setError((e as Error).message));
+  const firstLoad = useCallback(() => {
+    setError(null);
+    load().catch((e) => setError(errorText(e)));
   }, [load]);
+
+  useEffect(firstLoad, [firstLoad]);
 
   // /projects?start=existing and /projects?assess=<connectionId> (from
   // Connections, and where /assessments now redirects) open the drawer on the
@@ -910,9 +919,15 @@ export default function ProjectsPage() {
         </PrimaryButton>
       </div>
 
-      {error && <div className="text-danger text-sm mb-4">{error}</div>}
+      {error && (
+        <div className="mb-4">
+          <ErrorState message={error} onRetry={firstLoad} />
+        </div>
+      )}
 
-      {projects.length === 0 && migrations.length === 0 && !error && (
+      {!loaded && !error && <SkeletonCards count={2} label="Loading projects" />}
+
+      {loaded && projects.length === 0 && migrations.length === 0 && !error && (
         <div className={`${CARD} mb-4`}>
           <h3 className="text-base font-semibold mb-1.5">No projects yet</h3>
           <p className="text-muted text-sm">

@@ -6,8 +6,8 @@ import {
   type AssessmentSummary,
   type ProviderConnectionSummary,
 } from "@infralift/shared";
-import { api, formatCents, savingsNote } from "../lib/api";
-import { Dot, NUM } from "./ui";
+import { api, formatCents, savingsNote, errorText } from "../lib/api";
+import { Dot, NUM, Skeleton } from "./ui";
 
 // "From existing infrastructure": assess a connected account, then pick a
 // target on the assessment's options page, which opens the project. Lives in
@@ -33,6 +33,13 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
   const [runningId, setRunningId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  // True from the click until POST /assessments/run answers. The run is
+  // synchronous, so runningId stays null for its whole duration and used to
+  // leave the Assess buttons live: a second tap started a second run. The ref
+  // is read on the click itself, before React re-renders the disabled button.
+  const [submitting, setSubmitting] = useState(false);
+  const inFlight = useRef(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -44,9 +51,10 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
       setAssessments(a);
       setConnections(c);
       setError(null);
+      setLoaded(true);
       return a;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
       return [];
     }
   }, []);
@@ -73,6 +81,9 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
   }, [runningId, load]);
 
   async function run(connectionId: string) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSubmitting(true);
     setProgress(6);
     setError(null);
     try {
@@ -84,7 +95,10 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
       await load();
     } catch (e) {
       setProgress(0);
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
+    } finally {
+      inFlight.current = false;
+      setSubmitting(false);
     }
   }
 
@@ -100,7 +114,12 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
       </p>
       {error && <div className="mb-3 text-sm text-danger">{error}</div>}
 
-      {valid.length === 0 ? (
+      {!loaded && !error ? (
+        <div role="status" aria-label="Loading connected accounts">
+          <Skeleton className="h-12 w-full mb-2" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+      ) : valid.length === 0 ? (
         <p className="text-sm text-muted">
           No connected accounts yet. <a href="/connections">Connect one</a> first.
         </p>
@@ -116,12 +135,14 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
               <div className="text-[12px] text-muted">{c.label}</div>
             </div>
             <div className="ml-auto">
-              {runningId ? (
-                <span className="text-[13px] text-muted">assessing&hellip;</span>
+              {runningId || submitting ? (
+                <span role="status" className="text-[13px] text-muted">assessing&hellip;</span>
               ) : (
                 <button
-                  onClick={() => run(c.id)}
-                  className="cursor-pointer rounded-md border-0 bg-accent px-3 py-1.5 text-[13px] font-semibold text-bg hover:bg-accent/90"
+                  type="button"
+                  onClick={() => void run(c.id)}
+                  disabled={submitting}
+                  className="cursor-pointer rounded-md border-0 bg-accent px-3 py-1.5 text-[13px] font-semibold text-bg hover:bg-accent/90 disabled:cursor-default disabled:opacity-50"
                 >
                   {completed.some((a) => a.provider === c.provider) ? "Assess again" : "Assess"}
                 </button>

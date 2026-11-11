@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import type {
@@ -25,7 +26,11 @@ import { buildMigrationOptions } from "../lib/options.js";
 import { buildReportExtras } from "../lib/report-extras.js";
 import { buildMigrationPlan } from "../lib/migration-plan.js";
 import { InvalidInput, NotFound, Upstream, handle, parseBody } from "../lib/errors.js";
-import { assessmentSavings, setReportedSpend } from "../services/assessments.js";
+import {
+  assessmentSavings,
+  refuseConcurrentRun,
+  setReportedSpend,
+} from "../services/assessments.js";
 import { markInvalidOnAuthFailure } from "../services/connections.js";
 
 export const assessmentsRouter = Router();
@@ -147,6 +152,8 @@ assessmentsRouter.post("/run", handle(async (req, res) => {
   if (!(PROVIDERS as readonly string[]).includes(connection.provider)) {
     throw new InvalidInput(`${connection.provider} connections cannot be assessed`);
   }
+  // 409 while this connection already has a run going.
+  await refuseConcurrentRun(connection.orgId, connection.id);
   // AWS: always the caller's org's external ID; 422 when AWS is off here.
   const secret = await connectionSecret(connection.orgId, connection.provider, decryptToken(connection.encryptedToken));
 
@@ -166,18 +173,22 @@ assessmentsRouter.post("/run", handle(async (req, res) => {
 
     await persistAssessmentResult(assessment.id, result);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     await prisma.assessment.update({
       where: { id: assessment.id },
-      data: {
-        status: "failed",
-        completedAt: new Date(),
-        error: err instanceof Error ? err.message : String(err),
-      },
+      data: { status: "failed", completedAt: new Date(), error: message },
     });
     // A 401/403 means the stored credential no longer works; say so on the
     // connection, where the customer can replace it. A 5xx does not.
     await markInvalidOnAuthFailure(connection, err, "connector", "an assessment");
-    throw new Upstream("Assessment failed", { detail: err instanceof Error ? err.message : String(err), assessmentId: assessment.id });
+    // The provider's own message goes to the log, never the response: it can
+    // quote a response body, and the dashboard shows a sentence instead. The
+    // request id ties the two together when a customer reports it.
+    const requestId = randomUUID();
+    console.error(
+      `assessment ${assessment.id} failed (${connection.provider}) [request ${requestId}]: ${message}`
+    );
+    throw new Upstream("Assessment failed", { assessmentId: assessment.id, requestId });
   }
 
   res.status(201).json(await summarize(assessment.id));
@@ -224,20 +235,22 @@ assessmentsRouter.post("/from-bundle", handle(async (req, res) => {
     const result = analyzeBundle(parsedBundle);
     await persistAssessmentResult(assessment.id, result);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     await prisma.assessment.update({
       where: { id: assessment.id },
-      data: {
-        status: "failed",
-        completedAt: new Date(),
-        error: err instanceof Error ? err.message : String(err),
-      },
+      data: { status: "failed", completedAt: new Date(), error: message },
     });
     // Sent by hand on purpose: a failed bundle assessment is our fault (500),
-    // and the body carries the assessment id the dashboard links to.
+    // and the body carries the assessment id the dashboard links to. The
+    // analyzer's message is logged under a request id, not sent.
+    const requestId = randomUUID();
+    console.error(
+      `bundle assessment ${assessment.id} failed [request ${requestId}]: ${message}`
+    );
     return res.status(500).json({
       error: "Could not read that snapshot",
-      detail: err instanceof Error ? err.message : String(err),
       assessmentId: assessment.id,
+      requestId,
     });
   }
 

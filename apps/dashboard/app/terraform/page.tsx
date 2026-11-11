@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Project, TemplateProject } from "@infralift/shared";
-import { api } from "../../lib/api";
+import { api, errorText } from "../../lib/api";
 import { Drawer } from "../../components/ui";
 
 // -- API shapes ---------------------------------------------------------------
@@ -131,12 +131,23 @@ function ArgumentFields({
   );
 }
 
+function DrawerError({ message }: { message: string }) {
+  return (
+    <p role="alert" className="mb-4 text-sm text-danger">
+      {message}
+    </p>
+  );
+}
+
 export default function TerraformPage() {
   const [templates, setTemplates] = useState<TfTemplate[]>([]);
   const [projects, setProjects] = useState<TfProject[]>([]);
   const [jobs, setJobs] = useState<TfJob[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  // Errors from a drawer's form, shown inside the drawer: the page-level
+  // message sat under the drawer's overlay where nobody could read it.
+  const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   // Drawers
@@ -173,7 +184,7 @@ export default function TerraformPage() {
 
   useEffect(() => {
     Promise.all([loadTemplates(), loadProjects()]).catch((e) =>
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errorText(e))
     );
   }, [loadTemplates, loadProjects]);
 
@@ -210,7 +221,7 @@ export default function TerraformPage() {
   async function createProject(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setError(null);
+    setFormError(null);
     try {
       await api("/tf/projects", {
         method: "POST",
@@ -233,7 +244,7 @@ export default function TerraformPage() {
       setPName("");
       await loadProjects();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setFormError(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -242,7 +253,7 @@ export default function TerraformPage() {
   async function previewRender() {
     if (!runProject || !runVersion) return;
     setBusy(true);
-    setError(null);
+    setFormError(null);
     try {
       const res = await api<{ rendered: string }>(
         `/tf/templates/${runProject.templateVersion.template.slug}/versions/${runProject.templateVersion.releaseTag}/preview`,
@@ -256,7 +267,7 @@ export default function TerraformPage() {
       setPreview(res.rendered);
     } catch (err) {
       setPreview(null);
-      setError(err instanceof Error ? err.message : String(err));
+      setFormError(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -266,7 +277,7 @@ export default function TerraformPage() {
     e.preventDefault();
     if (!runProject || !runVersion) return;
     setBusy(true);
-    setError(null);
+    setFormError(null);
     try {
       await api("/tf/jobs", {
         method: "POST",
@@ -281,7 +292,7 @@ export default function TerraformPage() {
       setPreview(null);
       await loadJobs(runProject.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setFormError(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -359,6 +370,7 @@ export default function TerraformPage() {
                     <button
                       className="inline-block px-5 py-2 rounded-lg text-sm font-semibold cursor-pointer border border-border bg-transparent text-text hover:bg-surface"
                       onClick={() => {
+                        setFormError(null);
                         setRunProject(p);
                         setArgValues({});
                         setPreview(null);
@@ -374,7 +386,10 @@ export default function TerraformPage() {
         )}
         <button
           className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90"
-          onClick={() => setShowNewProject(true)}
+          onClick={() => {
+            setFormError(null);
+            setShowNewProject(true);
+          }}
         >
           New project
         </button>
@@ -440,6 +455,7 @@ export default function TerraformPage() {
           subtitle="Bind a template version to a destination repo. Generated files land under the destination path on the chosen branch."
           onClose={() => setShowNewProject(false)}
         >
+          {formError && <DrawerError message={formError} />}
           <form onSubmit={createProject}>
             <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Project name * (lowercase, digits, dashes)</label>
             <input
@@ -524,6 +540,7 @@ export default function TerraformPage() {
           subtitle={`${runProject.templateVersion.template.slug}@${runProject.templateVersion.releaseTag} to ${runProject.destRepo}`}
           onClose={() => setRunProject(null)}
         >
+          {formError && <DrawerError message={formError} />}
           <form onSubmit={launchJob}>
             <ArgumentFields
               schema={runVersion.inputSchema}

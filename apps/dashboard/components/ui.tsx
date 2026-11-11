@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+// Imported only by client components; Drawer uses hooks, so a server
+// component must not render it directly.
+import { useEffect, useId, useRef, type ReactNode } from "react";
 
 /** The repeated utility strings, in one place. No transitions: hover is
  *  colour-only, per the design system. */
@@ -230,7 +232,11 @@ export function Note({
 }
 
 /** Right-side slide-over. Forms live here rather than in a modal so the page
- *  behind them stays readable while a customer fills one in. */
+ *  behind them stays readable while a customer fills one in.
+ *
+ *  A dialog for assistive tech and the keyboard: Escape and the close button
+ *  both close it, focus moves into it on open and back to whatever opened it
+ *  on close. Focus is not trapped; the overlay already blocks the page. */
 export function Drawer({
   title,
   subtitle,
@@ -242,14 +248,121 @@ export function Drawer({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const panel = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  // The latest onClose, so the effect below runs once per open rather than on
+  // every render of a parent that passes a new arrow each time.
+  const close = useRef(onClose);
+  close.current = onClose;
+
+  useEffect(() => {
+    const opener =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panel.current?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") close.current();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      opener?.focus();
+    };
+  }, []);
+
   return (
     <>
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-      <div className="fixed top-0 right-0 bottom-0 w-[440px] max-w-[92vw] bg-surface border-l border-border p-6 overflow-y-auto z-50">
-        <h2 className="text-xl font-bold mb-1">{title}</h2>
-        <div className="text-muted text-sm mb-6">{subtitle}</div>
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="fixed top-0 right-0 bottom-0 w-[440px] max-w-[92vw] bg-surface border-l border-border p-6 overflow-y-auto z-50 focus:outline-none"
+      >
+        <div className="flex items-start gap-3 mb-6">
+          <div className="min-w-0 flex-1">
+            <h2 id={titleId} className="text-xl font-bold mb-1 break-words">
+              {title}
+            </h2>
+            <div className="text-muted text-sm break-words">{subtitle}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="-mr-2 -mt-2 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-muted hover:bg-bg hover:text-text"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 22 22"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M5 5l12 12" />
+              <path d="M17 5L5 17" />
+            </svg>
+          </button>
+        </div>
         {children}
       </div>
     </>
+  );
+}
+
+/** A grey block standing in for content that is still loading. Sized by the
+ *  caller so the page does not jump when the real content arrives. */
+export function Skeleton({ className = "" }: { className?: string }) {
+  return (
+    <div aria-hidden="true" className={`rounded-md bg-border/60 ${className}`} />
+  );
+}
+
+/** Card-shaped placeholders for a list that is loading. */
+export function SkeletonCards({
+  count = 2,
+  label = "Loading",
+}: {
+  count?: number;
+  label?: string;
+}) {
+  return (
+    <div role="status" aria-label={label} className="flex flex-col gap-4">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className={CARD}>
+          <Skeleton className="h-4 w-1/3 mb-3" />
+          <Skeleton className="h-3 w-2/3 mb-2" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A load that failed: what happened, in words, and a way to try again. */
+export function ErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div role="alert" className={`${CARD} flex flex-wrap items-center gap-3`}>
+      <p className="min-w-0 flex-1 text-sm text-text">{message}</p>
+      {onRetry ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="min-h-11 cursor-pointer rounded-lg border border-border bg-transparent px-4 text-sm font-semibold text-text hover:bg-bg"
+        >
+          Try again
+        </button>
+      ) : null}
+    </div>
   );
 }

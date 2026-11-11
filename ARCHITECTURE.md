@@ -75,6 +75,8 @@ Each is a well-known pattern, used under its usual name.
 
 `routes/*` validates the body with zod (`parseBody`), calls one service function, and sends what it returns. A service that refuses throws a typed error; `handle()` (and, for any route, the app's `errorHandler`) answers with its status and body. Anything else is a 500 and is logged. Every query a service makes is scoped to the caller's org.
 
+A response never carries a provider's or a library's own error text: a 5xx logs it with a request id and sends a sentence. The dashboard shows a failed request as the body's `error` sentence or a message chosen from the status (`errorMessageFor` in `apps/dashboard/lib/api.ts`, tested with `pnpm --filter @infralift/dashboard test`), never `detail`.
+
 ### A job
 
 Creating a stack project, importing a module, adopting resources, approving a migration or saving settings each create a `TfJob` row and call `startJob()`:
