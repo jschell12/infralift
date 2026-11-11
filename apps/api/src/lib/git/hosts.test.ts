@@ -267,3 +267,62 @@ describe("GitHub createFromTemplate", () => {
     expect(calls[0].body).toEqual({ owner: "acme", name: "web", private: true, include_all_branches: false });
   });
 });
+
+describe("resolveRef and listTree", () => {
+  // Tree entries exactly as GitHub returned them on 2026-11-10: a symlink and
+  // a file from jschell12/shopping-mawl@7860ad3, a submodule (no size field)
+  // from jschell12/schellout-engineering-team@9ad901d, and a directory.
+  const githubTree = {
+    tree: [
+      { mode: "120000", path: "godot/assets/models/cooler.glb", sha: "ae30c9f08ab320a3a4ee56aa0be8c6ed99176503", size: 36, type: "blob" },
+      { mode: "100644", path: "godot/project.godot", sha: "183a293ac4310d306c96d9076fcecc5124818831", size: 584, type: "blob" },
+      { mode: "160000", path: "examples/agent-comparison/swe-af-minimax/todo-app-benchmark", sha: "d5fbea402cd490e36d57a5d588aa91e58768f11a", type: "commit" },
+      { mode: "040000", path: "godot", sha: "t", type: "tree" },
+    ],
+    truncated: false,
+  };
+
+  it("GitHub: resolves a ref to its commit and lists files with their modes", async () => {
+    fake("https://api.github.com", [
+      (c) => (c.path === "/repos/acme/stacks/commits/v1" ? json({ sha: "aa3858b185ce340c2256d03e58992df3977eb348" }) : undefined),
+      (c) => (c.path === "/repos/acme/stacks/commits/nope" ? json({ message: "No commit found for SHA: nope" }, 422) : undefined),
+      (c) => (c.path.startsWith("/repos/acme/stacks/git/trees/") ? json(githubTree) : undefined),
+    ]);
+    const gh = gitHostClient("github", "t");
+    expect(await gh.resolveRef({ repo: "acme/stacks", ref: "v1" })).toBe("aa3858b185ce340c2256d03e58992df3977eb348");
+    expect(await gh.resolveRef({ repo: "acme/stacks", ref: "nope" })).toBeNull();
+    expect(await gh.listTree({ repo: "acme/stacks", ref: "aa3858b" })).toEqual({
+      entries: [
+        { path: "godot/assets/models/cooler.glb", type: "blob", mode: "120000", size: 36 },
+        { path: "godot/project.godot", type: "blob", mode: "100644", size: 584 },
+        { path: "examples/agent-comparison/swe-af-minimax/todo-app-benchmark", type: "commit", mode: "160000", size: null },
+      ],
+      truncated: false,
+    });
+  });
+
+  // Not a live capture: the tree items have the shape the GitLab fakes above
+  // use, and the commit is the documented { id }.
+  it("GitLab: resolves a ref through the commits API and keeps modes", async () => {
+    const P = "/projects/acme%2Fstacks";
+    fake("https://gitlab.com/api/v4", [
+      (c) => (c.path === `${P}/repository/commits/v1` ? json({ id: "c0ffee" }) : undefined),
+      (c) => (c.path === `${P}/repository/commits/nope` ? json({ message: "404 Commit Not Found" }, 404) : undefined),
+      (c) =>
+        c.path.startsWith(`${P}/repository/tree`)
+          ? json([
+              { path: "s/stack.json", type: "blob", id: "1", mode: "100644" },
+              { path: "s/files/link", type: "blob", id: "2", mode: "120000" },
+              { path: "s/files", type: "tree", id: "3", mode: "040000" },
+            ])
+          : undefined,
+    ]);
+    const gl = gitHostClient("gitlab", "t");
+    expect(await gl.resolveRef({ repo: "acme/stacks", ref: "v1" })).toBe("c0ffee");
+    expect(await gl.resolveRef({ repo: "acme/stacks", ref: "nope" })).toBeNull();
+    expect((await gl.listTree({ repo: "acme/stacks", ref: "c0ffee" })).entries).toEqual([
+      { path: "s/stack.json", type: "blob", mode: "100644", size: null },
+      { path: "s/files/link", type: "blob", mode: "120000", size: null },
+    ]);
+  });
+});

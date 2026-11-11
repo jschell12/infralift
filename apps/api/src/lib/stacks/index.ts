@@ -58,6 +58,20 @@ export interface StackManifest {
   rendered: { path: string; template: string; when?: When }[];
   exclude?: { prefix: string; when?: When }[];
   seed?: string[];
+  /** Optional, and descriptive only for now (ADR 0009): the modules the stack
+   *  is made of. A module manages one important resource and what exists only
+   *  to serve it; `path` is its directory in the rendered output. */
+  modules?: StackModule[];
+}
+
+export interface StackModule {
+  name: string;
+  path: string;
+  description?: string;
+  /** The resource type the module exists for, e.g. hcloud_server. */
+  anchor: string;
+  inputs?: string[];
+  outputs?: string[];
 }
 
 export interface StackDelivery {
@@ -91,6 +105,50 @@ export interface StackFile {
   /** git file mode: scripts the box runs directly must stay executable */
   mode: "100644" | "100755";
   ownership: "managed" | "seed";
+}
+
+/**
+ * Where a stack's files come from, so rendering does not care: the catalog's
+ * directory on disk, or a team stack's files fetched at its pinned commit
+ * (ADR 0009). Paths are relative to the stack root and "/"-separated.
+ */
+export interface StackTree {
+  /** Every file under `dir`, recursively, with its git mode. */
+  list(dir: string): { path: string; mode: StackFile["mode"] }[];
+  read(path: string): string;
+}
+
+/** A catalog stack's directory. Listing a missing directory throws, as it did
+ *  before this interface existed. */
+export function diskTree(root: string): StackTree {
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = join(dir, e.name);
+      return e.isDirectory() ? walk(full) : e.isFile() ? [full] : [];
+    });
+  return {
+    list: (dir) =>
+      walk(join(root, dir)).map((full) => ({
+        path: relative(root, full).split(sep).join("/"),
+        mode: statSync(full).mode & 0o111 ? "100755" : "100644",
+      })),
+    read: (path) => readFileSync(join(root, path), "utf8"),
+  };
+}
+
+/** Files already in memory, keyed by path from the stack root. */
+export function memoryTree(files: Map<string, { content: string; mode: StackFile["mode"] }>): StackTree {
+  return {
+    list: (dir) =>
+      [...files.entries()]
+        .filter(([path]) => path.startsWith(`${dir}/`))
+        .map(([path, f]) => ({ path, mode: f.mode })),
+    read: (path) => {
+      const f = files.get(path);
+      if (!f) throw new TfInputValidationError([`${path} is not in the stack`]);
+      return f.content;
+    },
+  };
 }
 
 const ajv = new Ajv({ allErrors: true, strict: false, useDefaults: true });
@@ -146,21 +204,11 @@ function matches(when: When | undefined, args: TfArguments): boolean {
   return Object.entries(when ?? {}).every(([k, v]) => args[k] === v);
 }
 
-function walk(root: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const full = join(root, entry.name);
-    if (entry.isDirectory()) out.push(...walk(full));
-    else if (entry.isFile()) out.push(full);
-  }
-  return out;
-}
-
 /** Renders a stack into the files to commit, sorted by path. */
 export function renderStack(
   manifest: StackManifest,
   inputs: TfArguments,
-  dir = STACKS_DIR
+  tree: StackTree = diskTree(join(STACKS_DIR, manifest.slug))
 ): StackFile[] {
   const args = resolveStackInputs(manifest, inputs);
   // Flags for {{#if}} blocks, which test presence rather than value.
@@ -181,7 +229,6 @@ export function renderStack(
     state_tool: args.backend === "tfc" ? "Terraform (Terraform Cloud)" : "OpenTofu",
   };
 
-  const stackDir = join(dir, manifest.slug);
   const seed = new Set(manifest.seed ?? []);
   const excluded = (path: string) =>
     (manifest.exclude ?? []).some(
@@ -189,20 +236,17 @@ export function renderStack(
     );
   const files = new Map<string, StackFile>();
 
-  for (const filesDir of [
-    join(stackDir, "files"),
-    join(stackDir, "deliveries", delivery.slug, "files"),
-  ]) {
-    for (const full of walk(filesDir)) {
-      const path = relative(filesDir, full).split(sep).join("/");
+  for (const filesDir of ["files", `deliveries/${delivery.slug}/files`]) {
+    for (const f of tree.list(filesDir)) {
+      const path = f.path.slice(filesDir.length + 1);
       if (excluded(path)) continue;
       if (files.has(path)) {
         throw new Error(`stack ${manifest.slug}: ${path} is both common and delivery-specific`);
       }
       files.set(path, {
         path,
-        content: readFileSync(full, "utf8"),
-        mode: statSync(full).mode & 0o111 ? "100755" : "100644",
+        content: tree.read(f.path),
+        mode: f.mode,
         ownership: seed.has(path) ? "seed" : "managed",
       });
     }
@@ -213,7 +257,7 @@ export function renderStack(
     if (files.has(r.path)) {
       throw new Error(`stack ${manifest.slug}: ${r.path} is both copied and rendered`);
     }
-    const body = readFileSync(join(stackDir, "templates", r.template), "utf8");
+    const body = tree.read(`templates/${r.template}`);
     files.set(r.path, {
       path: r.path,
       content: renderTemplate(body, templateArgs),

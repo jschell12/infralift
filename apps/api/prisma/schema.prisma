@@ -434,6 +434,10 @@ model TfProject {
   migrationTarget   String?
   // Set for stack projects: the directory under apps/api/stacks.
   stackSlug         String?
+  // Set for projects made from a team stack (ADR 0009): the version, pinned
+  // to one commit, they render from. Null for catalog stacks, which keep
+  // stackSlug. See migration 0026.
+  stackVersionId    String?
   // Set for imported projects: the scan of the root module at destPath
   // (lib/import/scan.ts RootModule). The job adds a read-only plan check.
   importJson        Json?
@@ -469,9 +473,64 @@ model TfProject {
   renderings      TfRendering[]
   jobs            TfJob[]
   workspaces      Workspace[]
+  stackVersion    StackVersion? @relation(fields: [stackVersionId], references: [id])
 
   @@unique([orgId, name])
   @@index([assessmentId])
+}
+
+// A stack a team keeps in its own repository (ADR 0009). Private to its org
+// until published and approved by an infralift admin. See migration 0026.
+model StackSource {
+  id           String   @id @default(cuid())
+  orgId        String
+  // github | gitlab, and the org's connection to it the files are read with.
+  gitHost      String
+  connectionId String
+  repo         String
+  // The stack's directory in the repository, "" = the root.
+  path         String   @default("")
+  // private | pending_public | public | revoked (lib/stacks/visibility.ts).
+  visibility   String   @default("private")
+  // The version the review covers: the only one other orgs see. Set when
+  // publishing is requested, cleared on withdraw.
+  publishedVersionId String?
+  publishedAt  DateTime?
+  // The admin who approved or revoked it, and when.
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  versions StackVersion[]
+
+  @@unique([orgId, gitHost, repo, path])
+  @@index([visibility])
+}
+
+// One commit of a StackSource. A ref resolves once, when the version is
+// added; a tag moved later does not change it.
+model StackVersion {
+  id            String   @id @default(cuid())
+  stackSourceId String
+  ref           String
+  resolvedSha   String
+  // stack.json as read, when it parsed and matched the schema.
+  manifest      Json?
+  // [{ path, mode, bytes, sha256 }] relative to the stack directory.
+  files         Json
+  // { path: content } as read at resolvedSha, so a project renders from what
+  // was checked and never reads another org's repository. Null when invalid.
+  contents      Json?
+  valid         Boolean
+  // { errors: string[] } or { renderedFiles: number }.
+  validation    Json
+  createdAt     DateTime @default(now())
+
+  source   StackSource @relation(fields: [stackSourceId], references: [id], onDelete: Cascade)
+  projects TfProject[]
+
+  @@unique([stackSourceId, resolvedSha])
 }
 
 model TfRendering {
