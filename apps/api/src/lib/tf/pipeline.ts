@@ -23,6 +23,7 @@ import { renderApplyWorkflow } from "../import/apply.js";
 import type { RootModule } from "../import/scan.js";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { markInvalidOnAuthFailure } from "../../services/connections.js";
+import { toInventoryItem } from "../inventory.js";
 import { PREFER_USABLE_CONNECTION } from "../connection-order.js";
 
 // Staged pipeline. Stages and statuses move only through the job state
@@ -156,10 +157,10 @@ export async function runJob(jobId: string): Promise<void> {
         workingDirectory: project.destPath,
         autoApply: false,
       });
-      const run = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
+      const tfcRun = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
       await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
       const listed = await recordJobWorkspaceNote({ orgId: project.orgId, projectId: project.id, connectionId: project.tfcConnectionId, cred, ws });
-      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws, run.runId !== "none")}; ${listed}`;
+      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${tfcRun.status}; ${vcsNote(ws, tfcRun.runId !== "none")}; ${listed}`;
     }
 
     // -- complete ----------------------------------------------------------
@@ -201,15 +202,7 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
       return;
     }
 
-    const inventory: ResourceInventoryItem[] = assessment.inventory.map((i) => ({
-      provider: i.provider as Provider,
-      type: i.type,
-      externalId: i.externalId,
-      name: i.name,
-      region: i.region ?? undefined,
-      monthlyCostCents: i.monthlyCostCents ?? undefined,
-      metadata: (i.metadata as Record<string, unknown> | null) ?? undefined,
-    }));
+    const inventory: ResourceInventoryItem[] = assessment.inventory.map(toInventoryItem);
 
     const args = (job.argumentsJson ?? {}) as Prisma.InputJsonObject &
       Record<string, unknown>;
@@ -309,10 +302,10 @@ async function runCodegenJob(jobId: string, job: CodegenJob): Promise<void> {
         workingDirectory: project.destPath,
         autoApply: false,
       });
-      const run = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
+      const tfcRun = await adapter.queueRun(workspaceName, `infralift job ${jobId}`);
       await prisma.tfJob.update({ where: { id: jobId }, data: { workspaceName } });
       const listed = await recordJobWorkspaceNote({ orgId: project.orgId, projectId: project.id, connectionId: project.tfcConnectionId, cred, ws });
-      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${run.status}; ${vcsNote(ws, run.runId !== "none")}; ${listed}`;
+      workspaceNote = `workspace ${cred.organization}/${workspaceName} run ${tfcRun.status}; ${vcsNote(ws, tfcRun.runId !== "none")}; ${listed}`;
     }
 
     // -- complete ----------------------------------------------------------

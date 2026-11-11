@@ -1,8 +1,30 @@
 import type { CurrentSpend, Provider } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
+import { toInventoryItem } from "../lib/inventory.js";
 import { Conflict, NotFound } from "../lib/errors.js";
 import { buildMigrationOptions, resolveCurrentSpend } from "../lib/options.js";
 import { headlineNetSavings } from "../lib/report-extras.js";
+
+/** How long an assessment may sit at "running". A token assessment runs
+ *  inside its HTTP request, so one still running after this belonged to a
+ *  request that died with its process, or to a provider that stalled past
+ *  every per-request deadline (lib/http.ts). */
+export const ASSESSMENT_TIME_LIMIT_MS = 30 * 60 * 1000;
+
+export const ASSESSMENT_TIMED_OUT =
+  "timed out: this assessment did not finish within 30 minutes, possibly because infralift restarted while it ran; run it again";
+
+/** Marks assessments stuck at "running" past the limit as failed, so the
+ *  dashboard stops showing a spinner for them. Conditional on the status
+ *  (compare-and-set), so one that completes meanwhile is left alone. Called
+ *  by the job worker's sweep (lib/jobs/queue.ts). Returns how many. */
+export async function failStuckAssessments(now = new Date(), limitMs = ASSESSMENT_TIME_LIMIT_MS): Promise<number> {
+  const { count } = await prisma.assessment.updateMany({
+    where: { status: "running", startedAt: { lt: new Date(now.getTime() - limitMs) } },
+    data: { status: "failed", completedAt: now, error: ASSESSMENT_TIMED_OUT },
+  });
+  return count;
+}
 
 /** Record the monthly bill the customer read off their invoice, or clear it
  *  with null. It overrides the inventory priced at list rates on the options
@@ -107,15 +129,7 @@ export async function assessmentSavings(a: {
       provider: a.provider,
       estimatedMonthlyCostCents: a.estimatedMonthlyCostCents,
       reportedMonthlySpendCents: a.reportedMonthlySpendCents,
-      inventory: inventory.map((i) => ({
-        provider: i.provider as Provider,
-        type: i.type,
-        externalId: i.externalId,
-        name: i.name,
-        region: i.region ?? undefined,
-        monthlyCostCents: i.monthlyCostCents ?? undefined,
-        metadata: (i.metadata as Record<string, unknown> | null) ?? undefined,
-      })),
+      inventory: inventory.map(toInventoryItem),
     });
     return { currentSpend, netMonthlySavingsCents: headlineNetSavings(report) };
   } catch (err) {

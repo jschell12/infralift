@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The connection service against a stubbed Prisma and a stubbed fetch, so the
 // assertions are about what is written (or not) and what the provider was
@@ -169,5 +169,45 @@ describe("deleteConnection", () => {
   it("deletes an unused connection", async () => {
     await svc.deleteConnection("org_mine", "conn_1");
     expect(del).toHaveBeenCalledWith({ where: { id: "conn_1" } });
+  });
+});
+
+describe("a provider that does not answer in time", () => {
+  // The real deadline is 15s; AbortSignal.timeout is shortened so the test
+  // does not wait it out. fetch hangs until its signal aborts, as Node's does
+  // for a server that accepts the connection and never answers.
+  beforeEach(() => {
+    vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+      const c = new AbortController();
+      setTimeout(() => c.abort(new DOMException("The operation was aborted due to timeout", "TimeoutError")), 20);
+      return c.signal;
+    });
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => init.signal!.addEventListener("abort", () => reject(init.signal!.reason)))
+    );
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fetchMock.mockReset();
+  });
+
+  it("fails the connector call with an error naming the host, and does not mark the connection invalid", async () => {
+    const { cloudflareConnector } = await import("../connectors/cloudflare.js");
+    const { HttpTimeoutError } = await import("../lib/http.js");
+    const err = await cloudflareConnector.assess("tok").catch((e) => e);
+    expect(err).toBeInstanceOf(HttpTimeoutError);
+    expect(err.message).toBe("api.cloudflare.com did not answer within 15s");
+    expect(await svc.markInvalidOnAuthFailure({ id: "conn_1", provider: "cloudflare" }, err, "connector", "an assessment")).toBe(false);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("re-verify records the timeout but keeps the connection's status", async () => {
+    findFirst.mockResolvedValue({ ...ROW, provider: "cloudflare", encryptedToken: encryptToken("tok") });
+    await svc.verifyConnection("org_mine", "conn_1");
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "conn_1" },
+      data: { lastError: "Cloudflare did not answer in time; try again" },
+    });
   });
 });

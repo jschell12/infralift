@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { PROVIDERS, type Provider, type ResourceInventoryItem } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
+import { toInventoryItem } from "../lib/inventory.js";
 import { decryptToken } from "../lib/crypto.js";
 import { Conflict, InvalidInput, NotFound, Upstream } from "../lib/errors.js";
 import { gitHostClient, type GitHostClient } from "../lib/git/hosts.js";
@@ -158,15 +159,7 @@ export async function adoptFromAssessment(orgId: string, input: AdoptInput) {
     throw new InvalidInput(`unknown provider ${assessment.provider}`);
   }
   const provider = assessment.provider as Provider;
-  const inventory: ResourceInventoryItem[] = assessment.inventory.map((i) => ({
-    provider,
-    type: i.type,
-    externalId: i.externalId,
-    name: i.name,
-    region: i.region ?? undefined,
-    monthlyCostCents: i.monthlyCostCents ?? undefined,
-    metadata: (i.metadata ?? undefined) as Record<string, unknown> | undefined,
-  }));
+  const inventory: ResourceInventoryItem[] = assessment.inventory.map(toInventoryItem);
   const path = input.path.replace(/^\/+|\/+$/g, "");
   const plan = planAdoption(provider, inventory);
   let rendered;

@@ -1,5 +1,6 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
 import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
+import { httpFetch } from "../lib/http.js";
 
 // Azure assessment via a service principal (client credentials flow). The
 // connection "token" is a JSON object: { tenantId, clientId, clientSecret,
@@ -37,7 +38,7 @@ function parseCredentials(token: string): AzureCredentials | null {
 }
 
 async function mintAccessToken(creds: AzureCredentials): Promise<string> {
-  const res = await fetch(
+  const res = await httpFetch(
     `${LOGIN_URL}/${creds.tenantId}/oauth2/v2.0/token`,
     {
       method: "POST",
@@ -58,7 +59,7 @@ async function mintAccessToken(creds: AzureCredentials): Promise<string> {
 }
 
 async function azFetch(accessToken: string, url: string): Promise<any> {
-  const res = await fetch(url, {
+  const res = await httpFetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {

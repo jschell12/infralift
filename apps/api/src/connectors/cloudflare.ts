@@ -1,10 +1,11 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
 import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
+import { httpFetch } from "../lib/http.js";
 
 const API = "https://api.cloudflare.com/client/v4";
 
 async function cfFetch(token: string, path: string): Promise<any> {
-  const res = await fetch(`${API}${path}`, {
+  const res = await httpFetch(`${API}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
@@ -51,7 +52,7 @@ export const cloudflareConnector: Connector = {
   // one of active | disabled | expired; expires_on is absent for a token
   // without an expiry. A refused token is a 401 whose errors[] says why.
   async check(token) {
-    const res = await fetch(`${API}/user/tokens/verify`, {
+    const res = await httpFetch(`${API}/user/tokens/verify`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const body: any = await res.json().catch(() => null);

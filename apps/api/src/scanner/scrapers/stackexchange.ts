@@ -1,4 +1,5 @@
 import type { ScrapedPost } from "../index.js";
+import { httpFetch } from "../../lib/http.js";
 
 const SITES: Record<string, string[]> = {
   stackoverflow: ["cloud-migration", "hosting", "cloud-computing", "deployment"],
@@ -19,7 +20,7 @@ export async function scrapeStackExchange(
   const url = `https://api.stackexchange.com/2.3/questions?site=${site}&tagged=${tagStr}&sort=creation&order=desc&fromdate=${fromDate}&pagesize=30&filter=withbody`;
 
   try {
-    const res = await fetch(url);
+    const res = await httpFetch(url);
     if (!res.ok) {
       console.warn(`Stack Exchange ${site}: ${res.status}`);
       return [];

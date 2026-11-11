@@ -2,6 +2,7 @@ import { AssumeRoleCommand, GetCallerIdentityCommand, STSClient } from "@aws-sdk
 import { GetResourcesCommand, ResourceGroupsTaggingAPIClient } from "@aws-sdk/client-resource-groups-tagging-api";
 import { CostExplorerClient, GetCostAndUsageCommand } from "@aws-sdk/client-cost-explorer";
 import type { ResourceInventoryItem } from "@infralift/shared";
+import { AWS_HTTP } from "../lib/http.js";
 import { ProviderHttpError, type Connector, type ConnectorAssessment, type VerifyResult } from "./types.js";
 
 // AWS access is a cross-account IAM role in the customer's account, trusted
@@ -74,11 +75,23 @@ export interface AwsClients {
   costExplorer(creds: Credentials): Sender;
 }
 
+// Every SDK client gets a deadline and a bounded retry count (lib/http.ts).
+// The SDK default is no request timeout at all. A timeout surfaces as an error
+// named TimeoutError or RequestTimeout, never as AccessDenied, so it fails the
+// assessment without touching the connection's status.
+const sdkHttp = {
+  requestHandler: {
+    connectionTimeout: AWS_HTTP.connectionTimeoutMs,
+    requestTimeout: AWS_HTTP.requestTimeoutMs,
+  },
+  maxAttempts: AWS_HTTP.maxAttempts,
+};
+
 const sdkClients: AwsClients = {
-  sts: (creds) => new STSClient({ region: "us-east-1", ...(creds ? { credentials: creds } : {}) }),
-  tagging: (region, creds) => new ResourceGroupsTaggingAPIClient({ region, credentials: creds }),
+  sts: (creds) => new STSClient({ region: "us-east-1", ...sdkHttp, ...(creds ? { credentials: creds } : {}) }),
+  tagging: (region, creds) => new ResourceGroupsTaggingAPIClient({ region, ...sdkHttp, credentials: creds }),
   // Cost Explorer has one endpoint, in us-east-1.
-  costExplorer: (creds) => new CostExplorerClient({ region: "us-east-1", credentials: creds }),
+  costExplorer: (creds) => new CostExplorerClient({ region: "us-east-1", ...sdkHttp, credentials: creds }),
 };
 
 const errName = (err: unknown): string => (err as { name?: string })?.name ?? "";

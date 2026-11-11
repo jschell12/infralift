@@ -201,6 +201,9 @@ const TOO_COMPLEX = "input schema too complex to validate";
 /** A failure of ours, not the team's schema: worth retrying unchanged. */
 const CHECK_FAILED = "the stack check could not run; try again";
 
+// Bulkhead / worker pool: at most renderConcurrency trial renders run at once
+// and at most renderQueue wait, so a burst of team-stack checks cannot take
+// every core or grow an unbounded queue; past that, a check is refused.
 let rendersRunning = 0;
 const rendersWaiting: (() => void)[] = [];
 

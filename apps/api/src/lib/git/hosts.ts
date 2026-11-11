@@ -12,6 +12,9 @@ import {
 } from "./github.js";
 import { GITLAB_API } from "../../connectors/gitlab.js";
 import { GitFileTooLarge } from "./errors.js";
+import { HTTP_TIMEOUTS_MS, httpFetch } from "../http.js";
+
+const gitTimeout = { timeoutMs: HTTP_TIMEOUTS_MS.gitHost };
 
 // ---------------------------------------------------------------------------
 // One interface over GitHub and GitLab for what a stack job does to a
@@ -183,16 +186,20 @@ export async function githubError(res: Response, message: string): Promise<GitCo
 
 function githubClient(token: string): GitHostClient {
   const gh = (method: string, path: string, body?: object) =>
-    fetch(`https://api.github.com${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        ...(body ? { "Content-Type": "application/json" } : {}),
+    httpFetch(
+      `https://api.github.com${path}`,
+      {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
       },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+      gitTimeout
+    );
 
   return {
     host: "github",
@@ -242,7 +249,7 @@ function githubClient(token: string): GitHostClient {
     },
 
     async readFile({ repo, path, ref, maxBytes }) {
-      const res = await fetch(
+      const res = await httpFetch(
         `https://api.github.com/repos/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`,
         {
           headers: {
@@ -250,7 +257,8 @@ function githubClient(token: string): GitHostClient {
             Accept: "application/vnd.github.raw+json",
             "X-GitHub-Api-Version": "2022-11-28",
           },
-        }
+        },
+        gitTimeout
       );
       if (res.status === 404) return null;
       if (!res.ok) throw new GitCommitError(`GitHub file read failed (${res.status}) for ${repo}/${path}`);
@@ -399,14 +407,18 @@ export const GITLAB_TREE_PAGES = 99;
 
 function gitlabClient(token: string): GitHostClient {
   const gl = (method: string, path: string, body?: object) =>
-    fetch(`${GITLAB_API}${path}`, {
-      method,
-      headers: {
-        "PRIVATE-TOKEN": token,
-        ...(body ? { "Content-Type": "application/json" } : {}),
+    httpFetch(
+      `${GITLAB_API}${path}`,
+      {
+        method,
+        headers: {
+          "PRIVATE-TOKEN": token,
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
       },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+      gitTimeout
+    );
   const pid = (repo: string) => encodeURIComponent(repo);
   const fail = async (what: string, res: Response): Promise<never> => {
     const text = await res.text().catch(() => "");

@@ -1,6 +1,8 @@
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
+import { toInventoryItem } from "../lib/inventory.js";
 import { isAdmin } from "../lib/cf-auth.js";
+import { createRateLimiter } from "../lib/rate-limit.js";
 import { Conflict, InvalidInput, NotFound, TooManyRequests } from "../lib/errors.js";
 import { startJob } from "../lib/jobs/start.js";
 import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
@@ -31,32 +33,19 @@ async function codegenUnlocked(caller: Caller): Promise<boolean> {
 // Codegen is the most expensive thing an anonymous signup can make us do, and
 // the preview renders HCL from an inventory typed by hand, so without a limit
 // it is a free codegen service for anyone who can complete a login.
-// In-process: a second replica means a second bucket, an acceptable ceiling
-// for a CPU-bound render.
-const CODEGEN_WINDOW_MS = 60 * 60 * 1000;
-const CODEGEN_MAX_PER_HOUR = 20;
-const codegenHits = new Map<string, number[]>();
+// Sliding-window limiter per org (lib/rate-limit.ts), in-process: a second
+// replica means a second bucket, an acceptable ceiling for a CPU-bound render.
+const codegenLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20 });
 
 function meter(orgId: string, now = Date.now()): void {
-  const recent = (codegenHits.get(orgId) ?? []).filter((t) => now - t < CODEGEN_WINDOW_MS);
-  if (recent.length >= CODEGEN_MAX_PER_HOUR) {
-    codegenHits.set(orgId, recent);
+  if (codegenLimiter.limited(orgId, now)) {
     throw new TooManyRequests("Too many codegen requests. Try again later.");
-  }
-  recent.push(now);
-  codegenHits.set(orgId, recent);
-  if (codegenHits.size > 5000) {
-    for (const [k, times] of codegenHits) {
-      const live = times.filter((t) => now - t < CODEGEN_WINDOW_MS);
-      if (live.length === 0) codegenHits.delete(k);
-      else codegenHits.set(k, live);
-    }
   }
 }
 
 /** For tests. */
 export function resetCodegenRateLimit(): void {
-  codegenHits.clear();
+  codegenLimiter.reset();
 }
 
 /** The whole files when unlocked, a sample otherwise. */
@@ -98,15 +87,7 @@ export async function generateFromAssessment(caller: Caller, input: CodegenInput
   if (!assessment || assessment.orgId !== caller.orgId) throw new NotFound("assessment not found");
   if (assessment.status !== "completed") throw new InvalidInput("assessment not completed");
   meter(caller.orgId);
-  const inventory: ResourceInventoryItem[] = assessment.inventory.map((i) => ({
-    provider: i.provider as Provider,
-    type: i.type,
-    externalId: i.externalId,
-    name: i.name,
-    region: i.region ?? undefined,
-    monthlyCostCents: i.monthlyCostCents ?? undefined,
-    metadata: (i.metadata as Record<string, unknown>) ?? undefined,
-  }));
+  const inventory: ResourceInventoryItem[] = assessment.inventory.map(toInventoryItem);
   const files = generateHcl({ provider: assessment.provider as Provider, inventory, ...opts } as CodegenOptions);
   return gated(caller, files, inventory.length);
 }

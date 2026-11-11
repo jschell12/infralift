@@ -1,4 +1,5 @@
 import type { ScrapedPost } from "../index.js";
+import { httpFetch } from "../../lib/http.js";
 
 const TAGS = ["cloud", "devops", "hosting", "terraform", "migration", "selfhosting"];
 const KEYWORDS = /\b(billing|cost|expensive|migrate|migration|moved from|switched|alternative|self[- ]host|egress)\b/i;
@@ -12,7 +13,7 @@ export async function scrapeDevTo(
   for (const tag of TAGS) {
     const url = `https://dev.to/api/articles?tag=${tag}&per_page=30&top=1`;
     try {
-      const res = await fetch(url, {
+      const res = await httpFetch(url, {
         headers: { "User-Agent": "infralift-scanner/1.0" },
       });
       if (!res.ok) continue;

@@ -1,6 +1,7 @@
 import { createSign } from "node:crypto";
 import type { ResourceInventoryItem } from "@infralift/shared";
 import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
+import { httpFetch } from "../lib/http.js";
 
 // Firebase/GCP assessment via a read-only service account. The connection
 // "token" is the service account JSON key (roles: Viewer or the granular
@@ -56,7 +57,7 @@ async function mintAccessToken(key: ServiceAccountKey): Promise<string> {
   const signature = signer.sign(key.private_key).toString("base64url");
   const assertion = `${header}.${claims}.${signature}`;
 
-  const res = await fetch(TOKEN_URL, {
+  const res = await httpFetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -72,7 +73,7 @@ async function mintAccessToken(key: ServiceAccountKey): Promise<string> {
 }
 
 async function gFetch(accessToken: string, url: string): Promise<any> {
-  const res = await fetch(url, {
+  const res = await httpFetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {

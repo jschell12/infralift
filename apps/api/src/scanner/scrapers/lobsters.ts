@@ -1,4 +1,5 @@
 import type { ScrapedPost } from "../index.js";
+import { httpFetch } from "../../lib/http.js";
 
 const KEYWORDS = /\b(billing|cost|expensive|migrate|migration|hosting|cloud|self[- ]host|egress|vercel|heroku|firebase|aws)\b/i;
 
@@ -7,7 +8,7 @@ export async function scrapeLobsters(
 ): Promise<ScrapedPost[]> {
   const url = "https://lobste.rs/newest.json";
   try {
-    const res = await fetch(url, {
+    const res = await httpFetch(url, {
       headers: { "User-Agent": "infralift-scanner/1.0" },
     });
     if (!res.ok) {

@@ -37,11 +37,13 @@ tfRouter.get("/tfc-status", requireAdmin, async (_req, res) => {
     return res.json({ connected: false, org: null, workspaceCount: null });
   }
   try {
-    const workspaces = await client.listWorkspaces();
+    const { workspaces, truncated } = await client.listWorkspacesCapped();
     res.json({
       connected: true,
       org: process.env.TFC_ORG ?? null,
       workspaceCount: workspaces.length,
+      // workspaceCount is a floor when the listing hit TFC_WORKSPACE_PAGES.
+      truncated,
     });
   } catch {
     // Token set but invalid or network failure

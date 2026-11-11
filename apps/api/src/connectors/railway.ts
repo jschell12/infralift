@@ -1,5 +1,6 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
 import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
+import { httpFetch } from "../lib/http.js";
 
 const API = "https://backboard.railway.com/graphql/v2";
 
@@ -8,7 +9,7 @@ async function gql(
   query: string,
   variables?: Record<string, unknown>
 ): Promise<any> {
-  const res = await fetch(API, {
+  const res = await httpFetch(API, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

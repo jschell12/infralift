@@ -15,7 +15,9 @@ export interface RateLimiter {
   reset(): void;
 }
 
-/** In-process and therefore per-instance: a second API replica would allow a
+/** Sliding-window limiter: each key keeps the timestamps of its recent hits,
+ * and a hit is refused when `max` of them fall inside the last `windowMs`.
+ * In-process and therefore per-instance: a second API replica would allow a
  * second bucket. That is an acceptable ceiling for routes that write one small
  * row or run a pure function, and it avoids adding Redis to the request path
  * for them. */
