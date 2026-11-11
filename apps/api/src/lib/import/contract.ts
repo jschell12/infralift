@@ -61,6 +61,10 @@ export const DRIFT = {
   none: "No drift: the plan changes nothing.",
   /** Error prefix: the plan would change something. */
   foundPrefix: "Drift:",
+  /** Notice from an adopted module's drift job: nothing would change, but the
+   *  plan still imports, so no apply has recorded the resources in state. */
+  unapplied: (imports: string, total: string) =>
+    `Not applied yet: ${imports} of ${total} resources are adopted but not recorded in state.`,
 } as const;
 
 /** A drift run's outcome. The import check's own messages count too, since
@@ -68,4 +72,5 @@ export const DRIFT = {
 export const READ_DRIFT = {
   none: (m: string) => m === DRIFT.none || READ.passed(m),
   found: (m: string) => m.startsWith(DRIFT.foundPrefix) || READ.changes(m),
+  unapplied: (m: string) => /^Not applied yet: \d+ of \d+ resources are adopted but not recorded in state\.$/.test(m),
 } as const;

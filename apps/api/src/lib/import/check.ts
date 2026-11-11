@@ -1,6 +1,7 @@
 import { Document } from "yaml";
 import type { RootModule } from "./scan.js";
-import { CHECK_JOB_NAME, GENERATED_COMMIT_SUBJECT, OUTCOME, driftJobName } from "./contract.js";
+import { CHECK_JOB_NAME, DRIFT, GENERATED_COMMIT_SUBJECT, OUTCOME, driftJobName } from "./contract.js";
+import { printDiagnostics, secretGuardSteps } from "./guard.js";
 
 // ---------------------------------------------------------------------------
 // The import check: a GitHub Actions workflow infralift adds to the customer's
@@ -111,7 +112,7 @@ export function checkSetupLines(root: RootModule): string[] {
 // library writes it, so quoting is the serializer's job and the shape of the
 // file is visible here as data. Shell scripts stay as lines of shell.
 
-interface Step {
+export interface Step {
   name?: string;
   id?: string;
   if?: string;
@@ -122,7 +123,7 @@ interface Step {
 }
 
 /** A `run:` script from its lines. */
-const script = (...lines: string[]) => `${lines.join("\n")}\n`;
+export const script = (...lines: string[]) => `${lines.join("\n")}\n`;
 
 const HEADER = [
   " Managed by infralift. Read-only: plans against this module's existing state",
@@ -134,15 +135,16 @@ const HEADER = [
 /** 06:23 UTC daily. */
 export const DRIFT_CRON = "23 6 * * *";
 
-export function renderImportCheck(
+/** What every job that plans this module shares: the tool, sign-in,
+ *  the credentials check and init, plus the env that goes with them. Used by
+ *  the import check and by the adoption's apply workflow (apply.ts). */
+export function prepareModule(
   root: RootModule,
   opts: { backendConfigFile?: string | null } = {}
-): CheckFile {
-  const file = checkWorkflowPath(root.path);
+): { prepare: Step[]; withCreds: (extra?: Record<string, string>) => Pick<Step, "env">; groups: CredentialGroup[]; jobEnv: Record<string, string> } {
   const tf = root.tool;
   const env = checkEnv(root);
   const groups = checkGroups(root);
-  const gen = root.generateConfig === true;
   const has = (c: CredentialGroup["cloud"]) => groups.some((g) => g.cloud === c);
   const label = root.path || "repository root";
   for (const p of [root.path, opts.backendConfigFile ?? ""]) {
@@ -240,6 +242,25 @@ export function renderImportCheck(
     { name: "Init", ...withCreds(), run: `${tf} init -input=false${backendConfig}` },
   ];
 
+  const jobEnv: Record<string, string> = {
+    TF_IN_AUTOMATION: "1",
+    TF_INPUT: "0",
+    MODULE_LABEL: label,
+    ...(opts.backendConfigFile ? { BACKEND_CONFIG: relativeTo(root.path, opts.backendConfigFile) } : {}),
+  };
+  return { prepare, withCreds, groups, jobEnv };
+}
+
+export function renderImportCheck(
+  root: RootModule,
+  opts: { backendConfigFile?: string | null } = {}
+): CheckFile {
+  const file = checkWorkflowPath(root.path);
+  const tf = root.tool;
+  const gen = root.generateConfig === true;
+  const label = root.path || "repository root";
+  const { prepare, withCreds, groups, jobEnv } = prepareModule(root, opts);
+
   const steps: Step[] = [
     {
       uses: "actions/checkout@v4",
@@ -263,10 +284,10 @@ export function renderImportCheck(
       ...withCreds(),
       run: script(
         "set +e",
-        `${tf} plan -input=false -lock=false -no-color -generate-config-out=generated.tf > generate.log 2>&1`,
+        `${tf} plan -input=false -lock=false -no-color -generate-config-out=generated.tf -json > generate.log 2>&1`,
         "set -e",
         "if [ ! -s generated.tf ]; then",
-        "  tail -n 80 generate.log",
+        ...printDiagnostics("generate.log").map((l) => `  ${l}`),
         `  echo "::error::${OUTCOME.planFailed}"`,
         "  exit 1",
         "fi",
@@ -283,11 +304,11 @@ export function renderImportCheck(
     ...withCreds(),
     run: script(
       "set +e",
-      `${tf} plan -input=false -lock=false -no-color -detailed-exitcode -out=infralift-import.tfplan > plan.log 2>&1`,
+      `${tf} plan -input=false -lock=false -no-color -detailed-exitcode -json -out=infralift-import.tfplan > plan.log 2>&1`,
       "code=$?",
       "set -e",
       'if [ "$code" -eq 1 ]; then',
-      "  tail -n 80 plan.log",
+      ...printDiagnostics("plan.log").map((l) => `  ${l}`),
       `  msg="${OUTCOME.planFailed}"`,
       '  echo "$msg" > "$RUNNER_TEMP/infralift-result"',
       '  echo "::error::$msg"',
@@ -304,7 +325,7 @@ export function renderImportCheck(
       '  echo ""',
       '  if [ "$changes" -eq 0 ]; then',
       drift
-        ? '    echo "No drift. All $total resources match the code on the default branch."'
+        ? '    if [ "$imports" -gt 0 ]; then echo "Adopted, not yet applied: the import blocks are merged but are not recorded in state yet."; else echo "No drift. All $total resources match the code on the default branch."; fi'
         : '    echo "No changes. All $total resources match the code, so infralift can take this module over without touching anything."',
       "  else",
       drift
@@ -324,7 +345,19 @@ export function renderImportCheck(
       '    echo "$drift resource(s) were changed outside Terraform since the last apply."',
       "  fi",
       '} >> "$GITHUB_STEP_SUMMARY"',
-      // One outcome per run, from the contract infralift reads back.
+      // One outcome per run, from the contract infralift reads back. On the
+      // default branch, import blocks nothing has applied yet are not "no
+      // drift": state is still empty, so the drift job says so.
+      ...(drift
+        ? [
+            'if [ "$changes" -eq 0 ] && [ "$imports" -gt 0 ]; then',
+            `  msg="${DRIFT.unapplied("$imports", "$total")}"`,
+            '  echo "$msg" > "$RUNNER_TEMP/infralift-result"',
+            '  echo "::notice::$msg"',
+            "  exit 0",
+            "fi",
+          ]
+        : []),
       'if [ "$changes" -eq 0 ]; then',
       `  msg="${OUTCOME.passed("$total")}"`,
       '  echo "$msg" > "$RUNNER_TEMP/infralift-result"',
@@ -337,14 +370,16 @@ export function renderImportCheck(
       "fi"
     ),
   });
+  if (gen) steps.push(...secretGuardSteps());
   steps.push(gate(false));
 
   if (gen) {
     // Committed whether or not the plan passed: a failing plan is fixed by
-    // editing this code, so the customer needs it in the branch.
+    // editing this code, so the customer needs it in the branch. Never when
+    // the guard found something that looks like a secret in it.
     steps.push({
       name: "Commit the generated code",
-      if: "always() && steps.gen.outcome == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)",
+      if: "always() && steps.gen.outcome == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && steps.guard.outcome == 'success'",
       env: {
         BRANCH: "${{ github.head_ref || github.ref_name }}",
         GH_TOKEN: "${{ github.token }}",
@@ -368,12 +403,6 @@ export function renderImportCheck(
     });
   }
 
-  const jobEnv = {
-    TF_IN_AUTOMATION: "1",
-    TF_INPUT: "0",
-    MODULE_LABEL: label,
-    ...(opts.backendConfigFile ? { BACKEND_CONFIG: relativeTo(root.path, opts.backendConfigFile) } : {}),
-  };
   const workflow = {
     name: `infralift import check: ${label}`,
     on: {

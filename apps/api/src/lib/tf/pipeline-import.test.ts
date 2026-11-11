@@ -118,7 +118,28 @@ describe("import job", () => {
     expect(pr.body!.base).toBe("main");
     expect(String(pr.body!.body)).toContain("read-only");
     expect(String(pr.body!.body)).toContain("`HCLOUD_TOKEN`");
+    expect(String(pr.body!.body)).toContain("Merging it applies nothing either");
     expect(h.state.jobUpdates).toContainEqual({ commitSha: "commit-new", prUrl: "https://github.com/acme/infra/pull/4" });
+  });
+
+  it("adds the apply workflow to an adoption, and says merging applies it", async () => {
+    const calls = fakeGitHub();
+    importJob({ importJson: { ...ROOT, generateConfig: true } });
+    h.state.job!.argumentsJson = { backendConfigFile: null, adoptFiles: [{ path: "imports.tf", content: "# imports\n" }] };
+    await runJob("job_abcdefgh12345678");
+    expect(h.state.stages.at(-1)).toMatchObject({ stage: "complete", status: "success" });
+    const tree = calls.find((c) => c.method === "POST" && c.path.endsWith("/git/trees"))!;
+    expect((tree.body!.tree as { path: string }[]).map((t) => t.path)).toEqual([
+      ".github/workflows/infralift-import-infra.yml",
+      ".github/workflows/infralift-apply-infra.yml",
+      "infra/imports.tf",
+    ]);
+    expect(h.prisma.tfRendering.upsert).toHaveBeenCalledTimes(2);
+    const body = String(calls.find((c) => c.method === "POST" && c.path.endsWith("/pulls"))!.body!.body);
+    expect(body).toContain("**Merging starts the apply.** On the push to `main`");
+    expect(body).toContain("`repo:acme/infra:environment:production`");
+    // The old copy promised an apply that nothing ran.
+    expect(body).not.toContain("Merging and applying then only records");
   });
 
   it("removes its branch when the check is already there", async () => {

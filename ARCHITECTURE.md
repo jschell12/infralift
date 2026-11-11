@@ -97,7 +97,7 @@ If the process dies mid-job, the next one to start marks the job `errored` with 
 
 ### Adopting resources built by hand
 
-From a completed assessment, `POST /tf/imports/from-assessment` opens a PR with import blocks, a provider and a backend in a bucket the customer owns, and no resource code (`lib/import/adopt.ts`). The check generates the code from what is running (`plan -generate-config-out`), commits it, and holds it to the same zero-change gate.
+From a completed assessment, `POST /tf/imports/from-assessment` opens a PR with import blocks, a provider and a backend in a bucket the customer owns, and no resource code (`lib/import/adopt.ts`). The check generates the code from what is running (`plan -generate-config-out`), commits it, and holds it to the same zero-change gate. Before committing it scans `generated.tf` for literal secrets (`lib/import/guard.ts`). The same PR adds an apply workflow (`lib/import/apply.ts`): on the push that merges it, one job in the `production` environment plans and applies exactly that plan, so the plan file never leaves the runner, which is what records the resources in state. Until then the drift job reports the project as `unapplied`. Workflows already in a repository change only when re-rendered; see [ADR 0008](docs/adr/0008-adoption-applies-a-saved-plan.md).
 
 ### Terraform Cloud
 

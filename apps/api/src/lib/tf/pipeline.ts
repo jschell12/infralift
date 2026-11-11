@@ -19,6 +19,7 @@ import type { CreatedWorkspace } from "./workspace.js";
 import { JobRun } from "../jobs/state.js";
 import { generateHcl } from "./codegen.js";
 import { checkEnv, checkSetupLines, renderImportCheck } from "../import/check.js";
+import { renderApplyWorkflow } from "../import/apply.js";
 import type { RootModule } from "../import/scan.js";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { markInvalidOnAuthFailure } from "../../services/connections.js";
@@ -563,7 +564,9 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
 
 /** Adds the import check for an existing root module to the customer's
  *  repository as a pull request. Nothing in their Terraform is changed: the
- *  only file is the workflow, and it plans without applying or locking. */
+ *  only file is the workflow, and it plans without applying or locking. An
+ *  adoption also adds its files and the apply workflow, which applies once
+ *  the pull request is merged (lib/import/apply.ts). */
 async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
   const run = jobRun(jobId);
   const project = job.project;
@@ -582,6 +585,11 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
       adoptFiles?: { path: string; content: string }[];
     };
     const check = renderImportCheck(root, { backendConfigFile: args.backendConfigFile ?? null });
+    // Only an adoption gets an apply: a repository import already has the
+    // customer's own pipeline applying it, and a second one would race it.
+    const workflows = root.generateConfig
+      ? [check, renderApplyWorkflow(root, { branch: project.destBranch, repo: project.destRepo, backendConfigFile: args.backendConfigFile ?? null })]
+      : [check];
 
     const git = await getGitToken(project.orgId, "github", project.gitConnectionId);
     gitConnection = git?.connection ?? null;
@@ -594,12 +602,14 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
 
     await run.start("commit");
     const repo = project.destRepo;
-    await prisma.tfRendering.upsert({
-      where: { projectId_fileName: { projectId: project.id, fileName: check.path } },
-      create: { projectId: project.id, fileName: check.path, argumentsJson: args, renderedBody: check.content },
-      update: { argumentsJson: args, renderedBody: check.content },
-    });
-    await prisma.tfJob.update({ where: { id: jobId }, data: { fileCount: 1 } });
+    for (const w of workflows) {
+      await prisma.tfRendering.upsert({
+        where: { projectId_fileName: { projectId: project.id, fileName: w.path } },
+        create: { projectId: project.id, fileName: w.path, argumentsJson: args, renderedBody: w.content },
+        update: { argumentsJson: args, renderedBody: w.content },
+      });
+    }
+    await prisma.tfJob.update({ where: { id: jobId }, data: { fileCount: workflows.length } });
 
     const label = root.path || "the repository root";
     const env = checkEnv(root);
@@ -611,17 +621,19 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
       // The workflow lives at the repository root; adoption files under destPath.
       workDir: "",
       files: async () => [
-        { fileName: check.path, content: check.content },
+        ...workflows.map((w) => ({ fileName: w.path, content: w.content })),
         ...(args.adoptFiles ?? []).map((f) => ({
           fileName: project.destPath ? `${project.destPath}/${f.path}` : f.path,
           content: f.content,
         })),
       ],
-      message: `infralift: import check for ${label}\n\nRead-only plan against the existing state; applies nothing.`,
+      message: root.generateConfig
+        ? `infralift: adopt resources into ${label}\n\nImport blocks, a read-only check, and an apply workflow that runs once this is merged.`
+        : `infralift: import check for ${label}\n\nRead-only plan against the existing state; applies nothing.`,
       title: root.generateConfig
         ? `infralift: adopt ${root.resources} resources into ${label}`
         : `infralift: import check for ${label}`,
-      body: () => importRequestBody(root, repo, label),
+      body: () => importRequestBody(root, repo, label, project.destBranch),
     });
     if (landed.outcome === "unchanged") {
       await run.succeed(
@@ -639,25 +651,34 @@ async function runImportJob(jobId: string, job: CodegenJob): Promise<void> {
   }
 }
 
-/** The import or adoption pull request's description. */
-function importRequestBody(root: RootModule, repo: string, label: string): string {
+/** The import or adoption pull request's description. Says what happens on
+ *  merge: for an adoption, the apply workflow applies; for an import, nothing. */
+function importRequestBody(root: RootModule, repo: string, label: string, branch: string): string {
   const env = checkEnv(root);
   const setup = checkSetupLines(root);
+  const adopt = root.generateConfig === true;
   return [
-    ...(root.generateConfig
+    ...(adopt
       ? [
-          `infralift is adopting ${root.resources} resources that already run in your account into \`${label}\`, without changing them. This pull request adds import blocks, a provider and a backend for state in ${root.backend.kind === "r2" ? "R2" : "S3"} (\`${root.backend.settings.bucket}\`), plus the check workflow.`,
+          `infralift is adopting ${root.resources} resources that already run in your account into \`${label}\`, without changing them. This pull request adds import blocks, a provider and a backend for state in ${root.backend.kind === "r2" ? "R2" : "S3"} (\`${root.backend.settings.bucket}\`), plus two workflows: the check and the apply.`,
           "",
-          "There is no hand-written resource code. The check generates it from what is actually running (`plan -generate-config-out`) and commits it to this branch as `generated.tf`, then holds it to the same rule: the plan may import, but must change and destroy nothing. Merging and applying then only records the resources in state.",
+          "There is no hand-written resource code. The check generates it from what is actually running (`plan -generate-config-out`) and commits it to this branch as `generated.tf`, then holds it to the same rule: the plan may import, but must change and destroy nothing. Before committing, it scans `generated.tf` for values that look like secrets (attribute names such as `password` or `token` with a literal value, and gitleaks) and commits nothing if it finds one.",
           "",
+          `**Merging starts the apply.** On the push to \`${branch}\`, the apply workflow plans and applies exactly that plan, in one job in the \`production\` environment; the plan file never leaves the runner. That apply is what records the resources in state; until it has run they exist only as code, and infralift shows the project as adopted, not yet applied. Add required reviewers to the \`production\` environment (Settings, Environments) to hold each run for approval; they approve before it plans, and the plan is the one this pull request's check showed. The apply needs credentials that can write state and take its lock; put those on the environment, and keep the repository secrets read-only for the check. Environment secrets win over repository secrets of the same name.`,
+          "",
+          "The check itself runs a **read-only** plan on pull requests and daily on the default branch. It applies nothing and runs with `-lock=false`, so it cannot change your infrastructure or block your own pipeline.",
         ]
-      : [`infralift is importing the Terraform in \`${label}\` (${root.resources} resources, state in ${root.backend.kind}).`, ""]),
-    "This pull request adds a workflow that runs a **read-only** plan against the existing state. It applies nothing and runs with `-lock=false`, so it cannot change your infrastructure or block your own pipeline. infralift never sees your state or your credentials: the plan runs here, with your secrets.",
+      : [
+          `infralift is importing the Terraform in \`${label}\` (${root.resources} resources, state in ${root.backend.kind}).`,
+          "",
+          "This pull request adds a workflow that runs a **read-only** plan against the existing state. It applies nothing and runs with `-lock=false`, so it cannot change your infrastructure or block your own pipeline. Merging it applies nothing either: your own pipeline keeps applying this module.",
+        ]),
+    "infralift never sees your state or your credentials: the plans run here, with your secrets.",
     "",
     "The import is safe to finish when the check passes, which means the plan changes nothing: the code already matches what is running, so taking it over cannot cause downtime. If it fails, the job summary lists each resource that would change.",
     "",
     env.length
-      ? `Set these before the check can run (Settings, Secrets and variables, Actions):\n\n${setup.map((l) => `- ${l}`).join("\n")}\n\nOIDC is the better choice where a cloud offers it: CI signs in as a role for each run and no key is stored. This check runs on pull requests, so the role's trust policy (AWS) or federated credential (Azure, Google Cloud) must allow pull-request runs from this repository, not only \`main\`; on AWS that is the subject \`repo:${repo}:pull_request\`. Either way, give the credentials read-only roles. A plan runs provider code and data sources with whatever the secrets allow, so read-only on state is not read-only on the account unless the roles are.`
+      ? `Set these before the check can run (Settings, Secrets and variables, Actions):\n\n${setup.map((l) => `- ${l}`).join("\n")}\n\nOIDC is the better choice where a cloud offers it: CI signs in as a role for each run and no key is stored. This check runs on pull requests, so the role's trust policy (AWS) or federated credential (Azure, Google Cloud) must allow pull-request runs from this repository, not only \`main\`; on AWS that is the subject \`repo:${repo}:pull_request\`.${adopt ? ` The apply job runs in the \`production\` environment, whose subject is \`repo:${repo}:environment:production\`.` : ""} Give the check's credentials read-only roles. A plan runs provider code and data sources with whatever the secrets allow, so read-only on state is not read-only on the account unless the roles are.`
       : "The check needs no secrets.",
     ...(root.notes.length ? ["", "Notes from the scan:", "", ...root.notes.map((n) => `- ${n}`)] : []),
   ].join("\n");
