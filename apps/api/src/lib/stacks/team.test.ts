@@ -326,6 +326,31 @@ describe("loadTeamStack", () => {
     expect(thread!.threadId).toBe(-1);
   }, 15000);
 
+  it("runs at most two trial renders at once and turns away more than the queue holds", async () => {
+    const { repo, manifest } = bomb();
+    const contents = new Map([...repo].map(([p, f]) => [p.slice(2), f as { content: string; mode: "100644" | "100755" }]));
+    let live = 0;
+    let peak = 0;
+    const exits: Promise<unknown>[] = [];
+    const calls = Array.from({ length: TEAM_STACK_LIMITS.renderConcurrency + TEAM_STACK_LIMITS.renderQueue + 2 }, () =>
+      trialRender(manifest, contents, {
+        timeoutMs: 200,
+        onWorker: (w) => {
+          peak = Math.max(peak, ++live);
+          exits.push(once(w, "exit").then(() => live--));
+        },
+      })
+    );
+    const results = await Promise.all(calls);
+    await Promise.all(exits);
+    expect(peak).toBeLessThanOrEqual(2);
+    const busy = results.filter((r) => !r.ok && /too many stacks/.test(r.error));
+    expect(busy).toHaveLength(2);
+    expect(results.filter((r) => !r.ok && /too complex/.test(r.error))).toHaveLength(
+      TEAM_STACK_LIMITS.renderConcurrency + TEAM_STACK_LIMITS.renderQueue
+    );
+  }, 60000);
+
   it("throws when the ref does not exist, rather than recording a version", async () => {
     const { client } = fakeHost({}, {});
     await expect(loadTeamStack(client, { repo: "acme/stacks", dir: "", ref: "nope" })).rejects.toThrow(/not a branch, tag or commit/);

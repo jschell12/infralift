@@ -33,6 +33,10 @@ export const TEAM_STACK_LIMITS = {
   /** The trial render's budget once its thread is loaded, and its heap. */
   renderTimeoutMs: 2000,
   renderHeapMb: 128,
+  /** Trial renders running at once, and how many may wait for a slot. Each
+   *  thread may take renderHeapMb, so this bounds the API's memory. */
+  renderConcurrency: 2,
+  renderQueue: 8,
 };
 
 /** The parts of the tree under `path` that make up a stack. Anything else
@@ -58,6 +62,20 @@ export type TeamStackLoad =
   | { valid: false; sha: string; manifest: StackManifest | null; files: IndexedFile[]; errors: string[] };
 
 export class StackFetchError extends Error {}
+
+/** The check itself could not run (queue full, thread failed): nothing was
+ *  learned about the stack, so nothing is recorded and the same commit can be
+ *  tried again. */
+export class StackCheckUnavailable extends Error {
+  constructor(
+    message: string,
+    readonly reason: "busy" | "failed"
+  ) {
+    super(message);
+  }
+}
+
+type TrialResult = RenderResult | { ok: false; error: string; retry: "busy" | "failed" };
 
 /** A relative path that stays inside the tree: no leading slash, no "." or
  *  ".." segment, no backslash, nothing a shell or a filesystem reads twice. */
@@ -180,6 +198,28 @@ function renderWorker(): { url: URL; execArgv: string[] } {
 }
 
 const TOO_COMPLEX = "input schema too complex to validate";
+/** A failure of ours, not the team's schema: worth retrying unchanged. */
+const CHECK_FAILED = "the stack check could not run; try again";
+
+let rendersRunning = 0;
+const rendersWaiting: (() => void)[] = [];
+
+/** Waits for a render slot, or returns false when the queue is full. */
+async function acquireRenderSlot(): Promise<boolean> {
+  if (rendersRunning < TEAM_STACK_LIMITS.renderConcurrency) {
+    rendersRunning++;
+    return true;
+  }
+  if (rendersWaiting.length >= TEAM_STACK_LIMITS.renderQueue) return false;
+  await new Promise<void>((resolve) => rendersWaiting.push(resolve));
+  return true; // the releasing render handed its slot straight to us
+}
+
+function releaseRenderSlot(): void {
+  const next = rendersWaiting.shift();
+  if (next) next();
+  else rendersRunning--;
+}
 
 /**
  * Compiles the team's schema, validates its example and renders it, in a
@@ -187,11 +227,26 @@ const TOO_COMPLEX = "input schema too complex to validate";
  * past the heap limit, the thread is terminated and the stack refused.
  * `onWorker` lets a test watch the thread exit.
  */
-export function trialRender(
+export async function trialRender(
   manifest: StackManifest,
   contents: Map<string, { content: string; mode: StackFile["mode"] }>,
   opts: { timeoutMs?: number; onWorker?: (w: Worker) => void } = {}
-): Promise<RenderResult> {
+): Promise<TrialResult> {
+  if (!(await acquireRenderSlot())) {
+    return { ok: false, error: "too many stacks are being checked right now; try again in a minute", retry: "busy" };
+  }
+  try {
+    return await runTrialRender(manifest, contents, opts);
+  } finally {
+    releaseRenderSlot();
+  }
+}
+
+function runTrialRender(
+  manifest: StackManifest,
+  contents: Map<string, { content: string; mode: StackFile["mode"] }>,
+  opts: { timeoutMs?: number; onWorker?: (w: Worker) => void }
+): Promise<TrialResult> {
   const timeoutMs = opts.timeoutMs ?? TEAM_STACK_LIMITS.renderTimeoutMs;
   const { url, execArgv } = renderWorker();
   const worker = new Worker(url, {
@@ -199,19 +254,20 @@ export function trialRender(
     resourceLimits: { maxOldGenerationSizeMb: TEAM_STACK_LIMITS.renderHeapMb, maxYoungGenerationSizeMb: 32 },
   });
   opts.onWorker?.(worker);
-  return new Promise<RenderResult>((resolve) => {
+  return new Promise<TrialResult>((resolve) => {
     let timer: NodeJS.Timeout | undefined;
     let settled = false;
-    const finish = (result: RenderResult) => {
+    const finish = (result: TrialResult) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      void worker.terminate();
-      resolve(result);
+      // Resolve once the thread is gone, so a render slot is only handed on
+      // when its heap is actually freed.
+      void worker.terminate().finally(() => resolve(result));
     };
     // Loading the thread is ours to pay for, not the team's: a generous
     // limit for that, then the real budget once it says it is ready.
-    timer = setTimeout(() => finish({ ok: false, error: "the stack check could not start; try again" }), 30_000);
+    timer = setTimeout(() => finish({ ok: false, error: CHECK_FAILED, retry: "failed" }), 30_000);
     worker.on("message", (msg: "ready" | RenderResult) => {
       if (msg === "ready") {
         clearTimeout(timer);
@@ -223,10 +279,16 @@ export function trialRender(
         worker.postMessage(job);
       } else finish(msg);
     });
+    // Running out of heap is the schema's doing; any other thread failure
+    // (it failed to load, it crashed) is ours, and says so.
     worker.on("error", (err) =>
-      finish({ ok: false, error: /memory/i.test(err.message) ? `${TOO_COMPLEX}: it ran out of memory` : `${TOO_COMPLEX}: ${err.message}` })
+      finish(
+        /memory/i.test(err.message)
+          ? { ok: false, error: `${TOO_COMPLEX}: it ran out of memory` }
+          : { ok: false, error: CHECK_FAILED, retry: "failed" }
+      )
     );
-    worker.on("exit", () => finish({ ok: false, error: `${TOO_COMPLEX}: the check stopped` }));
+    worker.on("exit", () => finish({ ok: false, error: CHECK_FAILED, retry: "failed" }));
   });
 }
 
@@ -299,6 +361,7 @@ export async function loadTeamStack(
   const manifest = raw as StackManifest;
 
   const rendered = await trialRender(manifest, contents);
+  if (!rendered.ok && "retry" in rendered) throw new StackCheckUnavailable(rendered.error, rendered.retry);
   if (!rendered.ok) return { valid: false, sha, manifest, files, errors: [rendered.error] };
   const text = Object.fromEntries([...contents].map(([p, f]) => [p, f.content]));
   return { valid: true, sha, manifest, files, contents: text, renderedFiles: rendered.renderedFiles };

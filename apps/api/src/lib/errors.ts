@@ -70,6 +70,12 @@ export class Unprocessable extends AppError {
   }
 }
 
+export class ServiceUnavailable extends AppError {
+  constructor(message: string) {
+    super(503, message);
+  }
+}
+
 export class TooManyRequests extends AppError {
   constructor(message: string) {
     super(429, message);
