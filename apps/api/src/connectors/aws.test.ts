@@ -151,10 +151,16 @@ describe("aws assess", () => {
     expect(lastFullMonth(new Date("2027-01-03T00:00:00Z"))).toEqual({ Start: "2026-12-01", End: "2027-01-01" });
   });
 
-  it("produces inventory that adoption skips rather than fails on", async () => {
+  it("produces inventory that adoption maps, on a provider alias per region", async () => {
     const { inventory } = await mock().connector.assess(TOKEN);
     const plan = planAdoption("aws", inventory);
-    expect(plan.imports).toEqual([]);
-    expect(plan.skipped).toHaveLength(inventory.length);
+    expect(plan.imports.map((i) => [i.to.split(".")[0], i.id, i.provider])).toEqual([
+      ["aws_instance", "i-0abcd1234efgh5678", "aws.us_east_1"],
+      ["aws_s3_bucket", "example-assets-bucket", "aws.us_east_1"],
+      ["aws_lambda_function", "resize-images", "aws.us_east_1"],
+      ["aws_db_instance", "orders-db", "aws.us_east_1"],
+    ]);
+    expect(plan.skipped).toEqual([{ type: "aws:account", name: expect.any(String), reason: "the account itself is not a Terraform resource" }]);
+    expect(plan.settings?.regions).toEqual(["us-east-1"]);
   });
 });

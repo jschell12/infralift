@@ -1,0 +1,68 @@
+{
+  "_source": "Not captured from a live account. Each body is the response example in the Cloudflare API reference for that operation (GET /accounts, GET /zones, GET /zones/{zone_id}/dns_records, GET /accounts/{account_id}/r2/buckets), trimmed to the fields infralift reads, read 2026-11-10. The second zones page and the DNS record ids are copies of the first with new ids, so the paging test has two pages to follow. Replace with captured responses.",
+  "accounts": {
+    "errors": [],
+    "messages": [],
+    "success": true,
+    "result": [{ "id": "023e105f4ecef8ad9ca31a8372d0c353", "name": "Demo Account", "type": "standard" }],
+    "result_info": { "count": 1, "page": 1, "per_page": 50, "total_count": 1, "total_pages": 1 }
+  },
+  "zonesPage1": {
+    "errors": [],
+    "messages": [],
+    "success": true,
+    "result": [
+      {
+        "id": "023e105f4ecef8ad9ca31a8372d0c353",
+        "account": { "id": "023e105f4ecef8ad9ca31a8372d0c353", "name": "Example Account Name" },
+        "name": "example.com",
+        "status": "active",
+        "plan": { "id": "e592fd9519420ba7405e1307bff33214", "name": "Pro Plan" }
+      }
+    ],
+    "result_info": { "count": 1, "page": 1, "per_page": 50, "total_count": 2, "total_pages": 2 }
+  },
+  "zonesPage2": {
+    "errors": [],
+    "messages": [],
+    "success": true,
+    "result": [
+      {
+        "id": "353c0d2783a8ac9da8fece4f501e320c",
+        "account": { "id": "023e105f4ecef8ad9ca31a8372d0c353", "name": "Example Account Name" },
+        "name": "example.org",
+        "status": "active",
+        "plan": { "id": "e592fd9519420ba7405e1307bff33214", "name": "Pro Plan" }
+      }
+    ],
+    "result_info": { "count": 1, "page": 2, "per_page": 50, "total_count": 2, "total_pages": 2 }
+  },
+  "dnsRecords": {
+    "errors": [],
+    "messages": [],
+    "success": true,
+    "result": [
+      {
+        "name": "example.com",
+        "ttl": 3600,
+        "type": "A",
+        "comment": "Domain verification record",
+        "content": "198.51.100.4",
+        "proxied": true,
+        "id": "023e105f4ecef8ad9ca31a8372d0c353",
+        "created_on": "2014-01-01T05:20:00.12345Z",
+        "modified_on": "2014-01-01T05:20:00.12345Z",
+        "proxiable": true
+      }
+    ],
+    "result_info": { "count": 1, "page": 1, "per_page": 100, "total_count": 1, "total_pages": 1 }
+  },
+  "r2Buckets": {
+    "errors": [],
+    "messages": [],
+    "success": true,
+    "result": {
+      "buckets": [{ "creation_date": "2024-01-01T00:00:00Z", "jurisdiction": "default", "location": "ENAM", "name": "example-bucket", "storage_class": "Standard" }]
+    }
+  }
+}
