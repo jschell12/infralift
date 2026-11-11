@@ -33,6 +33,10 @@ export const TEAM_STACK_LIMITS = {
   /** The trial render's budget once its thread is loaded, and its heap. */
   renderTimeoutMs: 2000,
   renderHeapMb: 128,
+  /** Trial renders running at once, and how many may wait for a slot. Each
+   *  thread may take renderHeapMb, so this bounds the API's memory. */
+  renderConcurrency: 2,
+  renderQueue: 8,
 };
 
 /** The parts of the tree under `path` that make up a stack. Anything else
@@ -180,6 +184,28 @@ function renderWorker(): { url: URL; execArgv: string[] } {
 }
 
 const TOO_COMPLEX = "input schema too complex to validate";
+/** A failure of ours, not the team's schema: worth retrying unchanged. */
+const CHECK_FAILED = "the stack check could not run; try again";
+
+let rendersRunning = 0;
+const rendersWaiting: (() => void)[] = [];
+
+/** Waits for a render slot, or returns false when the queue is full. */
+async function acquireRenderSlot(): Promise<boolean> {
+  if (rendersRunning < TEAM_STACK_LIMITS.renderConcurrency) {
+    rendersRunning++;
+    return true;
+  }
+  if (rendersWaiting.length >= TEAM_STACK_LIMITS.renderQueue) return false;
+  await new Promise<void>((resolve) => rendersWaiting.push(resolve));
+  return true; // the releasing render handed its slot straight to us
+}
+
+function releaseRenderSlot(): void {
+  const next = rendersWaiting.shift();
+  if (next) next();
+  else rendersRunning--;
+}
 
 /**
  * Compiles the team's schema, validates its example and renders it, in a
@@ -187,10 +213,25 @@ const TOO_COMPLEX = "input schema too complex to validate";
  * past the heap limit, the thread is terminated and the stack refused.
  * `onWorker` lets a test watch the thread exit.
  */
-export function trialRender(
+export async function trialRender(
   manifest: StackManifest,
   contents: Map<string, { content: string; mode: StackFile["mode"] }>,
   opts: { timeoutMs?: number; onWorker?: (w: Worker) => void } = {}
+): Promise<RenderResult> {
+  if (!(await acquireRenderSlot())) {
+    return { ok: false, error: "too many stacks are being checked right now; try again in a minute" };
+  }
+  try {
+    return await runTrialRender(manifest, contents, opts);
+  } finally {
+    releaseRenderSlot();
+  }
+}
+
+function runTrialRender(
+  manifest: StackManifest,
+  contents: Map<string, { content: string; mode: StackFile["mode"] }>,
+  opts: { timeoutMs?: number; onWorker?: (w: Worker) => void }
 ): Promise<RenderResult> {
   const timeoutMs = opts.timeoutMs ?? TEAM_STACK_LIMITS.renderTimeoutMs;
   const { url, execArgv } = renderWorker();
@@ -206,12 +247,13 @@ export function trialRender(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      void worker.terminate();
-      resolve(result);
+      // Resolve once the thread is gone, so a render slot is only handed on
+      // when its heap is actually freed.
+      void worker.terminate().finally(() => resolve(result));
     };
     // Loading the thread is ours to pay for, not the team's: a generous
     // limit for that, then the real budget once it says it is ready.
-    timer = setTimeout(() => finish({ ok: false, error: "the stack check could not start; try again" }), 30_000);
+    timer = setTimeout(() => finish({ ok: false, error: CHECK_FAILED }), 30_000);
     worker.on("message", (msg: "ready" | RenderResult) => {
       if (msg === "ready") {
         clearTimeout(timer);
@@ -223,10 +265,12 @@ export function trialRender(
         worker.postMessage(job);
       } else finish(msg);
     });
+    // Running out of heap is the schema's doing; any other thread failure
+    // (it failed to load, it crashed) is ours, and says so.
     worker.on("error", (err) =>
-      finish({ ok: false, error: /memory/i.test(err.message) ? `${TOO_COMPLEX}: it ran out of memory` : `${TOO_COMPLEX}: ${err.message}` })
+      finish({ ok: false, error: /memory/i.test(err.message) ? `${TOO_COMPLEX}: it ran out of memory` : CHECK_FAILED })
     );
-    worker.on("exit", () => finish({ ok: false, error: `${TOO_COMPLEX}: the check stopped` }));
+    worker.on("exit", () => finish({ ok: false, error: CHECK_FAILED }));
   });
 }
 
