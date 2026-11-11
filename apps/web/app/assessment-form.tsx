@@ -201,7 +201,7 @@ export function AssessmentForm({ provider }: { provider?: string }) {
         >
           {state === "sending" ? "Sending..." : "Request a free assessment"}
         </button>
-        <span className="text-[13px] text-faint">
+        <span className="text-[13px] text-muted">
           No account needed. We reply by email.
         </span>
       </div>

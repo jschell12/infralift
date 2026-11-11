@@ -4,8 +4,9 @@ import { LEAVING_PAGES, getLeavingPage } from "../../../lib/leaving";
 
 import { DASHBOARD_URL, LEAD_FORM_ENABLED } from "../../../lib/links";
 import { AssessmentForm } from "../../assessment-form";
+import { SiteFooter, SiteHeader } from "../../site-chrome";
 
-const CONTAINER = "max-w-[880px] mx-auto px-6";
+const CONTAINER = "max-w-[880px] mx-auto px-4 sm:px-6";
 const CARD = "bg-surface border border-border rounded-xl p-6";
 const BTN =
   "inline-block px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:opacity-90";
@@ -38,26 +39,11 @@ export default async function LeavingPage({
 
   return (
     <>
-      <header className={CONTAINER}>
-        <nav className="flex items-center justify-between py-5">
-          <a
-            href="/"
-            className="font-bold text-xl tracking-[-0.02em] text-text"
-          >
-            infra<span className="text-accent">lift</span>
-          </a>
-          <a href={DASHBOARD_URL} className={BTN}>
-            Free assessment
-          </a>
-        </nav>
-      </header>
+      <SiteHeader />
 
       <main className={CONTAINER}>
         <section className="pt-12 pb-10">
-          <p className="text-accent text-sm font-semibold uppercase tracking-[0.08em] mb-3">
-            Leaving {page.provider}
-          </p>
-          <h1 className="text-[38px] leading-tight font-bold tracking-[-0.02em] mb-4">
+          <h1 className="text-3xl md:text-[38px] text-balance leading-tight font-bold tracking-[-0.02em] mb-4">
             {page.headline}
           </h1>
           <p className="text-muted text-[17px] max-w-[640px]">{page.intro}</p>
@@ -147,7 +133,7 @@ export default async function LeavingPage({
             <a href={DASHBOARD_URL} className={BTN}>
               Run the free assessment
             </a>
-            <p className="mt-3.5 text-[13px] text-faint">
+            <p className="mt-3.5 text-sm text-muted">
               Sign in with Google or GitHub, then connect a read-only{" "}
               {page.provider} token.
             </p>
@@ -171,20 +157,7 @@ export default async function LeavingPage({
         </section>
       </main>
 
-      <footer
-        className={`${CONTAINER} border-t border-border py-10 text-muted text-sm flex flex-wrap gap-x-6 gap-y-2`}
-      >
-        <span>infralift</span>
-        {LEAVING_PAGES.map((p) => (
-          <a
-            key={p.slug}
-            href={`/leaving/${p.slug}`}
-            className={p.slug === page.slug ? "text-text" : ""}
-          >
-            Leaving {p.provider}
-          </a>
-        ))}
-      </footer>
+      <SiteFooter />
     </>
   );
 }

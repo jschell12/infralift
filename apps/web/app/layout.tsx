@@ -1,10 +1,23 @@
 import type { Metadata } from "next";
+import { listProviders } from "../lib/providers";
 import "./globals.css";
 
+const TITLE = "infralift | bring click-ops infrastructure under Terraform";
+const DESCRIPTION = `Find the cloud resources nobody wrote Terraform for, adopt them through a pull request that has to plan zero changes, then manage them as code with plan-on-PR, apply-on-merge and daily drift checks. Free assessment for ${listProviders()}.`;
+
+// The provider list comes from lib/providers.ts, so this description and the
+// home page count cannot disagree again (they said 11 and 12).
 export const metadata: Metadata = {
-  title: "infralift | fixed-fee infrastructure migrations, delivered as Terraform",
-  description:
-    "Your cloud bill shouldn't scale faster than your revenue. Free assessment for Vercel, Heroku, Firebase, AWS, GCP, Azure, Netlify, Render, Railway, Fly.io, and DigitalOcean. Fixed-fee migration onto infrastructure you own, delivered as Terraform.",
+  metadataBase: new URL("https://infralift.dev"),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: "infralift",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
 };
 
 // First-party page-view beacon. Posts {p: path, r: referrer, q: query} to

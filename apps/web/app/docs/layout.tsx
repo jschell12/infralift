@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { DASHBOARD_URL } from "../../lib/links";
+import { CONTAINER, SiteFooter, SiteHeader } from "../site-chrome";
 
 // Every .md under docs/ is rendered and publicly reachable (see lib/docs.ts),
 // so anything not listed here is published but unlinked rather than private.
@@ -20,33 +20,27 @@ export default function DocsLayout({
 }) {
   return (
     <>
-      <header className="container">
-        <nav className="nav">
-          <Link href="/" className="logo">
-            infra<span>lift</span>
-          </Link>
-          <div className="nav-links">
-            <Link href="/">Home</Link>
-            <a className="btn btn-primary" href={DASHBOARD_URL}>
-              Start assessment
-            </a>
-          </div>
+      <SiteHeader />
+      <div
+        className={`${CONTAINER} grid gap-8 pt-8 pb-16 md:grid-cols-[200px_minmax(0,1fr)] md:gap-12`}
+      >
+        <nav aria-label="Documentation">
+          <ul className="flex flex-wrap gap-x-5 border-b border-border pb-3 md:sticky md:top-6 md:flex-col md:border-b-0 md:pb-0">
+            {NAV.map((item) => (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className="inline-flex min-h-11 items-center text-[15px] text-muted hover:text-text"
+                >
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </nav>
-      </header>
-      <div className="container docs-shell">
-        <aside className="docs-sidebar">
-          {NAV.map((item) => (
-            <Link key={item.href} href={item.href}>
-              {item.label}
-            </Link>
-          ))}
-        </aside>
-        <main className="docs-article">{children}</main>
+        <main className="docs-article min-w-0">{children}</main>
       </div>
-      <footer className="container footer">
-        <div>© {new Date().getFullYear()} infralift</div>
-        <div>Fixed-fee migrations, delivered as Terraform.</div>
-      </footer>
+      <SiteFooter />
     </>
   );
 }

@@ -1,9 +1,8 @@
 import Link from "next/link";
 
 import { DASHBOARD_URL } from "../../lib/links";
+import { CONTAINER, SiteFooter, SiteHeader } from "../site-chrome";
 import { Calculator } from "./calculator";
-
-const CONTAINER = "max-w-[1080px] mx-auto px-6";
 
 export const metadata = {
   title: "What would your stack cost somewhere else? | infralift",
@@ -14,37 +13,11 @@ export const metadata = {
 export default function EstimatePage() {
   return (
     <>
-      <header className={CONTAINER}>
-        <nav className="flex items-center justify-between py-5">
-          <Link
-            href="/"
-            className="font-bold text-xl tracking-[-0.02em] text-text"
-          >
-            infra<span className="text-accent">lift</span>
-          </Link>
-          <div className="flex items-center gap-6">
-            <Link href="/" className="text-muted text-[15px] hover:text-text">
-              Home
-            </Link>
-            <Link
-              href="/docs"
-              className="text-muted text-[15px] hover:text-text"
-            >
-              Docs
-            </Link>
-            <a
-              className="rounded-lg bg-accent px-5 py-2.5 text-[15px] font-semibold text-bg hover:bg-accent/90"
-              href={DASHBOARD_URL}
-            >
-              Start assessment
-            </a>
-          </div>
-        </nav>
-      </header>
+      <SiteHeader />
 
       <main className={CONTAINER}>
         <section className="pt-16 pb-10">
-          <h1 className="max-w-[760px] text-[44px] font-bold leading-[1.15] tracking-[-0.03em]">
+          <h1 className="max-w-[760px] text-4xl md:text-[44px] text-balance font-bold leading-[1.15] tracking-[-0.03em]">
             What would your stack cost somewhere else?
           </h1>
           <p className="mt-5 max-w-[640px] text-lg text-muted">
@@ -92,12 +65,7 @@ export default function EstimatePage() {
         </section>
       </main>
 
-      <footer
-        className={`${CONTAINER} border-t border-border py-10 text-muted text-sm flex justify-between`}
-      >
-        <div>&copy; {new Date().getFullYear()} infralift</div>
-        <div>Fixed-fee migrations, delivered as Terraform.</div>
-      </footer>
+      <SiteFooter />
     </>
   );
 }

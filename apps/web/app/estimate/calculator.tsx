@@ -17,7 +17,7 @@ import { verifiedMonth } from "../../lib/prices";
 const FIELD =
   "w-full rounded-lg border border-border bg-bg px-3.5 py-2.5 text-[15px] text-text placeholder:text-faint focus:border-accent focus:outline-none";
 const LABEL_CLS = "block text-[13px] font-semibold text-muted mb-1.5";
-const HINT = "mt-1 text-[12px] text-faint";
+const HINT = "mt-1 text-[13px] text-muted";
 
 const PROVIDERS = [
   "Vercel",
@@ -370,7 +370,7 @@ export function Calculator() {
           >
             {state === "running" ? "Working..." : "Show me the number"}
           </button>
-          <span className="text-[13px] text-faint">
+          <span className="text-[13px] text-muted">
             No account, no token, nothing stored.
           </span>
         </div>
@@ -393,7 +393,7 @@ function Result({ result }: { result: EstimateResult }) {
           believable, and it saves both sides a call. */}
       {best && best.netAnnualSavingsCents !== null ? (
         <div className="rounded-xl border border-accent/20 bg-accent-dim/40 p-6">
-          <div className="text-[13px] font-semibold uppercase tracking-wide text-accent">
+          <div className="text-[15px] font-semibold text-accent">
             Best fit: {best.name}
           </div>
           <div className="mt-2 text-4xl font-bold tracking-[-0.02em]">
@@ -487,7 +487,7 @@ function Result({ result }: { result: EstimateResult }) {
       </div>
 
       <div className="rounded-xl border border-border bg-surface p-6">
-        <h4 className="text-[13px] font-semibold uppercase tracking-wide text-muted">
+        <h4 className="text-base font-semibold text-text">
           What this assumes
         </h4>
         <ul className="mt-3 grid gap-2 text-[14px] text-muted">
