@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
+import { Worker } from "node:worker_threads";
 import { Ajv2020 as Ajv } from "ajv/dist/2020.js";
 import { GitFileTooLarge } from "../git/errors.js";
 import type { GitHostClient, TreeEntry } from "../git/hosts.js";
-import { TfInputValidationError } from "../tf/render.js";
-import { memoryTree, newSchemaCompiler, renderStack, type StackFile, type StackManifest } from "./index.js";
+import type { StackFile, StackManifest } from "./index.js";
 import { STACK_MANIFEST_SCHEMA } from "./manifest-schema.js";
+import type { RenderJob, RenderResult } from "./render-worker.js";
 
 // ---------------------------------------------------------------------------
 // Team stacks: a stack a team keeps in its own repository, laid out like a
@@ -26,6 +27,12 @@ export const TEAM_STACK_LIMITS = {
   maxFileBytes: 256 * 1024,
   maxTotalBytes: 2 * 1024 * 1024,
   maxPathLength: 512,
+  /** The input schema as JSON, and how deeply it nests. */
+  maxSchemaBytes: 64 * 1024,
+  maxSchemaDepth: 32,
+  /** The trial render's budget once its thread is loaded, and its heap. */
+  renderTimeoutMs: 2000,
+  renderHeapMb: 128,
 };
 
 /** The parts of the tree under `path` that make up a stack. Anything else
@@ -103,6 +110,11 @@ const ajv = new Ajv({ allErrors: true, strict: false });
 const validateManifest = ajv.compile(STACK_MANIFEST_SCHEMA);
 
 /**
+ * The keyword checks below are defence in depth, not the guard. A schema can
+ * be exponential without any regex (nested anyOf through $ref), so the trial
+ * render that compiles and validates it runs in a worker thread with a hard
+ * timeout and a heap limit (trialRender, render-worker.ts).
+ *
  * Keywords a team's input schema may not use. Ajv runs `pattern` and
  * `patternProperties` with JavaScript's backtracking regex engine, on the one
  * event loop the API has, against values the same team wrote: `^(a+)+$` with a
@@ -113,22 +125,109 @@ const validateManifest = ajv.compile(STACK_MANIFEST_SCHEMA);
  */
 const REGEX_KEYWORDS = ["pattern", "patternProperties", "format"];
 /** Keywords whose value maps names to subschemas: the names are data. */
-const SCHEMA_MAPS = new Set(["properties", "$defs", "definitions", "dependentSchemas", "patternProperties"]);
+const SCHEMA_MAPS = new Set([
+  "properties",
+  "$defs",
+  "definitions",
+  "dependentSchemas",
+  "dependentRequired",
+  "dependencies",
+  "patternProperties",
+]);
+/** The only $ref a team schema may use: a definition in the same schema. */
+const REF_KEYWORDS = ["$ref", "$dynamicRef", "$recursiveRef"];
+const LOCAL_REF = /^#\/\$defs\/[A-Za-z0-9_-]+$/;
 /** Keywords whose value is data, never a schema. */
 const DATA = new Set(["enum", "const", "default", "examples", "required"]);
 
-export function checkInputSchema(schema: unknown, at = "inputSchema"): string[] {
-  if (Array.isArray(schema)) return schema.flatMap((s, i) => checkInputSchema(s, `${at}/${i}`));
+export function checkInputSchema(schema: unknown): string[] {
+  const bytes = Buffer.byteLength(JSON.stringify(schema ?? null), "utf8");
+  if (bytes > TEAM_STACK_LIMITS.maxSchemaBytes) {
+    return [`stack.json inputSchema is ${bytes} bytes; the limit is ${TEAM_STACK_LIMITS.maxSchemaBytes}`];
+  }
+  return walkSchema(schema, "inputSchema", 0);
+}
+
+function walkSchema(schema: unknown, at: string, depth: number): string[] {
+  if (depth > TEAM_STACK_LIMITS.maxSchemaDepth) {
+    return [`stack.json ${at} nests deeper than ${TEAM_STACK_LIMITS.maxSchemaDepth} levels`];
+  }
+  if (Array.isArray(schema)) return schema.flatMap((s, i) => walkSchema(s, `${at}/${i}`, depth + 1));
   if (!schema || typeof schema !== "object") return [];
   const errors: string[] = [];
   for (const [k, v] of Object.entries(schema)) {
     if (REGEX_KEYWORDS.includes(k)) errors.push(`stack.json ${at} uses "${k}", which team stacks may not use (regexes run on infralift's servers)`);
+    if (REF_KEYWORDS.includes(k) && !(k === "$ref" && typeof v === "string" && LOCAL_REF.test(v))) {
+      errors.push(`stack.json ${at} has ${k} ${JSON.stringify(v)}; team stacks may only use $ref "#/$defs/<name>"`);
+    }
     if (DATA.has(k)) continue;
     if (SCHEMA_MAPS.has(k) && v && typeof v === "object") {
-      for (const [name, sub] of Object.entries(v)) errors.push(...checkInputSchema(sub, `${at}/${k}/${name}`));
-    } else errors.push(...checkInputSchema(v, `${at}/${k}`));
+      for (const [name, sub] of Object.entries(v)) errors.push(...walkSchema(sub, `${at}/${k}/${name}`, depth + 1));
+    } else errors.push(...walkSchema(v, `${at}/${k}`, depth + 1));
   }
   return errors;
+}
+
+/** The worker's entry: the compiled .js beside this file, or the .ts source
+ *  loaded through tsx when this file is itself running as TypeScript
+ *  (vitest, `pnpm dev`). */
+function renderWorker(): { url: URL; execArgv: string[] } {
+  const ts = import.meta.url.endsWith(".ts");
+  return {
+    url: new URL(ts ? "./render-worker.ts" : "./render-worker.js", import.meta.url),
+    execArgv: ts ? ["--import", "tsx"] : [],
+  };
+}
+
+const TOO_COMPLEX = "input schema too complex to validate";
+
+/**
+ * Compiles the team's schema, validates its example and renders it, in a
+ * worker thread. The budget starts once the thread has loaded; past it, or
+ * past the heap limit, the thread is terminated and the stack refused.
+ * `onWorker` lets a test watch the thread exit.
+ */
+export function trialRender(
+  manifest: StackManifest,
+  contents: Map<string, { content: string; mode: StackFile["mode"] }>,
+  opts: { timeoutMs?: number; onWorker?: (w: Worker) => void } = {}
+): Promise<RenderResult> {
+  const timeoutMs = opts.timeoutMs ?? TEAM_STACK_LIMITS.renderTimeoutMs;
+  const { url, execArgv } = renderWorker();
+  const worker = new Worker(url, {
+    execArgv,
+    resourceLimits: { maxOldGenerationSizeMb: TEAM_STACK_LIMITS.renderHeapMb, maxYoungGenerationSizeMb: 32 },
+  });
+  opts.onWorker?.(worker);
+  return new Promise<RenderResult>((resolve) => {
+    let timer: NodeJS.Timeout | undefined;
+    let settled = false;
+    const finish = (result: RenderResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      void worker.terminate();
+      resolve(result);
+    };
+    // Loading the thread is ours to pay for, not the team's: a generous
+    // limit for that, then the real budget once it says it is ready.
+    timer = setTimeout(() => finish({ ok: false, error: "the stack check could not start; try again" }), 30_000);
+    worker.on("message", (msg: "ready" | RenderResult) => {
+      if (msg === "ready") {
+        clearTimeout(timer);
+        timer = setTimeout(
+          () => finish({ ok: false, error: `${TOO_COMPLEX}: it took over ${timeoutMs} ms` }),
+          timeoutMs
+        );
+        const job: RenderJob = { manifest, contents: Object.fromEntries(contents) };
+        worker.postMessage(job);
+      } else finish(msg);
+    });
+    worker.on("error", (err) =>
+      finish({ ok: false, error: /memory/i.test(err.message) ? `${TOO_COMPLEX}: it ran out of memory` : `${TOO_COMPLEX}: ${err.message}` })
+    );
+    worker.on("exit", () => finish({ ok: false, error: `${TOO_COMPLEX}: the check stopped` }));
+  });
 }
 
 /** Schema errors, plus references the schema cannot see: every output path is
@@ -199,14 +298,8 @@ export async function loadTeamStack(
   if (manifestErrors.length) return { valid: false, sha, manifest: null, files, errors: manifestErrors };
   const manifest = raw as StackManifest;
 
-  try {
-    // A compiler of its own: a team schema's $id cannot collide with another
-    // org's, and nothing it compiles outlives this load.
-    const rendered = renderStack(manifest, manifest.example, memoryTree(contents), newSchemaCompiler());
-    const text = Object.fromEntries([...contents].map(([p, f]) => [p, f.content]));
-    return { valid: true, sha, manifest, files, contents: text, renderedFiles: rendered.length };
-  } catch (err) {
-    const why = err instanceof TfInputValidationError ? err.message : `does not render: ${(err as Error).message}`;
-    return { valid: false, sha, manifest, files, errors: [`example ${why}`] };
-  }
+  const rendered = await trialRender(manifest, contents);
+  if (!rendered.ok) return { valid: false, sha, manifest, files, errors: [rendered.error] };
+  const text = Object.fromEntries([...contents].map(([p, f]) => [p, f.content]));
+  return { valid: true, sha, manifest, files, contents: text, renderedFiles: rendered.renderedFiles };
 }

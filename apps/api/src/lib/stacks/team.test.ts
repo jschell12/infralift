@@ -1,11 +1,13 @@
+import { once } from "node:events";
 import { readFileSync, readdirSync, statSync } from "node:fs";
+import type { Worker } from "node:worker_threads";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { GitHostClient, TreeEntry } from "../git/hosts.js";
 import { getStack, renderStack } from "./index.js";
 import { GitFileTooLarge } from "../git/errors.js";
-import { checkInputSchema, checkManifest, isStackPath, loadTeamStack, selectStackEntries, TEAM_STACK_LIMITS } from "./team.js";
+import { checkInputSchema, checkManifest, isStackPath, trialRender, loadTeamStack, selectStackEntries, TEAM_STACK_LIMITS } from "./team.js";
 
 // A team stack is checked without running anything: path and size limits on
 // the tree, the manifest against its schema, and a render of its example.
@@ -214,10 +216,12 @@ describe("loadTeamStack", () => {
     const schema = {
       type: "object",
       properties: { pattern: { type: "string", enum: ["format"] }, tags: { type: "object", patternProperties: { "^x": {} } } },
+      dependencies: { format: ["pattern"], enum: { properties: { a: { pattern: "^x" } } } },
       $defs: { email: { type: "string", format: "email" } },
     };
     expect(checkInputSchema(schema)).toEqual([
       'stack.json inputSchema/properties/tags uses "patternProperties", which team stacks may not use (regexes run on infralift\'s servers)',
+      'stack.json inputSchema/dependencies/enum/properties/a uses "pattern", which team stacks may not use (regexes run on infralift\'s servers)',
       'stack.json inputSchema/$defs/email uses "format", which team stacks may not use (regexes run on infralift\'s servers)',
     ]);
   });
@@ -249,6 +253,78 @@ describe("loadTeamStack", () => {
     if (loaded.valid) return;
     expect(loaded.errors).toEqual([`stack.json is over ${TEAM_STACK_LIMITS.maxFileBytes} bytes`]);
   });
+
+  /** The catalog repo with `name` replaced by `schema`, its $defs merged in. */
+  function repoWithName(name: Record<string, unknown>, defs: Record<string, unknown>, example = "x") {
+    const repo = catalogRepo("s");
+    const manifest = JSON.parse(repo.get("s/stack.json")!.content);
+    manifest.inputSchema.properties.name = name;
+    manifest.inputSchema.$defs = defs;
+    manifest.example = { ...manifest.example, name: example };
+    repo.set("s/stack.json", { content: JSON.stringify(manifest), mode: "100644" });
+    return { repo, manifest };
+  }
+
+  // No regex anywhere: each level is an anyOf of two refs to the level
+  // below, and the bottom always fails, so validation tries 2^n paths. Every
+  // ref is local and the nesting is shallow, so only the worker stops it.
+  const bomb = () => {
+    const defs: Record<string, unknown> = { d0: { type: "string", minLength: 1000 } };
+    for (let i = 1; i <= 40; i++) defs[`d${i}`] = { anyOf: [{ $ref: `#/$defs/d${i - 1}` }, { $ref: `#/$defs/d${i - 1}` }] };
+    return repoWithName({ $ref: "#/$defs/d40" }, defs);
+  };
+
+  it("refuses a $ref into a data keyword, which would smuggle a pattern past the keyword check", async () => {
+    const { repo } = repoWithName(
+      { $ref: "#/$defs/x/default" },
+      { x: { type: "string", default: { type: "string", pattern: "^(a+)+$" } } },
+      `${"a".repeat(40)}!`
+    );
+    const { client } = fakeHost({ [SHA_A]: repo }, { main: SHA_A });
+    const started = performance.now();
+    const loaded = await loadTeamStack(client, { repo: "acme/stacks", dir: "s", ref: "main" });
+    expect(performance.now() - started).toBeLessThan(3000);
+    expect(loaded.valid).toBe(false);
+    if (loaded.valid) return;
+    expect(loaded.errors.join("\n")).toMatch(/may only use \$ref "#\/\$defs\/<name>"/);
+  });
+
+  it("refuses schemas that are too big or too deep before anything compiles", () => {
+    let deep: Record<string, unknown> = { type: "string" };
+    for (let i = 0; i < 40; i++) deep = { allOf: [deep] };
+    expect(checkInputSchema(deep).join()).toMatch(/nests deeper than 32 levels/);
+    const big = { type: "object", description: "x".repeat(70 * 1024) };
+    expect(checkInputSchema(big).join()).toMatch(/bytes; the limit is 65536/);
+  });
+
+  it("refuses an exponential anyOf/$ref schema within the budget, as too complex", async () => {
+    const { repo } = bomb();
+    const { client } = fakeHost({ [SHA_A]: repo }, { main: SHA_A });
+    const started = performance.now();
+    const loaded = await loadTeamStack(client, { repo: "acme/stacks", dir: "s", ref: "main" });
+    // 2 s budget, plus loading the thread through tsx under vitest.
+    expect(performance.now() - started).toBeLessThan(8000);
+    expect(loaded.valid).toBe(false);
+    if (loaded.valid) return;
+    expect(loaded.errors).toEqual([expect.stringMatching(/^input schema too complex to validate/)]);
+  }, 15000);
+
+  it("terminates the worker on a timeout rather than leaving it running", async () => {
+    const { repo, manifest } = bomb();
+    const contents = new Map([...repo].map(([p, f]) => [p.slice(2), f as { content: string; mode: "100644" | "100755" }]));
+    let exited: Promise<unknown> | undefined;
+    let thread: Worker | undefined;
+    const result = await trialRender(manifest, contents, {
+      timeoutMs: 300,
+      onWorker: (w) => {
+        thread = w;
+        exited = once(w, "exit");
+      },
+    });
+    expect(result).toEqual({ ok: false, error: "input schema too complex to validate: it took over 300 ms" });
+    await exited;
+    expect(thread!.threadId).toBe(-1);
+  }, 15000);
 
   it("throws when the ref does not exist, rather than recording a version", async () => {
     const { client } = fakeHost({}, {});
