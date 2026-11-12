@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { ImportCheckResult, ProviderConnectionSummary } from "@infralift/shared";
 import { api, errorText } from "../lib/api";
 import { Chip, INPUT, LABEL, MONO, Note, PrimaryButton, Skeleton, TEXT_BTN, type Tone } from "./ui";
@@ -199,6 +199,8 @@ function RootCard({
   connectionId: string;
   onCreated: () => void;
 }) {
+  // One card per root module, so ids are per card, not per page.
+  const fieldId = useId();
   const [name, setName] = useState(suggestName(scan.repo, root.path));
   const [configFile, setConfigFile] = useState(root.backend.configFiles.length === 1 ? root.backend.configFiles[0] : "");
   const [busy, setBusy] = useState(false);
@@ -281,8 +283,8 @@ function RootCard({
           )}
           {needsFile && (
             <>
-              <label htmlFor="import-backend-config-file" className={LABEL}>Backend config file</label>
-              <select id="import-backend-config-file" className={`${INPUT} mb-3`} value={configFile} onChange={(e) => setConfigFile(e.target.value)}>
+              <label htmlFor={`${fieldId}-config`} className={LABEL}>Backend config file</label>
+              <select id={`${fieldId}-config`} className={`${INPUT} mb-3`} value={configFile} onChange={(e) => setConfigFile(e.target.value)}>
                 <option value="">Pick one</option>
                 {root.backend.configFiles.map((f) => (
                   <option key={f} value={f}>
@@ -294,8 +296,8 @@ function RootCard({
           )}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
-              <label htmlFor="import-project-name" className={LABEL}>Project name</label>
-              <input id="import-project-name" className={INPUT} value={name} onChange={(e) => setName(e.target.value)} />
+              <label htmlFor={`${fieldId}-name`} className={LABEL}>Project name</label>
+              <input id={`${fieldId}-name`} className={INPUT} value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <PrimaryButton onClick={doImport} disabled={busy || !name || (needsFile && !configFile)}>
               {busy ? "Importing…" : "Import"}
