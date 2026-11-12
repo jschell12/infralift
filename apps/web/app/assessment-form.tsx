@@ -28,7 +28,7 @@ const SPEND = [
 ];
 
 const FIELD =
-  "w-full rounded-lg border border-border bg-bg px-3.5 py-2.5 text-[15px] text-text placeholder:text-faint focus:border-accent focus:outline-none";
+  "w-full rounded-lg border border-control bg-bg px-3.5 py-2.5 text-[15px] text-text placeholder:text-faint focus:border-text focus:outline-none";
 const LABEL_CLS = "block text-[13px] font-semibold text-muted mb-1.5";
 
 /** The /leaving pages know the provider but spell it their own way
@@ -95,7 +95,7 @@ export function AssessmentForm({ provider }: { provider?: string }) {
 
   if (state === "sent") {
     return (
-      <div className="rounded-xl border border-accent/20 bg-accent-dim/40 p-6">
+      <div className="rounded-xl border border-border bg-surface p-6">
         <h3 className="mb-1.5 text-lg font-semibold">Got it.</h3>
         <p className="text-[15px] text-muted">
           We read every one of these ourselves. If an assessment makes sense
@@ -197,7 +197,7 @@ export function AssessmentForm({ provider }: { provider?: string }) {
         <button
           type="submit"
           disabled={state === "sending"}
-          className="rounded-lg border-0 bg-accent px-6 py-3 text-[15px] font-semibold text-bg hover:bg-accent/90 disabled:cursor-default disabled:opacity-50"
+          className="rounded-lg border-0 bg-accent px-6 py-3 text-[15px] font-semibold text-on-accent hover:brightness-95 disabled:cursor-default disabled:opacity-50"
         >
           {state === "sending" ? "Sending..." : "Request a free assessment"}
         </button>

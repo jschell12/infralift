@@ -54,7 +54,7 @@ interface CodegenResponse {
 
 
 const OWNER_STYLE: Record<string, string> = {
-  infralift: "bg-accent-dim text-accent",
+  infralift: "border border-border text-text",
   customer: "bg-warn-dim text-warn",
   shared: "bg-bg text-muted",
 };
@@ -86,9 +86,9 @@ const CATEGORY_LABEL: Record<FindingCategory, string> = {
 };
 
 const CONFIDENCE_TONE: Record<PriceConfidence, Tone> = {
-  reported: "accent",
+  reported: "ok",
   list_price: "warn",
-  corroborated: "accent",
+  corroborated: "ok",
   advisor: "warn",
   anecdote: "muted",
   unverified: "faint",
@@ -230,12 +230,12 @@ export default function AssessmentReportPage({
                 ? `moving to ${recommended!.target}, after operations work`
                 : `${recommended!.target} does not beat today's bill`
           }
-          tone={netSavings !== null && netSavings <= 0 ? "warn" : "accent"}
+          tone={netSavings !== null && netSavings <= 0 ? "warn" : "muted"}
           center
         />
       </div>
 
-      <div className="mb-5 flex items-center gap-4 rounded-xl border border-accent/20 bg-accent-dim/40 px-5 py-4">
+      <div className="mb-5 flex items-center gap-4 rounded-xl border border-border bg-surface px-5 py-4">
         <div className="min-w-0">
           <div className="text-[15px] font-semibold">
             Where could this run instead?
@@ -393,7 +393,7 @@ export default function AssessmentReportPage({
               id="codegen-target"
               value={codegenTarget}
               onChange={(e) => setCodegenTarget(e.target.value as "cloudflare" | "hetzner")}
-              className="min-h-11 bg-bg border border-border rounded-lg px-2.5 py-2 text-base text-text focus:outline-none focus:border-accent"
+              className="min-h-11 bg-bg border border-control rounded-lg px-2.5 py-2 text-base text-text focus:outline-none focus:border-text"
             >
               <option value="cloudflare">Cloudflare Workers + Neon</option>
               <option value="hetzner">Hetzner VPS + Docker + Neon</option>
@@ -407,7 +407,7 @@ export default function AssessmentReportPage({
               id="codegen-backend"
               value={codegenBackend}
               onChange={(e) => setCodegenBackend(e.target.value as "local" | "tfc" | "s3")}
-              className="min-h-11 bg-bg border border-border rounded-lg px-2.5 py-2 text-base text-text focus:outline-none focus:border-accent"
+              className="min-h-11 bg-bg border border-control rounded-lg px-2.5 py-2 text-base text-text focus:outline-none focus:border-text"
             >
               <option value="local">Local state</option>
               <option value="tfc">Terraform Cloud</option>
@@ -439,7 +439,7 @@ export default function AssessmentReportPage({
             </div>
             {codegenFiles.filter(f => f.fileName !== "README.md").map((f) => (
               <details key={f.fileName} className="rounded-lg border border-border bg-bg">
-                <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-text hover:text-accent">
+                <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-text hover:underline">
                   {f.fileName}
                 </summary>
                 <pre className="overflow-x-auto border-t border-border p-3 text-xs leading-relaxed text-muted">
@@ -479,7 +479,7 @@ export default function AssessmentReportPage({
             derived from your inventory, and every step says who does it.
           </p>
 
-          <div className="mb-5 rounded-lg border border-danger/20 bg-danger/5 p-3.5">
+          <div className="mb-5 rounded-lg border border-danger/20 bg-danger-dim p-3.5">
             <div className="mb-1 text-[13px] font-semibold text-text">
               Point of no return
             </div>
@@ -520,7 +520,7 @@ export default function AssessmentReportPage({
                           {step.phase}
                         </span>
                         {step.automatable && (
-                          <span className="rounded-full bg-accent-dim px-2 py-0.5 text-xs text-accent">
+                          <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted">
                             we can verify this
                           </span>
                         )}

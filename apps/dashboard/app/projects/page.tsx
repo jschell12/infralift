@@ -127,7 +127,7 @@ const TFC_CONNECTION = "__tfc_connection";
 const BACKEND_KEYS = new Set(["backend", "tfc_organization", "tfc_workspace", TFC_CONNECTION]);
 
 const STATUS_TONE: Record<string, Tone> = {
-  success: "accent",
+  success: "ok",
   errored: "danger",
   running: "warn",
   pending: "muted",
@@ -263,7 +263,7 @@ function BackendPicker({
             key={o.key}
             type="button"
             onClick={() => onChange({ ...values, backend: o.key })}
-            className={`text-left rounded-lg border p-3 ${backend === o.key ? "border-accent bg-accent-dim/30" : "border-border bg-bg hover:border-muted"}`}
+            className={`text-left rounded-lg border p-3 ${backend === o.key ? "border-text bg-surface" : "border-border bg-bg hover:border-muted"}`}
           >
             <div className="text-sm font-semibold">{o.title}</div>
             <div className="text-xs text-muted mt-1">{o.body}</div>
@@ -276,7 +276,7 @@ function BackendPicker({
             <label htmlFor="proj-tfc-connection" className={LABEL}>Terraform Cloud connection *</label>
             {tfcConns && tfcConns.length === 0 ? (
               <div className="text-xs text-muted pt-2">
-                None yet. <a className="text-accent" href="/connections">Connect Terraform Cloud</a> first.
+                None yet. <a className="text-text underline" href="/connections">Connect Terraform Cloud</a> first.
               </div>
             ) : (
               <select
@@ -355,7 +355,7 @@ function FilePreview({ files }: { files: StackFile[] }) {
       </div>
       <div className={`${MONO} text-xs leading-5 max-h-48 overflow-y-auto`}>
         {files.map((f) => (
-          <div key={f.path} className={f.ownership === "seed" ? "text-accent" : ""}>
+          <div key={f.path} className={f.ownership === "seed" ? "font-semibold text-text" : ""}>
             {f.path}
           </div>
         ))}
@@ -533,7 +533,7 @@ function NewProjectDrawer({
               setStackSlug(stacks.find((s) => s.template.slug === t.slug)?.slug ?? "");
               setPreview(null);
             }}
-            className={`text-left rounded-lg border p-3 ${templateSlug === t.slug ? "border-accent bg-accent-dim/30" : "border-border bg-bg hover:border-muted"}`}
+            className={`text-left rounded-lg border p-3 ${templateSlug === t.slug ? "border-text bg-surface" : "border-border bg-bg hover:border-muted"}`}
           >
             <div className="text-sm font-semibold">{t.name}</div>
             <div className="text-xs text-muted mt-1">{t.description}</div>
@@ -552,7 +552,7 @@ function NewProjectDrawer({
               setStackSlug(s.slug);
               setPreview(null);
             }}
-            className={`inline-flex min-h-11 items-center rounded-full px-3 text-xs font-semibold border active:bg-bg ${stackSlug === s.slug ? "border-accent text-accent" : "border-border text-muted"}`}
+            className={`inline-flex min-h-11 items-center rounded-full px-3 text-xs font-semibold border active:bg-bg ${stackSlug === s.slug ? "border-text text-text" : "border-border text-muted"}`}
           >
             {s.target.name}
           </button>
@@ -667,7 +667,7 @@ function NewProjectDrawer({
           )}
           <div className={LABEL}>Runtime</div>
           <div className="flex flex-wrap gap-2 mb-4">
-            <span className="rounded-full px-3 py-1.5 text-xs font-semibold border border-accent text-accent">
+            <span className="rounded-full px-3 py-1.5 text-xs font-semibold border border-text text-text">
               {stack.runtime.name}
             </span>
             {ROADMAP_RUNTIMES.map((r) => (
@@ -684,7 +684,7 @@ function NewProjectDrawer({
             {stack.deliveries.map((d) => (
               <span
                 key={d.slug}
-                className={`rounded-full px-3 py-1.5 text-xs border ${d.gitHost === gitHost ? "border-accent text-accent font-semibold" : "border-border text-faint cursor-not-allowed"}`}
+                className={`rounded-full px-3 py-1.5 text-xs border ${d.gitHost === gitHost ? "border-text text-text font-semibold" : "border-border text-faint cursor-not-allowed"}`}
               >
                 {d.name}
                 {d.gitHost === gitHost ? "" : `: needs a ${PROVIDER_LABELS[d.gitHost]} repository`}
@@ -751,7 +751,7 @@ function NewProjectDrawer({
 
 const DRIFT_LOOK: Record<DriftStatus["state"], { tone: Tone; text: string }> = {
   drift: { tone: "danger", text: "drift detected" },
-  none: { tone: "accent", text: "no drift" },
+  none: { tone: "ok", text: "no drift" },
   unknown: { tone: "muted", text: "drift unknown" },
   unapplied: { tone: "warn", text: "adopted, not yet applied" },
 };
@@ -771,7 +771,7 @@ function DriftBadge({ drift }: { drift: DriftStatus | null }) {
         last checked {new Date(drift.ranAt ?? drift.checkedAt).toLocaleString()}
       </span>
       {drift.checkUrl && (
-        <a className="ml-auto text-accent text-sm font-semibold whitespace-nowrap" href={drift.checkUrl}>
+        <a className="ml-auto text-text underline text-sm font-semibold whitespace-nowrap" href={drift.checkUrl}>
           View check
         </a>
       )}
@@ -947,7 +947,7 @@ export default function ProjectsPage() {
             <div key={p.id} className={`${CARD} mb-4`}>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-2">
                 <h3 className="text-base font-semibold">{p.name}</h3>
-                <Chip tone="info">
+                <Chip tone="muted">
                   {PROVIDER_LABELS[from as keyof typeof PROVIDER_LABELS] ?? from} to{" "}
                   {TARGET_NAMES[p.migrationTarget ?? ""] ?? p.migrationTarget ?? "?"}
                 </Chip>
@@ -989,7 +989,7 @@ export default function ProjectsPage() {
             <div key={p.id} className={`${CARD} mb-4`}>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-2">
                 <h3 className="text-base font-semibold">{p.name}</h3>
-                <Chip tone="info">imported</Chip>
+                <Chip tone="muted">imported</Chip>
                 {scan && (
                   <Chip tone="muted">
                     {scan.resources} resources · {scan.tool === "tofu" ? "OpenTofu" : "Terraform"} ·{" "}
@@ -1030,7 +1030,7 @@ export default function ProjectsPage() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-2">
               <h3 className="text-base font-semibold">{p.name}</h3>
               {stack && (
-                <Chip tone="info">
+                <Chip tone="muted">
                   {stack.template.name} on {stack.target.name}
                 </Chip>
               )}
@@ -1067,7 +1067,7 @@ export default function ProjectsPage() {
                 </Chip>
                 <span className="text-muted truncate">{latest.statusMessage}</span>
                 {pr && (
-                  <a className="ml-auto text-accent text-sm font-semibold" href={pr}>
+                  <a className="ml-auto text-text underline text-sm font-semibold" href={pr}>
                     View pull request
                   </a>
                 )}

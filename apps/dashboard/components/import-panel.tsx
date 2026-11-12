@@ -53,8 +53,8 @@ const BACKEND_NAMES: Record<string, string> = {
 };
 
 const READINESS: Record<ScannedRoot["readiness"], { tone: Tone; text: string }> = {
-  ready: { tone: "accent", text: "Ready to import" },
-  "adopt-tfc": { tone: "info", text: "Adopt from Terraform Cloud" },
+  ready: { tone: "ok", text: "Ready to import" },
+  "adopt-tfc": { tone: "muted", text: "Adopt from Terraform Cloud" },
   blocked: { tone: "warn", text: "Needs a change first" },
 };
 
@@ -122,7 +122,7 @@ export function ImportPanel({ onCreated }: { onCreated: () => void }) {
   if (!conns.length && !error) {
     return (
       <Note>
-        Connect GitHub under <a className="text-accent" href="/connections">Connections</a> first. infralift reads
+        Connect GitHub under <a className="text-text underline" href="/connections">Connections</a> first. infralift reads
         the repository&apos;s Terraform with it and opens the import pull request.
       </Note>
     );
@@ -255,7 +255,7 @@ function RootCard({
         </div>
       ))}
       {root.readiness === "adopt-tfc" && (
-        <a className="text-accent text-sm font-semibold" href="/workspaces">
+        <a className="text-text underline text-sm font-semibold" href="/workspaces">
           Adopt the workspace
         </a>
       )}
@@ -315,8 +315,8 @@ function RootCard({
 const CHECK_LOOK: Record<ImportCheckResult["state"], { tone: Tone; text: string }> = {
   "no-pr": { tone: "faint", text: "No pull request yet" },
   waiting: { tone: "muted", text: "Check not started" },
-  running: { tone: "info", text: "Plan running" },
-  passed: { tone: "accent", text: "Safe to take over" },
+  running: { tone: "muted", text: "Plan running" },
+  passed: { tone: "ok", text: "Safe to take over" },
   changes: { tone: "warn", text: "Would change resources" },
   "needs-setup": { tone: "warn", text: "Needs credentials" },
   error: { tone: "danger", text: "Plan failed" },
@@ -362,7 +362,7 @@ export function ImportCheckStatus({ projectId, last }: { projectId: string; last
           {busy ? "Checking…" : "Re-check"}
         </button>
         {(result?.checkUrl ?? result?.prUrl) && (
-          <a className="whitespace-nowrap text-accent text-sm font-semibold" href={result!.checkUrl ?? result!.prUrl!}>
+          <a className="whitespace-nowrap text-text underline text-sm font-semibold" href={result!.checkUrl ?? result!.prUrl!}>
             {result?.checkUrl ? "View check" : "View pull request"}
           </a>
         )}

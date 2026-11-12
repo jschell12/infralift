@@ -107,10 +107,10 @@ function StatusChip({ c }: { c: ProviderConnectionSummary }) {
   if (c.status === "valid" && c.expiresAt) {
     const days = Math.ceil((new Date(c.expiresAt).getTime() - Date.now()) / 86_400_000);
     if (days <= 0) return <Chip tone="danger">expired</Chip>;
-    return <Chip tone={days < 14 ? "warn" : "accent"}>{`expires in ${days} day${days === 1 ? "" : "s"}`}</Chip>;
+    return <Chip tone={days < 14 ? "warn" : "ok"}>{`expires in ${days} day${days === 1 ? "" : "s"}`}</Chip>;
   }
   return (
-    <Chip tone={c.status === "valid" ? "accent" : c.status === "invalid" ? "danger" : "muted"}>{c.status}</Chip>
+    <Chip tone={c.status === "valid" ? "ok" : c.status === "invalid" ? "danger" : "muted"}>{c.status}</Chip>
   );
 }
 
@@ -317,7 +317,7 @@ function TfcConnectCard({ onAdded }: { onAdded: () => void }) {
           queues plans; it never applies.
         </div>
         <PrimaryButton disabled={busy}>{busy ? "Verifying..." : "Connect & verify"}</PrimaryButton>
-        {added && <div className="mt-2 text-sm text-accent">{added}</div>}
+        {added && <div className="mt-2 text-sm text-muted"><span aria-hidden="true">{"\u2713 "}</span>{added}</div>}
         {error && <div className="mt-2 text-sm text-danger">{error}</div>}
       </form>
     </Card>
@@ -490,7 +490,7 @@ export default function ConnectionsPage() {
             )}
 
             <div className="mb-3">
-              <Note tone="accent">
+              <Note tone="emphasis">
                 Your token is encrypted with AES-256 before storage, never
                 displayed again, and only used for read-only API calls. You can
                 revoke it from your provider at any time.

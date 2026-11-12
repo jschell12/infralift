@@ -100,7 +100,7 @@ export default function ReportPage() {
       {/* Summary stats */}
       <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
         <div className="rounded-xl border border-border bg-surface p-4 text-center sm:p-5">
-          <div className="text-3xl font-bold text-accent">{data.total}</div>
+          <div className="text-3xl font-bold text-text">{data.total}</div>
           <p className="text-muted text-sm">total leads</p>
         </div>
         <div className="rounded-xl border border-border bg-surface p-4 text-center sm:p-5">
@@ -118,7 +118,7 @@ export default function ReportPage() {
       </div>
 
       {/* Where infralift fits */}
-      <div className="mb-8 rounded-xl border border-accent/30 bg-surface p-4 sm:p-6">
+      <div className="mb-8 rounded-xl border border-control bg-surface p-4 sm:p-6">
         <h2 className="mb-3 text-lg font-bold sm:text-xl">Where infralift fits</h2>
         <p className="text-muted text-sm mb-4">
           {billingShare}% of leads are billing pain. Developers on Vercel, AWS, and Cloudflare
@@ -129,7 +129,7 @@ export default function ReportPage() {
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <h3 className="text-sm font-semibold text-accent mb-2">Primary targets</h3>
+            <h3 className="text-sm font-semibold text-text mb-2">Primary targets</h3>
             <ul className="text-muted text-sm space-y-1">
               <li><span className="text-text font-semibold">Vercel</span> ({leadsFor("vercel")} leads) - per-seat + usage pricing, $0.15/GB egress</li>
               <li><span className="text-text font-semibold">AWS</span> ({leadsFor("aws")} leads) - NAT gateways, egress, complexity sprawl</li>
@@ -137,7 +137,7 @@ export default function ReportPage() {
             </ul>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-accent mb-2">Secondary targets</h3>
+            <h3 className="text-sm font-semibold text-text mb-2">Secondary targets</h3>
             <ul className="text-muted text-sm space-y-1">
               <li><span className="text-text font-semibold">GCP</span> ({leadsFor("gcp")} leads) - Cloud Run billing, egress fees</li>
               <li><span className="text-text font-semibold">Cloudflare</span> ({leadsFor("cloudflare")} leads) - Workers limits, overage protection gaps</li>
@@ -193,7 +193,7 @@ export default function ReportPage() {
                 .map(([platform, count]) => (
                   <tr key={platform}>
                     <td className="p-2 border-b border-border text-text">{platform}</td>
-                    <td className="p-2 border-b border-border text-right text-accent font-semibold">{count}</td>
+                    <td className="p-2 border-b border-border text-right text-text font-semibold">{count}</td>
                   </tr>
                 ))}
             </tbody>
@@ -208,7 +208,7 @@ export default function ReportPage() {
                 .map(([status, count]) => (
                   <tr key={status}>
                     <td className="p-2 border-b border-border text-text">{status}</td>
-                    <td className="p-2 border-b border-border text-right text-accent font-semibold">{count}</td>
+                    <td className="p-2 border-b border-border text-right text-text font-semibold">{count}</td>
                   </tr>
                 ))}
             </tbody>
@@ -233,7 +233,7 @@ export default function ReportPage() {
             <tbody>
               {data.topLeads.map((l) => (
                 <tr key={l.id}>
-                  <td className="p-2 border-b border-border text-accent font-bold">{l.engagementScore ?? 0}</td>
+                  <td className="p-2 border-b border-border text-text font-bold">{l.engagementScore ?? 0}</td>
                   <td className="p-2 border-b border-border">
                     <span className={CLASS_COLOR[l.classification]}>
                       {CLASS_LABEL[l.classification] ?? l.classification}
@@ -242,14 +242,14 @@ export default function ReportPage() {
                   <td className="p-2 border-b border-border">
                     <div className="flex flex-wrap gap-1">
                       {(l.providers ?? []).map((p) => (
-                        <span key={p} className="inline-block px-1.5 py-0.5 rounded text-xs font-semibold bg-accent-dim text-accent">
+                        <span key={p} className="inline-block px-1.5 py-0.5 rounded text-xs font-semibold border border-border text-muted">
                           {PROVIDER_LABEL[p] ?? p}
                         </span>
                       ))}
                     </div>
                   </td>
                   <td className="p-2 border-b border-border">
-                    <a href={l.sourceUrl} target="_blank" rel="noopener noreferrer" className="hover:text-accent">
+                    <a href={l.sourceUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
                       {l.title.length > 70 ? l.title.slice(0, 70) + "..." : l.title}
                     </a>
                   </td>

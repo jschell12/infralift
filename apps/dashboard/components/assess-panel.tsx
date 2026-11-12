@@ -127,9 +127,9 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
         valid.map((c) => (
           <div
             key={c.id}
-            className={`flex items-center gap-3 border-b border-border py-3 ${highlight === c.id ? "bg-accent-dim/20 -mx-2 px-2 rounded" : ""}`}
+            className={`flex items-center gap-3 border-b border-border py-3 ${highlight === c.id ? "bg-bg -mx-2 px-2 rounded" : ""}`}
           >
-            <Dot tone="accent" />
+            <Dot tone="ok" />
             <div className="min-w-0">
               <div className="text-[14px] font-medium">{PROVIDER_LABELS[c.provider]}</div>
               <div className="text-[12px] text-muted">{c.label}</div>
@@ -155,11 +155,11 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
       {runningId && (
         <div className="mt-4">
           <div className="mb-3 h-1 overflow-hidden rounded-full bg-bg">
-            <div className="h-full bg-accent" style={{ width: `${progress}%` }} />
+            <div className="h-full bg-muted" style={{ width: `${progress}%` }} />
           </div>
           <div className="font-mono text-xs leading-[1.8] text-muted">
             {SCAN_LINES.slice(0, step + 1).map((line, i) => (
-              <div key={line} className={i === step ? "text-muted" : "text-accent"}>
+              <div key={line} className={i === step ? "text-text" : "text-muted"}>
                 {i === step ? "· " : "✓ "}
                 {line}
               </div>
@@ -179,7 +179,7 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
                 &middot; {savingsNote(a)}
               </div>
               <div className="mt-2 flex gap-3 text-[13px] font-semibold">
-                <a href={`/assessments/${a.id}/options`} className="text-accent">
+                <a href={`/assessments/${a.id}/options`} className="text-text underline">
                   Choose a target
                 </a>
                 <a href={`/assessments/${a.id}`} className="text-muted">

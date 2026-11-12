@@ -58,11 +58,11 @@ export default function WorkspacesPage() {
                     <span
                       className={
                         w.driftDetected
-                          ? "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-danger/20 text-danger"
-                          : "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent-dim text-accent"
+                          ? "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-danger-dim text-danger"
+                          : "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border border-border text-muted"
                       }
                     >
-                      {w.driftDetected ? "drift detected" : "clean"}
+                      {w.driftDetected ? "drift detected" : "\u2713 clean"}
                     </span>
                   </td>
                   <td className="p-3 border-b border-border">
@@ -79,7 +79,7 @@ export default function WorkspacesPage() {
                   </td>
                   <td className="p-3 border-b border-border">
                     {w.connectionId ? (
-                      <button className="inline-flex min-h-11 items-center cursor-pointer border-0 bg-transparent text-accent active:opacity-70" onClick={() => setOpen(w.id)}>
+                      <button className="inline-flex min-h-11 items-center cursor-pointer border-0 bg-transparent text-text underline active:opacity-70" onClick={() => setOpen(w.id)}>
                         Runs
                       </button>
                     ) : (

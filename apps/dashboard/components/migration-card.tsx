@@ -14,7 +14,7 @@ import { Card, Chip, Dot, type Tone } from "./ui";
 // app and where it runs".
 
 const STATUS_TONE: Record<MigrationStatus, Tone> = {
-  completed: "accent",
+  completed: "ok",
   in_progress: "warn",
   verifying: "warn",
   approved: "warn",
@@ -23,7 +23,7 @@ const STATUS_TONE: Record<MigrationStatus, Tone> = {
 };
 
 const PHASE_TONE: Record<MigrationPhase["status"], Tone> = {
-  completed: "accent",
+  completed: "ok",
   in_progress: "warn",
   pending: "muted",
   blocked: "danger",
@@ -37,7 +37,7 @@ export function MigrationCard({ m }: { m: MigrationSummary }) {
           {PROVIDER_LABELS[m.sourceProvider]} to{" "}
           {m.targetPlatform === "cloudflare" ? "Cloudflare" : "VPS"}
         </h3>
-        <Chip tone="info">Done for you</Chip>
+        <Chip tone="muted">Done for you</Chip>
         <Chip tone={STATUS_TONE[m.status] ?? "muted"}>{m.status.replace("_", " ")}</Chip>
       </div>
       <p className="mb-2 text-sm text-muted">

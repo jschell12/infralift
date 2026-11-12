@@ -20,9 +20,9 @@ import {
 
 const STATS = [
   { label: "Assessments run", value: "38", sub: "+6 this week", tone: "muted" as Tone },
-  { label: "Quote \u2192 signed", value: "31%", sub: "12 of 38", tone: "accent" as Tone },
+  { label: "Quote \u2192 signed", value: "31%", sub: "12 of 38", tone: "muted" as Tone },
   { label: "Migrations in flight", value: "4", sub: "1 cutover this week", tone: "warn" as Tone },
-  { label: "Fees booked (Q3)", value: "$46.2k", sub: "avg fee $4,850", tone: "accent" as Tone },
+  { label: "Fees booked (Q3)", value: "$46.2k", sub: "avg fee $4,850", tone: "muted" as Tone },
 ];
 
 type Stage = "assessing" | "quote sent" | "migrating" | "cutover" | "lost";
@@ -30,8 +30,8 @@ type Stage = "assessing" | "quote sent" | "migrating" | "cutover" | "lost";
 const STAGE_TONE: Record<Stage, Tone> = {
   assessing: "muted",
   "quote sent": "warn",
-  migrating: "accent",
-  cutover: "info",
+  migrating: "muted",
+  cutover: "muted",
   lost: "danger",
 };
 
@@ -60,7 +60,7 @@ const QUEUE: { id: string; provider: string; age: string; state: "running" | "do
 
 const QUEUE_TONE: Record<"running" | "done" | "error", Tone> = {
   running: "warn",
-  done: "accent",
+  done: "ok",
   error: "danger",
 };
 
@@ -109,7 +109,7 @@ export default function AdminOverview() {
                 </Chip>
                 <span className="text-muted">{d.source}</span>
                 <span className={NUM}>{d.fee}</span>
-                <span className={`text-accent ${NUM}`}>{d.saved}</span>
+                <span className={`text-text ${NUM}`}>{d.saved}</span>
               </TableRow>
             ))}
           </TableScroll>
@@ -140,7 +140,7 @@ export default function AdminOverview() {
 
           <Card>
             <CardTitle aside={<Chip tone="warn" size="xs">sample data</Chip>}>Last scan</CardTitle>
-            <div className="text-[26px] font-bold text-accent">41m ago</div>
+            <div className="text-[26px] font-bold text-text">41m ago</div>
             <p className="mt-1.5 text-[13px] text-muted">
               48 communities polled every 4 hours &middot; 6 platforms
             </p>

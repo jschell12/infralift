@@ -27,7 +27,7 @@ import {
   TableHead,
   TableRow,
   type Tone,
-  SMALL_BTN_ACCENT,
+  SMALL_BTN_STRONG,
   TEXT_BTN,
 } from "../../../../components/ui";
 
@@ -49,7 +49,7 @@ const SOURCE_LABEL: Record<CurrentSpendSource, string> = {
   unknown: "unknown",
 };
 const SOURCE_TONE: Record<CurrentSpendSource, Tone> = {
-  customer_reported: "accent",
+  customer_reported: "ok",
   inventory_list_price: "warn",
   unknown: "faint",
 };
@@ -130,7 +130,7 @@ function SpendForm({
             onChange={(e) => setValue(e.target.value)}
           />
         </div>
-        <button type="submit" className={SMALL_BTN_ACCENT} disabled={busy || !valid}>
+        <button type="submit" className={SMALL_BTN_STRONG} disabled={busy || !valid}>
           {busy ? "Saving..." : "Compare"}
         </button>
         {canClear && (
@@ -260,7 +260,7 @@ function ComparisonTable({
                   )}
                 </span>
                 <span
-                  className={`font-semibold ${NUM} ${net === null ? "text-faint" : net > 0 ? "text-accent" : "text-danger"}`}
+                  className={`font-semibold ${NUM} ${net === null ? "text-faint" : net > 0 ? "text-text" : "text-danger"}`}
                 >
                   {net === null
                     ? "\u2014"
@@ -377,7 +377,7 @@ function ExitTollCard({
           One-time cost to leave {PROVIDER_LABELS[provider]}
         </div>
         {toll.confidence !== "none" && (
-          <Chip tone={toll.confidence === "measured" ? "info" : "muted"} size="sm">
+          <Chip tone={toll.confidence === "measured" ? "ok" : "muted"} size="sm">
             {toll.confidence === "measured" ? "measured" : "estimated"}
           </Chip>
         )}
@@ -454,11 +454,11 @@ function OptionCard({
         <Chip size="xs" tone="muted">
           {option.category}
         </Chip>
-        <Chip size="xs" tone={option.managedLevel >= 2 ? "accent" : "warn"}>
+        <Chip size="xs" tone={option.managedLevel >= 2 ? "ok" : "warn"}>
           {MANAGED_LABEL[option.managedLevel] ?? "unknown ops model"}
         </Chip>
         {saves !== null && saves > 0 && (
-          <span className={`ml-auto text-[15px] font-semibold text-accent ${NUM}`}>
+          <span className={`ml-auto text-[15px] font-semibold text-text ${NUM}`}>
             saves {formatCents(saves)}/mo net
           </span>
         )}
@@ -488,7 +488,7 @@ function OptionCard({
             <span className="text-[13px] text-muted">
               all-in, sized to this workload
             </span>
-            <Chip size="xs" tone="accent">
+            <Chip size="xs" tone="muted">
               {option.sizing.confidence}
             </Chip>
           </div>
@@ -509,7 +509,7 @@ function OptionCard({
             >
               <span className="font-medium">{li.label}</span>
               <span
-                className={`shrink-0 font-semibold ${NUM} ${li.monthlyCents === 0 ? "text-accent" : "text-text"}`}
+                className={`shrink-0 font-semibold ${NUM} ${li.monthlyCents === 0 ? "text-text" : "text-muted"}`}
               >
                 {li.monthlyCents === 0 ? "$0" : `${formatCents(li.monthlyCents)}/mo`}
               </span>
@@ -591,7 +591,7 @@ function OptionCard({
             <button
               type="button"
               onClick={() => onApprove(option.codegenTarget!)}
-              className={SMALL_BTN_ACCENT}
+              className={SMALL_BTN_STRONG}
             >
               Approve and build it
             </button>
@@ -745,7 +745,7 @@ export default function MigrationOptionsPage({
           <div className="flex flex-wrap gap-2">
             {report.needs.map((n) => (
               <span key={n.key} title={`from: ${n.evidence}`}>
-                <Chip tone="info" size="sm">
+                <Chip tone="muted" size="sm">
                   {n.label}
                 </Chip>
               </span>
@@ -836,7 +836,7 @@ export default function MigrationOptionsPage({
 
       {approved && (
         <div className="mt-4">
-          <Note tone="accent">
+          <Note tone="emphasis">
             Building <strong>{approved.project.name}</strong> into{" "}
             <a
               href={`https://github.com/${approved.project.destRepo}`}

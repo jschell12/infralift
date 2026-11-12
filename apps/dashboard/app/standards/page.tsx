@@ -57,9 +57,9 @@ const STANDARDS: IacStandardCheck[] = [
 ];
 
 const BADGE: Record<IacStandardCheck["status"], string> = {
-  pass: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent-dim text-accent",
-  fail: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-danger/20 text-danger",
-  warn: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warn/20 text-warn",
+  pass: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border border-border text-muted",
+  fail: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-danger-dim text-danger",
+  warn: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warn-dim text-warn",
   not_applicable: "inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-border text-muted",
 };
 
@@ -78,6 +78,7 @@ export default function StandardsPage() {
           <h3 className="text-base font-semibold mb-1.5">
             {s.title}{" "}
             <span className={BADGE[s.status]}>
+              {s.status === "pass" ? <span aria-hidden="true">{"\u2713 "}</span> : null}
               {s.status === "not_applicable" ? "n/a" : s.status}
             </span>
           </h3>

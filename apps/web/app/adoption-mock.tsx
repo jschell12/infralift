@@ -26,7 +26,7 @@ export function AdoptionMock() {
               Import check on the adoption pull request
             </div>
           </div>
-          <span className="rounded-full border border-warn/30 bg-warn/10 px-2.5 py-0.5 text-[13px] text-warn">
+          <span className="rounded-full border border-warn/30 bg-warn-dim px-2.5 py-0.5 text-[13px] text-warn">
             adopted, not yet applied
           </span>
         </div>
@@ -51,7 +51,7 @@ export function AdoptionMock() {
                     <span className="text-muted">{r.kind}</span>
                   </td>
                   <td className="px-4 py-2.5 font-mono text-[13px] text-text">{r.address}</td>
-                  <td className="px-4 py-2.5 text-accent">import</td>
+                  <td className="px-4 py-2.5 text-text">import</td>
                 </tr>
               ))}
             </tbody>
@@ -59,7 +59,7 @@ export function AdoptionMock() {
         </div>
         <div className="border-t border-border bg-bg px-4 py-3 font-mono text-[13px] leading-relaxed text-text">
           <p>
-            <span className="text-accent">No changes.</span> All 5 resources
+            <span className="font-semibold text-text">No changes.</span> All 5 resources
             match the code, so infralift can take this module over without
             touching anything.
           </p>
