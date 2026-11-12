@@ -66,10 +66,13 @@ describe("site header", () => {
 
 describe("design tokens", () => {
   const css = read("app/globals.css");
-  const token = (name: string) => {
-    const m = css.match(new RegExp(`--color-${name}:\\s*(#[0-9a-f]{6})`, "i"));
+  // Tokens are light-dark(LIGHT, DARK); see palette.test.ts.
+  const token = (name: string, mode: "light" | "dark") => {
+    const m = css.match(
+      new RegExp(`--color-${name}:\\s*light-dark\\((#[0-9a-f]{6}),\\s*(#[0-9a-f]{6})\\)`, "i"),
+    );
     if (!m) throw new Error(`no --color-${name}`);
-    return m[1];
+    return mode === "light" ? m[1] : m[2];
   };
   const lum = (hex: string) => {
     const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
@@ -82,9 +85,11 @@ describe("design tokens", () => {
   };
 
   it("keeps small grey text at WCAG AA on both backgrounds", () => {
-    for (const fg of ["faint", "muted"]) {
-      for (const bg of ["bg", "surface"]) {
-        expect(ratio(token(fg), token(bg)), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+    for (const mode of ["light", "dark"] as const) {
+      for (const fg of ["faint", "muted"]) {
+        for (const bg of ["bg", "surface"]) {
+          expect(ratio(token(fg, mode), token(bg, mode)), `${mode}: ${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+        }
       }
     }
   });

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { LEAVING_PAGES } from "../lib/leaving";
 import { DASHBOARD_URL } from "../lib/links";
+import { ThemeControl } from "./theme-control";
 
 // One header and footer for every page. Home, the estimator, the leaving pages
 // and the docs each had their own copy, and the docs copy used class names no
@@ -114,7 +115,10 @@ export function SiteFooter() {
           </ul>
         </div>
       </div>
-      <p className="mt-8 text-muted">&copy; {new Date().getFullYear()} infralift</p>
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
+        <p className="text-muted">&copy; {new Date().getFullYear()} infralift</p>
+        <ThemeControl />
+      </div>
     </footer>
   );
 }

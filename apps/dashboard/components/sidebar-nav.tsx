@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { ProviderConnectionSummary } from "@infralift/shared";
 import { api } from "../lib/api";
+import { ThemeControl } from "./theme-control";
 
 const ITEMS = [
   { href: "/", label: "Dashboard", key: null },
@@ -131,6 +132,7 @@ export function AppNav() {
         {open ? (
           <div id="app-nav-menu" className="border-t border-border px-3 py-3">
             <SidebarNav onNavigate={() => setOpen(false)} />
+            <ThemeControl className="mt-3 border-t border-border px-3 pt-3" />
           </div>
         ) : null}
       </header>
@@ -143,6 +145,7 @@ export function AppNav() {
           <SidebarNav />
         </div>
         <div className="px-3 text-xs">
+          <ThemeControl className="mb-4 flex-wrap" />
           <a href="https://infralift.dev" className="text-faint hover:text-text">
             infralift.dev
           </a>

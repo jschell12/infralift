@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AdminNav } from "../components/nav";
+import { THEME_BOOT_SCRIPT } from "../lib/theme";
 
 export const metadata: Metadata = {
   title: "infralift admin",
@@ -18,7 +19,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Sets data-theme before the first paint so the page never flashes
+            the wrong palette. Built from lib/theme.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body>
         {/* Column on phones (top bar over content), row on desktop (sidebar
             beside content). AdminNav renders whichever half is visible. */}

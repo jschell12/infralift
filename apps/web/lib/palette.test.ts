@@ -8,6 +8,10 @@ import { join } from "node:path";
 // every text/background pair meets WCAG AA in both color schemes, and the
 // accent stays on the primary action. It lives here because this is the one
 // app whose tests already read stylesheets.
+//
+// Each token is written once as light-dark(LIGHT, DARK); color-scheme, set
+// from <html data-theme> (see lib/theme.ts), picks the half. So the two
+// palettes below are the two arguments of the same declarations.
 
 const APPS = join(process.cwd(), "..");
 const APP_NAMES = ["web", "dashboard", "admin"] as const;
@@ -28,20 +32,34 @@ function block(css: string, opener: RegExp): string {
   return css.slice(start, i - 1);
 }
 
-function tokens(body: string): Palette {
-  const out: Palette = {};
-  for (const m of body.matchAll(/--color-([a-z-]+):\s*(#[0-9a-f]{6})\s*;/gi)) {
-    out[m[1]] = m[2].toLowerCase();
+const LIGHT_DARK =
+  /--color-([a-z-]+):\s*light-dark\(\s*(#[0-9a-f]{6})\s*,\s*(#[0-9a-f]{6})\s*\)\s*;/gi;
+
+function palettes(app: string): {
+  css: string;
+  theme: string;
+  dark: Palette;
+  light: Palette;
+} {
+  const css = readFileSync(join(APPS, app, "app/globals.css"), "utf8");
+  const theme = block(css, /@theme\s*\{/);
+  const dark: Palette = {};
+  const light: Palette = {};
+  for (const m of theme.matchAll(LIGHT_DARK)) {
+    light[m[1]] = m[2].toLowerCase();
+    dark[m[1]] = m[3].toLowerCase();
   }
-  return out;
+  return { css, theme, dark, light };
 }
 
-function palettes(app: string): { css: string; dark: Palette; light: Palette } {
-  const css = readFileSync(join(APPS, app, "app/globals.css"), "utf8");
-  const dark = tokens(block(css, /@theme\s*\{/));
-  const media = block(css, /@media\s*\(prefers-color-scheme:\s*light\)\s*\{/);
-  const light = tokens(block(media, /:root\s*\{/));
-  return { css, dark, light };
+/** The declarations inside every rule whose selector is exactly `selector`. */
+function rulesFor(css: string, selector: string): string[] {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const out: string[] = [];
+  for (const m of css.matchAll(new RegExp(`(?:^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`, "g"))) {
+    out.push(m[1]);
+  }
+  return out;
 }
 
 const lum = (hex: string) => {
@@ -74,10 +92,15 @@ const PAIRS: [string, string, number][] = [
 ];
 
 describe.each(APP_NAMES)("%s palette", (app) => {
-  const { css, dark, light } = palettes(app);
+  const { css, theme, dark, light } = palettes(app);
 
-  it("defines a light value for every dark token, and no others", () => {
-    expect(Object.keys(light).sort()).toEqual(Object.keys(dark).sort());
+  it("writes every color token as light-dark(light, dark), once", () => {
+    const declared = [...theme.matchAll(/--color-([a-z-]+):/g)].map((m) => m[1]);
+    expect(declared.length).toBeGreaterThan(10);
+    expect(Object.keys(dark).sort()).toEqual([...declared].sort());
+    expect(new Set(declared).size).toBe(declared.length);
+    // No second table anywhere else in the file to drift from this one.
+    expect(css.match(/--color-[a-z-]+:/g)).toHaveLength(declared.length);
   });
 
   it("is the same palette as the marketing site", () => {
@@ -90,10 +113,31 @@ describe.each(APP_NAMES)("%s palette", (app) => {
     expect(css).not.toMatch(/--color-(info|tag-heroku|tag-both|danger-bright)\b/);
   });
 
-  it("tells native controls which scheme each mode is", () => {
-    expect(css).toMatch(/html\s*\{[^}]*color-scheme:\s*dark/);
+  it("sets color-scheme from data-theme, which picks the light-dark() half", () => {
+    expect(rulesFor(css, ':root[data-theme="light"]').join()).toMatch(
+      /color-scheme:\s*light\s*;/,
+    );
+    expect(rulesFor(css, ':root[data-theme="dark"]').join()).toMatch(
+      /color-scheme:\s*dark\s*;/,
+    );
+  });
+
+  it("follows the OS when no script set data-theme, dark unless it asks for light", () => {
     const media = block(css, /@media\s*\(prefers-color-scheme:\s*light\)\s*\{/);
-    expect(media).toMatch(/color-scheme:\s*light/);
+    expect(rulesFor(media, ":root:not([data-theme])").join()).toMatch(
+      /color-scheme:\s*light\s*;/,
+    );
+    const outside = css.replace(media, "");
+    expect(rulesFor(outside, ":root:not([data-theme])").join()).toMatch(
+      /color-scheme:\s*dark\s*;/,
+    );
+  });
+
+  it("has no unguarded color-scheme that would beat data-theme", () => {
+    const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const m of code.matchAll(/([^{}]+)\{[^{}]*color-scheme:/g)) {
+      expect(m[1].trim()).toMatch(/^:root(\[data-theme="(light|dark)"\]|:not\(\[data-theme\]\))$/);
+    }
   });
 
   for (const [mode, p] of [
