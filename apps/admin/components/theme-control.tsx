@@ -11,6 +11,7 @@
 import { useEffect, useId, useState } from "react";
 
 import {
+  THEME_CHANGE_EVENT,
   THEME_OVERRIDES,
   THEME_STORAGE_KEY,
   applyTheme,
@@ -41,8 +42,16 @@ export function ThemeControl({ className = "" }: { className?: string }) {
     const onStorage = (e: StorageEvent) => {
       if (e.key === THEME_STORAGE_KEY) setOverride(parseOverride(e.newValue));
     };
+    // Another ThemeControl in this tab changed it (works with storage blocked).
+    const onChange = (e: Event) => {
+      setOverride(parseOverride((e as CustomEvent<string>).detail));
+    };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener(THEME_CHANGE_EVENT, onChange);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(THEME_CHANGE_EVENT, onChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -73,7 +82,7 @@ export function ThemeControl({ className = "" }: { className?: string }) {
 
   const choose = (next: ThemeOverride) => {
     writeStoredOverride(next);
-    setOverride(next);
+    window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: next }));
   };
 
   return (

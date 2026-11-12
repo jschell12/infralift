@@ -31,6 +31,15 @@ export const THEME_STORAGE_KEY = "infralift-theme";
 
 export const THEME_OVERRIDES: readonly ThemeOverride[] = ["auto", "light", "dark"];
 
+/**
+ * Window event carrying a new override to every ThemeControl in this tab.
+ * The dashboard and admin mount two (the phone menu, and the sidebar, which
+ * is only hidden by CSS on phones), and the browser's own `storage` event
+ * reaches other tabs, never the one that wrote. Without this the hidden copy
+ * stays in Auto and its timer flips the page back.
+ */
+export const THEME_CHANGE_EVENT = "infralift-theme-change";
+
 /** Anything that is not "light" or "dark" (null, junk, an old value) is Auto. */
 export function parseOverride(raw: string | null | undefined): ThemeOverride {
   return raw === "light" || raw === "dark" ? raw : "auto";

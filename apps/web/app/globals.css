@@ -11,7 +11,9 @@
    drift. Which half applies follows color-scheme, set below from
    <html data-theme>: the inline script in app/layout.tsx picks light from
    07:00 to 19:00 on the viewer's clock and dark otherwise, unless they chose
-   one (lib/theme.ts). light-dark() needs Safari 17.5, Chrome 123, Firefox 120.
+   one (lib/theme.ts). Tailwind's Lightning CSS compiles light-dark() into
+   --lightningcss-light/dark custom properties keyed on these color-scheme
+   rules, so browsers without native light-dark() get the same result.
 
    faint is muted pulled toward the surface until it sits just above AA:
    dark #858881 is 5.15:1 on bg, 4.74:1 on surface; light #696d66 is 4.75:1 on
