@@ -7,6 +7,7 @@ import {
   Dot,
   H1,
   NUM,
+  Note,
   StatCard,
   TableHead,
   TableRow,
@@ -69,9 +70,16 @@ export default function AdminOverview() {
   return (
     <>
       <h1 className={H1}>Admin</h1>
-      <p className="mb-7 text-muted">
+      <p className="mb-4 text-muted">
         Pipeline, lead flow, and account health across the book.
       </p>
+      <div className="mb-6">
+        <Note>
+          Sample data. The deals and assessment-queue endpoints are not built
+          yet, so every number and row on this page is illustrative, not live.
+          Live lead numbers are under Leads, Scanner and Report.
+        </Note>
+      </div>
 
       <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         {STATS.map((s) => (
@@ -81,7 +89,7 @@ export default function AdminOverview() {
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_320px]">
         <Card>
-          <CardTitle>Deals in flight</CardTitle>
+          <CardTitle aside={<Chip tone="warn" size="xs">sample data</Chip>}>Deals in flight</CardTitle>
           <TableScroll min="min-w-[620px]">
             <TableHead cols={DEAL_COLS}>
               <span>Account</span>
@@ -94,7 +102,7 @@ export default function AdminOverview() {
               <TableRow key={d.id} cols={DEAL_COLS}>
                 <div className="min-w-0">
                   <div className="text-sm">{d.org}</div>
-                  <div className="font-mono text-[11px] text-faint">{d.id}</div>
+                  <div className="font-mono text-xs text-faint">{d.id}</div>
                 </div>
                 <Chip tone={STAGE_TONE[d.stage]} size="xs">
                   {d.stage}
@@ -109,7 +117,7 @@ export default function AdminOverview() {
 
         <div className="flex flex-col gap-4">
           <Card>
-            <CardTitle>Assessment queue</CardTitle>
+            <CardTitle aside={<Chip tone="warn" size="xs">sample data</Chip>}>Assessment queue</CardTitle>
             <div className="flex flex-col gap-1.5">
               {QUEUE.map((q) => (
                 <div
@@ -119,7 +127,7 @@ export default function AdminOverview() {
                   <Dot tone={QUEUE_TONE[q.state]} />
                   <span className="font-mono text-xs">{q.id}</span>
                   <span className="text-muted">{q.provider}</span>
-                  <span className={`ml-auto text-[11px] text-faint ${NUM}`}>
+                  <span className={`ml-auto text-xs text-faint ${NUM}`}>
                     {q.age}
                   </span>
                 </div>
@@ -131,7 +139,7 @@ export default function AdminOverview() {
           </Card>
 
           <Card>
-            <CardTitle>Last scan</CardTitle>
+            <CardTitle aside={<Chip tone="warn" size="xs">sample data</Chip>}>Last scan</CardTitle>
             <div className="text-[26px] font-bold text-accent">41m ago</div>
             <p className="mt-1.5 text-[13px] text-muted">
               48 communities polled every 4 hours &middot; 6 platforms

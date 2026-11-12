@@ -100,7 +100,7 @@ export function AdminNav() {
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
-            className="-mr-2 cursor-pointer rounded-lg border-0 bg-transparent p-2 text-muted hover:text-text"
+            className="-mr-2 flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-muted hover:text-text active:bg-bg"
           >
             <MenuIcon open={open} />
           </button>

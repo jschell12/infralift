@@ -13,7 +13,7 @@ import {
   type ProviderConnectionSummary,
   type StackProject,
 } from "@infralift/shared";
-import { api, errorText } from "../../lib/api";
+import { api, errorText, siteUrl } from "../../lib/api";
 import { AssessPanel } from "../../components/assess-panel";
 import { ImportCheckStatus, ImportPanel } from "../../components/import-panel";
 import { MigrationCard } from "../../components/migration-card";
@@ -29,6 +29,7 @@ import {
   PrimaryButton,
   SkeletonCards,
   type Tone,
+  SMALL_BTN,
 } from "../../components/ui";
 
 // Projects: an app and where it runs, kept as code in a repository. A project
@@ -181,12 +182,13 @@ function SettingsFields({
         .filter(([key]) => !BACKEND_KEYS.has(key) && !hide.includes(key))
         .map(([key, prop]) => (
           <div key={key} className="mb-4">
-            <label className={LABEL}>
+            <label htmlFor={`setting-${key}`} className={LABEL}>
               {label(key)}
               {required.has(key) ? " *" : ""}
             </label>
             {prop.enum ? (
               <select
+                id={`setting-${key}`}
                 className={INPUT}
                 value={values[key] ?? String(prop.default ?? "")}
                 onChange={(e) => set(key, e.target.value)}
@@ -199,6 +201,7 @@ function SettingsFields({
               </select>
             ) : (
               <input
+                id={`setting-${key}`}
                 className={`${INPUT} ${locked.includes(key) ? "opacity-60" : ""}`}
                 readOnly={locked.includes(key)}
                 type={prop.type === "integer" ? "number" : "text"}
@@ -253,8 +256,8 @@ function BackendPicker({
   ];
   return (
     <div className="mb-4">
-      <label className={LABEL}>State backend</label>
-      <div className="grid grid-cols-2 gap-2">
+      <div id="proj-backend-label" className={LABEL}>State backend</div>
+      <div role="group" aria-labelledby="proj-backend-label" className="grid grid-cols-2 gap-2">
         {options.map((o) => (
           <button
             key={o.key}
@@ -270,13 +273,14 @@ function BackendPicker({
       {backend === "tfc" && (
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div>
-            <label className={LABEL}>Terraform Cloud connection *</label>
+            <label htmlFor="proj-tfc-connection" className={LABEL}>Terraform Cloud connection *</label>
             {tfcConns && tfcConns.length === 0 ? (
               <div className="text-xs text-muted pt-2">
                 None yet. <a className="text-accent" href="/connections">Connect Terraform Cloud</a> first.
               </div>
             ) : (
               <select
+                id="proj-tfc-connection"
                 className={INPUT}
                 value={values[TFC_CONNECTION] ?? ""}
                 onChange={(e) => onChange({ ...values, [TFC_CONNECTION]: e.target.value })}
@@ -292,8 +296,8 @@ function BackendPicker({
             )}
           </div>
           <div>
-            <label className={LABEL}>Workspace</label>
-            <input
+            <label htmlFor="proj-workspace" className={LABEL}>Workspace</label>
+            <input id="proj-workspace"
               className={INPUT}
               placeholder={values.name || "project name"}
               value={values.tfc_workspace ?? ""}
@@ -349,7 +353,7 @@ function FilePreview({ files }: { files: StackFile[] }) {
         )}
         .
       </div>
-      <div className={`${MONO} text-[11px] leading-5 max-h-48 overflow-y-auto`}>
+      <div className={`${MONO} text-xs leading-5 max-h-48 overflow-y-auto`}>
         {files.map((f) => (
           <div key={f.path} className={f.ownership === "seed" ? "text-accent" : ""}>
             {f.path}
@@ -505,7 +509,7 @@ function NewProjectDrawer({
             key={key}
             type="button"
             onClick={() => setMode(key)}
-            className={`rounded-md px-2 py-2 text-[13px] font-semibold ${mode === key ? "bg-surface text-text" : "text-muted hover:text-text"}`}
+            className={`min-h-11 rounded-md px-2 py-2 text-[13px] font-semibold active:text-text ${mode === key ? "bg-surface text-text" : "text-muted hover:text-text"}`}
           >
             {text}
           </button>
@@ -518,8 +522,8 @@ function NewProjectDrawer({
         <AssessPanel highlight={highlight} />
       ) : (
       <>
-      <label className={LABEL}>App template</label>
-      <div className="grid gap-2 mb-5">
+      <div id="proj-template-label" className={LABEL}>App template</div>
+      <div role="group" aria-labelledby="proj-template-label" className="grid gap-2 mb-5">
         {templates.map((t) => (
           <button
             key={t.slug}
@@ -533,13 +537,13 @@ function NewProjectDrawer({
           >
             <div className="text-sm font-semibold">{t.name}</div>
             <div className="text-xs text-muted mt-1">{t.description}</div>
-            <div className={`text-[11px] text-faint mt-1 ${MONO}`}>{t.repo}</div>
+            <div className={`text-xs text-faint mt-1 ${MONO}`}>{t.repo}</div>
           </button>
         ))}
       </div>
 
-      <label className={LABEL}>Target</label>
-      <div className="flex flex-wrap gap-2 mb-5">
+      <div id="proj-target-label" className={LABEL}>Target</div>
+      <div role="group" aria-labelledby="proj-target-label" className="flex flex-wrap gap-2 mb-5">
         {targets.map((s) => (
           <button
             key={s.slug}
@@ -548,7 +552,7 @@ function NewProjectDrawer({
               setStackSlug(s.slug);
               setPreview(null);
             }}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold border ${stackSlug === s.slug ? "border-accent text-accent" : "border-border text-muted"}`}
+            className={`inline-flex min-h-11 items-center rounded-full px-3 text-xs font-semibold border active:bg-bg ${stackSlug === s.slug ? "border-accent text-accent" : "border-border text-muted"}`}
           >
             {s.target.name}
           </button>
@@ -557,10 +561,9 @@ function NewProjectDrawer({
           (r) => (
             <span
               key={r.slug}
-              title="Coming soon"
               className="rounded-full px-3 py-1.5 text-xs border border-border text-faint cursor-not-allowed"
             >
-              {r.name}
+              {r.name}: coming soon
             </span>
           )
         )}
@@ -569,15 +572,15 @@ function NewProjectDrawer({
       {stack && (
         <>
           <div className="mb-4">
-            <label className={LABEL}>Project name *</label>
-            <input
+            <label htmlFor="proj-project-name" className={LABEL}>Project name *</label>
+            <input id="proj-project-name"
               className={INPUT}
               placeholder="acme-web"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           </div>
-          <label className={LABEL}>Repository *</label>
+          <label htmlFor="proj-git-connection" className={LABEL}>Repository *</label>
           {gitConns.length === 0 ? (
             <div className="mb-4">
               <Note>
@@ -590,6 +593,7 @@ function NewProjectDrawer({
             <div className="mb-4">
               <div className="flex gap-2 mb-2">
                 <select
+                  id="proj-git-connection"
                   className={INPUT}
                   value={connectionId}
                   onChange={(e) => setConnectionId(e.target.value)}
@@ -612,7 +616,7 @@ function NewProjectDrawer({
                     key={String(v)}
                     type="button"
                     onClick={() => setNewRepo(v)}
-                    className={`rounded-md px-2 py-1.5 text-[12px] font-semibold ${newRepo === v ? "bg-surface text-text" : "text-muted hover:text-text"}`}
+                    className={`min-h-11 rounded-md px-2 py-1.5 text-[13px] font-semibold active:text-text ${newRepo === v ? "bg-surface text-text" : "text-muted hover:text-text"}`}
                   >
                     {text}
                   </button>
@@ -661,7 +665,7 @@ function NewProjectDrawer({
               )}
             </div>
           )}
-          <label className={LABEL}>Runtime</label>
+          <div className={LABEL}>Runtime</div>
           <div className="flex flex-wrap gap-2 mb-4">
             <span className="rounded-full px-3 py-1.5 text-xs font-semibold border border-accent text-accent">
               {stack.runtime.name}
@@ -669,37 +673,34 @@ function NewProjectDrawer({
             {ROADMAP_RUNTIMES.map((r) => (
               <span
                 key={r.slug}
-                title={r.why}
                 className="rounded-full px-3 py-1.5 text-xs border border-border text-faint cursor-not-allowed"
               >
-                {r.name}
+                {r.name}: {r.why}
               </span>
             ))}
           </div>
-          <label className={LABEL}>Delivery</label>
+          <div className={LABEL}>Delivery</div>
           <div className="flex flex-wrap gap-2 mb-1">
             {stack.deliveries.map((d) => (
               <span
                 key={d.slug}
-                title={d.gitHost === gitHost ? "" : `needs a ${PROVIDER_LABELS[d.gitHost]} repository`}
                 className={`rounded-full px-3 py-1.5 text-xs border ${d.gitHost === gitHost ? "border-accent text-accent font-semibold" : "border-border text-faint cursor-not-allowed"}`}
               >
                 {d.name}
+                {d.gitHost === gitHost ? "" : `: needs a ${PROVIDER_LABELS[d.gitHost]} repository`}
               </span>
             ))}
             {ROADMAP_DELIVERIES.map((r) => (
               <span
                 key={r.slug}
-                title={r.why}
                 className="rounded-full px-3 py-1.5 text-xs border border-border text-faint cursor-not-allowed"
               >
-                {r.name}
+                {r.name}: {r.why}
               </span>
             ))}
           </div>
           <div className="text-xs text-faint mb-4">
             Follows the repository: {delivery ? `${delivery.name} on ${PROVIDER_LABELS[gitHost]}` : "none for this host"}.
-            Hover a greyed option for what it needs.
           </div>
           <SettingsFields
             schema={stack.inputSchema}
@@ -723,7 +724,7 @@ function NewProjectDrawer({
             <button
               type="button"
               onClick={doPreview}
-              className="rounded-lg border border-border px-4 py-3 text-sm font-semibold text-muted hover:text-text"
+              className="min-h-11 rounded-lg border border-border px-4 py-3 text-sm font-semibold text-muted hover:text-text active:bg-border"
             >
               Preview files
             </button>
@@ -761,9 +762,9 @@ function DriftBadge({ drift }: { drift: DriftStatus | null }) {
   if (!drift) return null;
   const look = DRIFT_LOOK[drift.state] ?? DRIFT_LOOK.unknown;
   return (
-    <div className="flex items-center gap-2 text-sm mb-2">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm mb-2">
       <Chip tone={look.tone}>{look.text}</Chip>
-      <span className="text-muted truncate" title={drift.message}>
+      <span className="min-w-0 text-muted break-words" title={drift.message}>
         {drift.message}
       </span>
       <span className="text-faint whitespace-nowrap">
@@ -944,7 +945,7 @@ export default function ProjectsPage() {
           const from = String(p.providerConfig.source ?? "");
           return (
             <div key={p.id} className={`${CARD} mb-4`}>
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-2">
                 <h3 className="text-base font-semibold">{p.name}</h3>
                 <Chip tone="info">
                   {PROVIDER_LABELS[from as keyof typeof PROVIDER_LABELS] ?? from} to{" "}
@@ -953,14 +954,14 @@ export default function ProjectsPage() {
                 <Chip tone="muted">from existing infrastructure</Chip>
                 {p.assessmentId && (
                   <a
-                    className="ml-auto text-xs font-semibold text-muted hover:text-text"
+                    className="ml-auto inline-flex min-h-11 items-center text-xs font-semibold text-muted hover:text-text"
                     href={`/assessments/${p.assessmentId}`}
                   >
                     Assessment
                   </a>
                 )}
               </div>
-              <div className={`text-sm text-muted ${MONO} mb-3`}>
+              <div className={`text-sm text-muted ${MONO} mb-3 break-all`}>
                 <a href={`https://${p.gitHost === "gitlab" ? "gitlab.com" : "github.com"}/${p.destRepo}`}>
                   {p.destRepo}
                 </a>
@@ -986,7 +987,7 @@ export default function ProjectsPage() {
           const scan = p.importJson;
           return (
             <div key={p.id} className={`${CARD} mb-4`}>
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-2">
                 <h3 className="text-base font-semibold">{p.name}</h3>
                 <Chip tone="info">imported</Chip>
                 {scan && (
@@ -996,7 +997,7 @@ export default function ProjectsPage() {
                   </Chip>
                 )}
               </div>
-              <div className={`text-sm text-muted ${MONO} mb-3`}>
+              <div className={`text-sm text-muted ${MONO} mb-3 break-all`}>
                 <a href={`https://github.com/${p.destRepo}`}>{p.destRepo}</a>@{p.destBranch}
                 {p.destPath && ` · ${p.destPath}`}
               </div>
@@ -1026,7 +1027,7 @@ export default function ProjectsPage() {
         const pr = list.find((j) => j.prUrl)?.prUrl;
         return (
           <div key={p.id} className={`${CARD} mb-4`}>
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-2">
               <h3 className="text-base font-semibold">{p.name}</h3>
               {stack && (
                 <Chip tone="info">
@@ -1047,16 +1048,16 @@ export default function ProjectsPage() {
                   <button
                     type="button"
                     onClick={() => setEditing(p)}
-                    className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted hover:text-text"
+                    className={SMALL_BTN}
                   >
                     Settings
                   </button>
                 )}
               </div>
             </div>
-            <div className={`text-sm text-muted ${MONO} mb-3`}>
-              {p.destRepo}@{p.destBranch} · https://{String(p.providerConfig.subdomain)}.
-              {String(p.providerConfig.zone_name)}
+            <div className={`text-sm text-muted ${MONO} mb-3 break-all`}>
+              {p.destRepo}@{p.destBranch}
+              {siteUrl(p.providerConfig) && ` · ${siteUrl(p.providerConfig)}`}
             </div>
             <DriftBadge drift={p.drift} />
             {latest ? (

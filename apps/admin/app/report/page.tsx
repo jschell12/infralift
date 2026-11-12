@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api } from "../../lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { api, errorText } from "../../lib/api";
+import { ErrorState, LoadingRows } from "../../components/ui";
 
 interface Lead {
   id: string;
@@ -57,14 +58,25 @@ export default function ReportPage() {
   const [data, setData] = useState<ReportData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     api<ReportData>("/leads/report")
       .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => setError(errorText(e)));
   }, []);
 
-  if (error) return <div className="text-danger">{error}</div>;
-  if (!data) return <p className="text-muted">Loading report...</p>;
+  useEffect(load, [load]);
+
+  if (error) return <ErrorState message={error} onRetry={load} />;
+  if (!data) return <LoadingRows label="Loading report" />;
+
+  // The prose below names providers; its counts come from this report, not
+  // from the numbers it was first written with.
+  const leadsFor = (provider: string) =>
+    data.byProvider.find((p) => p.provider === provider)?.count ?? 0;
+  const billingShare = data.total
+    ? Math.round(((data.byClassification.billing_pain ?? 0) / data.total) * 100)
+    : 0;
 
   // Build cross-tab matrix
   const providers = data.byProvider.map((p) => p.provider);
@@ -80,7 +92,7 @@ export default function ReportPage() {
         Lead Intelligence Report
       </h1>
       <p className="text-muted mb-8">
-        106 classified leads from developer communities (Jan-Aug 2026). Each lead
+        {data.total} classified leads from developer communities. Each lead
         mentions at least one source hosting platform and discusses billing pain,
         migration interest, or platform complaints.
       </p>
@@ -109,7 +121,7 @@ export default function ReportPage() {
       <div className="mb-8 rounded-xl border border-accent/30 bg-surface p-4 sm:p-6">
         <h2 className="mb-3 text-lg font-bold sm:text-xl">Where infralift fits</h2>
         <p className="text-muted text-sm mb-4">
-          75% of leads are billing pain. Developers on Vercel, AWS, and Cloudflare
+          {billingShare}% of leads are billing pain. Developers on Vercel, AWS, and Cloudflare
           are the loudest about costs. The pattern: usage-based pricing is
           predictable at small scale but compounds with growth. infralift's
           fixed-fee migration to Cloudflare Workers or a Hetzner VPS eliminates
@@ -119,17 +131,17 @@ export default function ReportPage() {
           <div>
             <h3 className="text-sm font-semibold text-accent mb-2">Primary targets</h3>
             <ul className="text-muted text-sm space-y-1">
-              <li><span className="text-text font-semibold">Vercel</span> (42 leads) - per-seat + usage pricing, $0.15/GB egress</li>
-              <li><span className="text-text font-semibold">AWS</span> (37 leads) - NAT gateways, egress, complexity sprawl</li>
-              <li><span className="text-text font-semibold">Firebase</span> (12 leads) - Firestore per-read pricing, Studio sunset</li>
+              <li><span className="text-text font-semibold">Vercel</span> ({leadsFor("vercel")} leads) - per-seat + usage pricing, $0.15/GB egress</li>
+              <li><span className="text-text font-semibold">AWS</span> ({leadsFor("aws")} leads) - NAT gateways, egress, complexity sprawl</li>
+              <li><span className="text-text font-semibold">Firebase</span> ({leadsFor("firebase")} leads) - Firestore per-read pricing, Studio sunset</li>
             </ul>
           </div>
           <div>
             <h3 className="text-sm font-semibold text-accent mb-2">Secondary targets</h3>
             <ul className="text-muted text-sm space-y-1">
-              <li><span className="text-text font-semibold">GCP</span> (12 leads) - Cloud Run billing, egress fees</li>
-              <li><span className="text-text font-semibold">Cloudflare</span> (24 leads) - Workers limits, overage protection gaps</li>
-              <li><span className="text-text font-semibold">Heroku</span> (5 leads) - maintenance mode, stagnation</li>
+              <li><span className="text-text font-semibold">GCP</span> ({leadsFor("gcp")} leads) - Cloud Run billing, egress fees</li>
+              <li><span className="text-text font-semibold">Cloudflare</span> ({leadsFor("cloudflare")} leads) - Workers limits, overage protection gaps</li>
+              <li><span className="text-text font-semibold">Heroku</span> ({leadsFor("heroku")} leads) - maintenance mode, stagnation</li>
             </ul>
           </div>
         </div>
@@ -230,7 +242,7 @@ export default function ReportPage() {
                   <td className="p-2 border-b border-border">
                     <div className="flex flex-wrap gap-1">
                       {(l.providers ?? []).map((p) => (
-                        <span key={p} className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-accent-dim text-accent">
+                        <span key={p} className="inline-block px-1.5 py-0.5 rounded text-xs font-semibold bg-accent-dim text-accent">
                           {PROVIDER_LABEL[p] ?? p}
                         </span>
                       ))}

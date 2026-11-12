@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api } from "../../lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { api, errorText } from "../../lib/api";
 import {
   Card,
   CardTitle,
+  Chip,
   Dot,
+  ErrorState,
   H1,
   NUM,
   StatCard,
@@ -50,17 +52,20 @@ export default function ScannerPage() {
   const [status, setStatus] = useState<ScannerStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     api<ScannerStatus>("/leads/scanner-status")
       .then(setStatus)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => setError(errorText(e)));
   }, []);
+
+  useEffect(load, [load]);
 
   if (error) {
     return (
       <>
         <h1 className={H1}>Scanner status</h1>
-        <div className="mt-4 text-sm text-danger">{error}</div>
+        <ErrorState message={error} onRetry={load} />
       </>
     );
   }
@@ -123,7 +128,11 @@ export default function ScannerPage() {
         </Card>
 
         <Card>
-          <CardTitle>Pipeline health</CardTitle>
+          <CardTitle aside={<Chip tone="warn" size="xs">sample data</Chip>}>Pipeline health</CardTitle>
+          <p className="mb-3 text-[13px] text-muted">
+            Illustrative rows: the pipeline-health endpoint is not built yet, so
+            these are not live readings.
+          </p>
           <div className="flex flex-col gap-2">
             {HEALTH.map((h) => (
               <div

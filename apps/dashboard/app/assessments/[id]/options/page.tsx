@@ -27,6 +27,8 @@ import {
   TableHead,
   TableRow,
   type Tone,
+  SMALL_BTN_ACCENT,
+  TEXT_BTN,
 } from "../../../../components/ui";
 
 interface ApproveResult {
@@ -57,9 +59,6 @@ const SOURCE_DETAIL: Record<CurrentSpendSource, string> = {
     "the assessed resources at published list prices, not your invoice",
   unknown: "this provider does not expose billing to us",
 };
-
-const BTN_OUTLINE =
-  "rounded-lg border border-accent/40 px-3.5 py-2 text-[13px] font-semibold text-accent hover:bg-accent-dim/40 disabled:opacity-50";
 
 function breakEvenLabel(option: MigrationOption, spendKnown: boolean): string {
   if (!spendKnown) return "\u2014";
@@ -131,13 +130,13 @@ function SpendForm({
             onChange={(e) => setValue(e.target.value)}
           />
         </div>
-        <button type="submit" className={BTN_OUTLINE} disabled={busy || !valid}>
+        <button type="submit" className={SMALL_BTN_ACCENT} disabled={busy || !valid}>
           {busy ? "Saving..." : "Compare"}
         </button>
         {canClear && (
           <button
             type="button"
-            className="text-[13px] text-muted hover:text-text"
+            className={TEXT_BTN}
             disabled={busy}
             onClick={() => save(null)}
           >
@@ -147,7 +146,7 @@ function SpendForm({
         {onCancel && (
           <button
             type="button"
-            className="text-[13px] text-muted hover:text-text"
+            className={TEXT_BTN}
             onClick={onCancel}
           >
             Cancel
@@ -218,7 +217,7 @@ function ComparisonTable({
               {known && !editing && (
                 <button
                   type="button"
-                  className="ml-2 text-[12px] font-normal text-muted hover:text-text"
+                  className={`ml-1 font-normal ${TEXT_BTN}`}
                   onClick={() => setEditing(true)}
                 >
                   {spend.source === "customer_reported" ? "edit" : "use your bill"}
@@ -255,7 +254,7 @@ function ComparisonTable({
                 <span className={NUM}>
                   {formatCents(o.ops?.monthlyCents)}
                   {o.ops && (
-                    <span className="block text-[11px] text-faint">
+                    <span className="block text-xs text-faint">
                       {o.ops.hoursPerMonth} hr
                     </span>
                   )}
@@ -270,7 +269,7 @@ function ComparisonTable({
                 <span className={NUM}>
                   {formatCents(toll.centsAfterWaiver)}
                   {toll.waiverAvailable && toll.cents > 0 && (
-                    <span className="block text-[11px] text-faint">
+                    <span className="block text-xs text-faint">
                       {formatCents(toll.cents)} waived
                     </span>
                   )}
@@ -374,7 +373,7 @@ function ExitTollCard({
   return (
     <Card className="mb-5">
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <div className="text-[11px] uppercase tracking-[0.06em] text-faint">
+        <div className="text-[13px] font-medium text-muted">
           One-time cost to leave {PROVIDER_LABELS[provider]}
         </div>
         {toll.confidence !== "none" && (
@@ -500,7 +499,7 @@ function OptionCard({
               {option.ops.note}
             </p>
           )}
-          <div className="mb-1.5 text-[11px] uppercase tracking-[0.06em] text-faint">
+          <div className="mb-1.5 text-[13px] font-medium text-muted">
             How we sized it
           </div>
           {option.sizing.lineItems.map((li) => (
@@ -528,7 +527,7 @@ function OptionCard({
             ] as const
           ).map(([label, cents]) => (
             <div key={label} className="rounded-lg bg-bg px-3 py-2">
-              <div className="text-[10px] uppercase tracking-[0.06em] text-faint">
+              <div className="text-xs font-medium text-muted">
                 {label}
               </div>
               <div className={`text-[15px] font-semibold ${NUM}`}>
@@ -541,7 +540,7 @@ function OptionCard({
 
       {option.companions.length > 0 && (
         <div className="mb-4">
-          <div className="mb-1.5 text-[11px] uppercase tracking-[0.06em] text-faint">
+          <div className="mb-1.5 text-[13px] font-medium text-muted">
             Pair with
           </div>
           {option.companions.map((c) => (
@@ -564,7 +563,7 @@ function OptionCard({
 
       <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
         <div>
-          <div className="mb-1 text-[11px] uppercase tracking-[0.06em] text-faint">
+          <div className="mb-1 text-[13px] font-medium text-muted">
             Why it fits
           </div>
           <p className="text-[13px] leading-relaxed text-muted">
@@ -572,7 +571,7 @@ function OptionCard({
           </p>
         </div>
         <div>
-          <div className="mb-1 text-[11px] uppercase tracking-[0.06em] text-faint">
+          <div className="mb-1 text-[13px] font-medium text-muted">
             Trade-offs
           </div>
           <p className="text-[13px] leading-relaxed text-muted">
@@ -592,7 +591,7 @@ function OptionCard({
             <button
               type="button"
               onClick={() => onApprove(option.codegenTarget!)}
-              className="rounded-lg border border-accent/40 px-3.5 py-2 text-[13px] font-semibold text-accent hover:bg-accent-dim/40"
+              className={SMALL_BTN_ACCENT}
             >
               Approve and build it
             </button>
@@ -742,9 +741,7 @@ export default function MigrationOptionsPage({
 
       {report.needs.length > 0 && (
         <Card className="mb-5">
-          <div className="mb-2 text-[11px] uppercase tracking-[0.06em] text-faint">
-            What your infrastructure needs
-          </div>
+          <CardTitle>What your infrastructure needs</CardTitle>
           <div className="flex flex-wrap gap-2">
             {report.needs.map((n) => (
               <span key={n.key} title={`from: ${n.evidence}`}>
@@ -801,8 +798,8 @@ export default function MigrationOptionsPage({
           subtitle="infralift creates the repository, commits the Terraform, and provisions a workspace. Nothing is applied until you review the plan."
           onClose={() => setApproving(null)}
         >
-          <label className={LABEL}>GitHub repository</label>
-          <input
+          <label htmlFor="build-github-repository" className={LABEL}>GitHub repository</label>
+          <input id="build-github-repository"
             className={INPUT}
             value={repo}
             onChange={(e) => setRepo(e.target.value)}
@@ -813,8 +810,8 @@ export default function MigrationOptionsPage({
             connection on this organization.
           </p>
 
-          <label className={LABEL}>Directory in the repo</label>
-          <input
+          <label htmlFor="build-directory-in-the-repo" className={LABEL}>Directory in the repo</label>
+          <input id="build-directory-in-the-repo"
             className={INPUT}
             value={destPath}
             onChange={(e) => setDestPath(e.target.value)}

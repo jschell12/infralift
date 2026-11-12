@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../../lib/api";
+import { api, errorText } from "../../lib/api";
+import { ErrorState, LoadingRows } from "../../components/ui";
 
 // Inbound leads: people who filled in the form on the marketing site. Kept on
 // its own page rather than merged into /leads, because a scraped forum post
@@ -50,8 +51,11 @@ export default function InboundLeadsPage() {
   const load = useCallback(() => {
     const q = filter ? `?status=${filter}` : "";
     api<Payload>(`/leads/inbound${q}`)
-      .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .then((d) => {
+        setData(d);
+        setError(null);
+      })
+      .catch((e) => setError(errorText(e)));
   }, [filter]);
 
   useEffect(load, [load]);
@@ -69,13 +73,13 @@ export default function InboundLeadsPage() {
         body: JSON.stringify({ status }),
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
       load();
     }
   }
 
-  if (error) return <div className="mt-2 text-sm text-danger">{error}</div>;
-  if (!data) return <p className="text-muted">Loading inbound leads...</p>;
+  if (error && !data) return <ErrorState message={error} onRetry={load} />;
+  if (!data) return <LoadingRows label="Loading inbound leads" />;
 
   return (
     <>
@@ -87,6 +91,8 @@ export default function InboundLeadsPage() {
         arrive with an email address and no account, so they are worth a reply
         the same day.
       </p>
+
+      {error && <ErrorState message={error} onRetry={load} />}
 
       <div className="mb-5 flex flex-wrap gap-2">
         <button
@@ -120,7 +126,7 @@ export default function InboundLeadsPage() {
               <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <a
                   href={`mailto:${l.email}`}
-                  className="text-[15px] font-semibold"
+                  className="min-w-0 break-all text-[15px] font-semibold"
                 >
                   {l.email}
                 </a>
@@ -148,7 +154,7 @@ export default function InboundLeadsPage() {
                 </p>
               )}
 
-              <div className="mb-3 flex flex-wrap gap-x-4 text-xs text-faint">
+              <div className="mb-3 flex flex-wrap gap-x-4 break-all text-xs text-faint">
                 {l.sourcePath && <span>from {l.sourcePath}</span>}
                 {l.utmSource && <span>utm: {l.utmSource}</span>}
                 {l.utmCampaign && <span>campaign: {l.utmCampaign}</span>}

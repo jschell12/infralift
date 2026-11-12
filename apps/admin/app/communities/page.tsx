@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../../lib/api";
+import { api, errorText } from "../../lib/api";
+import { ErrorState, LoadingRows } from "../../components/ui";
 
 interface Community {
   id: string;
@@ -32,6 +33,7 @@ export default function CommunitiesPage() {
   const [platform, setPlatform] = useState("");
   const [category, setCategory] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -41,7 +43,9 @@ export default function CommunitiesPage() {
       setCommunities(await api<Community[]>(`/communities?${params}`));
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
+    } finally {
+      setLoaded(true);
     }
   }, [platform, category]);
 
@@ -56,11 +60,11 @@ export default function CommunitiesPage() {
       </h1>
       <p className="text-muted mb-8">
         Forums, subreddits, Discords, and blogs where infralift&apos;s target
-        audience discusses cloud costs and migrations. {communities.length}{" "}
-        communities tracked.
+        audience discusses cloud costs and migrations.
+        {loaded && !error ? ` ${communities.length} communities tracked.` : ""}
       </p>
 
-      {error && <div className="text-danger text-sm mt-2">{error}</div>}
+      {error && <ErrorState message={error} onRetry={() => void load()} />}
 
       <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
         <div className="mb-4 flex flex-wrap gap-3">
@@ -100,7 +104,9 @@ export default function CommunitiesPage() {
           </div>
         </div>
 
-        {communities.length === 0 ? (
+        {!loaded ? (
+          <LoadingRows label="Loading communities" />
+        ) : communities.length === 0 ? (
           <p className="text-muted text-sm">No communities found.</p>
         ) : (
           <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">

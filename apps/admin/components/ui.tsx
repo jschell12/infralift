@@ -26,7 +26,7 @@ const TONE: Record<Tone, string> = {
   warn: "bg-warn/20 text-warn",
   info: "bg-info/20 text-info",
   muted: "bg-border text-muted",
-  faint: "bg-border text-faint",
+  faint: "bg-border/50 text-faint",
 };
 
 const DOT: Record<Tone, string> = {
@@ -74,7 +74,7 @@ export function Chip({
 }) {
   return (
     <span
-      className={`inline-block w-fit justify-self-start whitespace-nowrap rounded-full px-2.5 py-0.5 font-semibold ${size === "xs" ? "text-[11px]" : "text-xs"} ${TONE[tone]}`}
+      className={`inline-block w-fit justify-self-start whitespace-nowrap rounded-full py-0.5 text-xs font-semibold ${size === "xs" ? "px-2" : "px-2.5"} ${TONE[tone]}`}
     >
       {children}
     </span>
@@ -112,7 +112,7 @@ export function StatCard({
           : "text-accent";
   return (
     <div className={`${CARD} ${center ? "text-center" : ""}`}>
-      <div className="text-[11px] uppercase tracking-[0.06em] text-muted mb-1.5">
+      <div className="text-[13px] text-muted mb-1.5 first-letter:uppercase">
         {label}
       </div>
       <div
@@ -165,7 +165,7 @@ export function FilterPill({
   return (
     <button
       onClick={onClick}
-      className={`rounded-full border px-3 py-1 text-xs cursor-pointer ${active ? "border-accent bg-accent-dim text-accent" : "border-border bg-transparent text-muted hover:text-text"}`}
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border px-3 text-xs cursor-pointer active:bg-bg ${active ? "border-accent bg-accent-dim text-accent" : "border-border bg-transparent text-muted hover:text-text"}`}
     >
       {children}
     </button>
@@ -183,7 +183,7 @@ export function TableHead({
 }) {
   return (
     <div
-      className={`grid ${cols} gap-2 border-b border-border pb-2 text-[11px] uppercase tracking-[0.06em] text-faint`}
+      className={`grid ${cols} gap-2 border-b border-border pb-2 text-xs font-medium text-muted`}
     >
       {children}
     </div>
@@ -227,6 +227,41 @@ export function TableScroll({
   return (
     <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
       <div className={min}>{children}</div>
+    </div>
+  );
+}
+
+/** A load that failed: what happened, in words, and a way to try again. */
+export function ErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div role="alert" className={`${CARD} mb-4 flex flex-wrap items-center gap-3`}>
+      <p className="min-w-0 flex-1 text-sm text-text">{message}</p>
+      {onRetry ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="min-h-11 cursor-pointer rounded-lg border border-border bg-transparent px-4 text-sm font-semibold text-text hover:bg-bg active:bg-border"
+        >
+          Try again
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Placeholder rows for a list that is still loading. */
+export function LoadingRows({ label }: { label: string }) {
+  return (
+    <div role="status" aria-label={label} className="flex flex-col gap-2">
+      {[0, 1, 2].map((i) => (
+        <div key={i} aria-hidden="true" className="h-12 rounded-md bg-border/60" />
+      ))}
     </div>
   );
 }

@@ -383,7 +383,7 @@ export default function Dashboard() {
 
       <Card className="mb-6">
         <button
-          className="w-full cursor-pointer text-left text-sm text-muted hover:text-text"
+          className="min-h-11 w-full cursor-pointer border-0 bg-transparent text-left text-sm text-muted hover:text-text active:text-text"
           onClick={() => setShowAll((v) => !v)}
         >
           + {rest.length} more providers (Netlify, Render, Railway, Fly.io,

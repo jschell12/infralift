@@ -154,3 +154,14 @@ export function formatMonth(iso: string): string {
     timeZone: "UTC",
   });
 }
+
+/** The live URL of a stack project, from the subdomain and zone_name settings
+ *  its template asks for. null when the zone is missing, so a project created
+ *  without them never reads "https://undefined.undefined". An empty subdomain
+ *  means the zone apex. */
+export function siteUrl(settings: Record<string, unknown>): string | null {
+  const zone = typeof settings.zone_name === "string" ? settings.zone_name.trim() : "";
+  if (!zone) return null;
+  const sub = typeof settings.subdomain === "string" ? settings.subdomain.trim() : "";
+  return sub ? `https://${sub}.${zone}` : `https://${zone}`;
+}

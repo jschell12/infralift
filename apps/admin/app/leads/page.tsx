@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../../lib/api";
+import { api, errorText } from "../../lib/api";
 import {
   Card,
   Chip,
+  ErrorState,
   FilterPill,
+  LoadingRows,
   H1,
   NUM,
   StatCard,
@@ -85,7 +87,7 @@ function LeadBody({ lead }: { lead: Lead }) {
       <p className="mb-2 whitespace-pre-wrap text-xs leading-relaxed text-muted">
         {lead.body || "(no body)"}
       </p>
-      <div className="flex flex-wrap gap-3 text-[11px]">
+      <div className="flex flex-wrap gap-3 text-xs">
         <a
           href={lead.sourceUrl}
           target="_blank"
@@ -119,14 +121,14 @@ function LeadActions({
   return (
     <div className="flex gap-1.5">
       <button
-        className="cursor-pointer rounded-md border-0 bg-info/20 px-2.5 py-1 text-xs text-info hover:bg-info/30 disabled:cursor-default disabled:opacity-35"
+        className="inline-flex min-h-11 items-center cursor-pointer rounded-md border-0 bg-info/20 px-3 text-xs text-info hover:bg-info/30 active:bg-info/40 disabled:cursor-default disabled:opacity-35"
         disabled={busy || lead.status === "contacted"}
         onClick={() => onStatus("contacted")}
       >
         Contact
       </button>
       <button
-        className="cursor-pointer rounded-md border-0 bg-border px-2.5 py-1 text-xs text-muted hover:text-text disabled:cursor-default disabled:opacity-35"
+        className="inline-flex min-h-11 items-center cursor-pointer rounded-md border-0 bg-border px-3 text-xs text-muted hover:text-text active:bg-bg disabled:cursor-default disabled:opacity-35"
         disabled={busy || lead.status === "dismissed"}
         onClick={() => onStatus("dismissed")}
       >
@@ -141,6 +143,7 @@ export default function LeadsPage() {
   const [summary, setSummary] = useState<Summary>({});
   const [classification, setClassification] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -159,7 +162,9 @@ export default function LeadsPage() {
       setSummary(summaryData);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
+    } finally {
+      setLoaded(true);
     }
   }, [classification]);
 
@@ -192,7 +197,7 @@ export default function LeadsPage() {
       setSummary(await api<Summary>(`/leads/summary?days=${DAYS}`));
     } catch (e) {
       setLeads(before);
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setUpdating(null);
     }
@@ -206,7 +211,7 @@ export default function LeadsPage() {
         interest, or platform complaints. Updated every 4 hours.
       </p>
 
-      {error && <div className="mb-4 text-sm text-danger">{error}</div>}
+      {error && <ErrorState message={error} onRetry={() => void load()} />}
 
       <div className="mb-5 grid grid-cols-3 gap-3 sm:gap-4">
         <StatCard label="billing pain" value={summary.billing_pain ?? 0} center />
@@ -224,7 +229,7 @@ export default function LeadsPage() {
 
       <Card>
         <div className="mb-4 flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[11px] uppercase tracking-[0.06em] text-faint">
+          <span className="mr-1 text-[13px] font-medium text-muted">
             Classification
           </span>
           {FILTERS.map((f) => (
@@ -242,7 +247,9 @@ export default function LeadsPage() {
           </span>
         </div>
 
-        {leads.length === 0 ? (
+        {!loaded ? (
+          <LoadingRows label="Loading leads" />
+        ) : leads.length === 0 ? (
           <p className="text-sm text-muted">No leads found for this filter.</p>
         ) : (
           <>
@@ -261,7 +268,7 @@ export default function LeadsPage() {
                     <Chip tone={STATUS_TONE[l.status] ?? "accent"} size="xs">
                       {l.status}
                     </Chip>
-                    <span className={`ml-auto text-[11px] text-faint ${NUM}`}>
+                    <span className={`ml-auto text-xs text-faint ${NUM}`}>
                       {l.engagementScore ?? 0}
                     </span>
                   </div>
@@ -271,7 +278,7 @@ export default function LeadsPage() {
                   >
                     {l.title}
                   </button>
-                  <div className="mt-1 text-[11px] text-faint">
+                  <div className="mt-1 text-xs text-faint">
                     {l.community?.name ?? l.platform}
                     {byline(l) ? ` · ${byline(l)}` : ""}
                   </div>
@@ -315,7 +322,7 @@ export default function LeadsPage() {
                       >
                         {l.title}
                       </button>
-                      <div className="text-[11px] text-faint">{byline(l)}</div>
+                      <div className="text-xs text-faint">{byline(l)}</div>
                       {expanded.has(l.id) && <LeadBody lead={l} />}
                     </div>
                     <span className={`text-muted ${NUM}`}>

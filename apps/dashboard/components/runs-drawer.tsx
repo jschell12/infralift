@@ -8,10 +8,9 @@ import {
   type WorkspaceSummary,
 } from "@infralift/shared";
 import { api, errorText } from "../lib/api";
-import { Chip, Drawer, INPUT, LABEL, PrimaryButton, type Tone } from "./ui";
+import { Chip, Drawer, INPUT, LABEL, PrimaryButton, SMALL_BTN, type Tone } from "./ui";
 
 const POLL_MS = 5000;
-const BTN = "rounded-lg border border-border px-3 py-1.5 text-xs font-semibold cursor-pointer disabled:opacity-50";
 
 function tone(r: TfcRunSummary): Tone {
   if (r.isConfirmable) return "warn";
@@ -147,7 +146,7 @@ export function RunsDrawer({
           Queue plan
         </PrimaryButton>
         {!workspace.vcsRepo && workspace.kind !== "adopted" && !linking && (
-          <button className={BTN} onClick={startLink}>
+          <button className={SMALL_BTN} onClick={startLink}>
             Link repository
           </button>
         )}
@@ -155,8 +154,8 @@ export function RunsDrawer({
 
       {linking && tokens.length > 0 && (
         <form onSubmit={link} className="mb-6 border border-border rounded-lg p-4">
-          <label className={LABEL}>VCS connection</label>
-          <select className={`${INPUT} mb-3`} value={tokenId} onChange={(e) => setTokenId(e.target.value)}>
+          <label htmlFor="runs-vcs-connection" className={LABEL}>VCS connection</label>
+          <select id="runs-vcs-connection" className={`${INPUT} mb-3`} value={tokenId} onChange={(e) => setTokenId(e.target.value)}>
             {tokens.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.serviceProviderDisplayName}
@@ -164,17 +163,17 @@ export function RunsDrawer({
               </option>
             ))}
           </select>
-          <label className={LABEL}>Repository (owner/repo)</label>
-          <input className={`${INPUT} mb-3`} value={repo} onChange={(e) => setRepo(e.target.value)} required />
-          <label className={LABEL}>Branch (blank: the default branch)</label>
-          <input className={`${INPUT} mb-3`} value={branch} onChange={(e) => setBranch(e.target.value)} />
-          <label className={LABEL}>Working directory (optional)</label>
-          <input className={`${INPUT} mb-3`} value={dir} onChange={(e) => setDir(e.target.value)} />
+          <label htmlFor="runs-repo" className={LABEL}>Repository (owner/repo)</label>
+          <input id="runs-repo" className={`${INPUT} mb-3`} value={repo} onChange={(e) => setRepo(e.target.value)} required />
+          <label htmlFor="runs-branch" className={LABEL}>Branch (blank: the default branch)</label>
+          <input id="runs-branch" className={`${INPUT} mb-3`} value={branch} onChange={(e) => setBranch(e.target.value)} />
+          <label htmlFor="runs-dir" className={LABEL}>Working directory (optional)</label>
+          <input id="runs-dir" className={`${INPUT} mb-3`} value={dir} onChange={(e) => setDir(e.target.value)} />
           <div className="flex gap-2">
-            <button className={BTN} type="submit" disabled={busy || !repo || !tokenId}>
+            <button className={SMALL_BTN} type="submit" disabled={busy || !repo || !tokenId}>
               Link
             </button>
-            <button className={BTN} type="button" onClick={() => setLinking(false)}>
+            <button className={SMALL_BTN} type="button" onClick={() => setLinking(false)}>
               Cancel
             </button>
           </div>
@@ -200,12 +199,12 @@ export function RunsDrawer({
               {(r.isConfirmable || r.isDiscardable) && confirming !== r.id && (
                 <div className="flex gap-2 mt-3">
                   {r.isConfirmable && (
-                    <button className={BTN} disabled={busy} onClick={() => setConfirming(r.id)}>
+                    <button className={SMALL_BTN} disabled={busy} onClick={() => setConfirming(r.id)}>
                       Apply
                     </button>
                   )}
                   {r.isDiscardable && (
-                    <button className={BTN} disabled={busy} onClick={() => act(`${base}/runs/${r.id}/discard`, {})}>
+                    <button className={SMALL_BTN} disabled={busy} onClick={() => act(`${base}/runs/${r.id}/discard`, {})}>
                       Discard
                     </button>
                   )}
@@ -213,19 +212,19 @@ export function RunsDrawer({
               )}
               {confirming === r.id && (
                 <div className="mt-3">
-                  <label className={LABEL}>
+                  <label htmlFor="runs-confirm" className={LABEL}>
                     Type <span className="font-mono">{workspace.name}</span> to apply
                   </label>
-                  <input className={`${INPUT} mb-2`} value={typed} onChange={(e) => setTyped(e.target.value)} />
+                  <input id="runs-confirm" className={`${INPUT} mb-2`} value={typed} onChange={(e) => setTyped(e.target.value)} />
                   <div className="flex gap-2">
                     <button
-                      className={BTN}
+                      className={SMALL_BTN}
                       disabled={busy || typed !== workspace.name}
                       onClick={() => act(`${base}/runs/${r.id}/apply`, { confirm: typed })}
                     >
                       Apply
                     </button>
-                    <button className={BTN} onClick={() => setConfirming(null)}>
+                    <button className={SMALL_BTN} onClick={() => setConfirming(null)}>
                       Cancel
                     </button>
                   </div>
