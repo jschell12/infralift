@@ -176,15 +176,30 @@ function AdoptWorkspace({
   // dropped, so a slow "Load more" cannot land on top of a refresh.
   const requestSeq = useRef(0);
 
+  // How many resources were on screen before a refresh, so the refresh reads
+  // back at least as far and picks made after "Load more" are not dropped.
+  const loadedCount = useRef(0);
+
   const loadFirst = useCallback(
     async (refresh: boolean) => {
       const seq = ++requestSeq.current;
+      const depth = refresh ? loadedCount.current : 0;
       setList({ status: "loading" });
       setMoreError(null);
       try {
-        const { page, nextCursor } = await fetchUnmanagedPage(account.id, { refresh });
+        // Only the first request reads the account again; the pages after it
+        // come from the inventory that read just cached.
+        const first = await fetchUnmanagedPage(account.id, { refresh });
+        const { resources: firstPage, ...meta } = first.page;
+        let resources = firstPage;
+        let nextCursor = first.nextCursor;
+        while (nextCursor && resources.length < depth && seq === requestSeq.current) {
+          const more = await fetchUnmanagedPage(account.id, { cursor: nextCursor });
+          resources = appendPage(resources, more.page.resources);
+          nextCursor = more.nextCursor;
+        }
         if (seq !== requestSeq.current) return;
-        const { resources, ...meta } = page;
+        loadedCount.current = resources.length;
         setList({ status: "ready", page: meta, resources, nextCursor });
         setSelected((s) => keepLoadedPicks(s, resources));
       } catch (e) {
@@ -209,9 +224,12 @@ function AdoptWorkspace({
     try {
       const { page, nextCursor } = await fetchUnmanagedPage(account.id, { cursor: list.nextCursor });
       if (seq !== requestSeq.current) return;
-      setList((cur) =>
-        cur.status === "ready" ? { ...cur, resources: appendPage(cur.resources, page.resources), nextCursor } : cur
-      );
+      setList((cur) => {
+        if (cur.status !== "ready") return cur;
+        const resources = appendPage(cur.resources, page.resources);
+        loadedCount.current = resources.length;
+        return { ...cur, resources, nextCursor };
+      });
     } catch (e) {
       if (seq === requestSeq.current) setMoreError(e instanceof AdoptRequestError ? e.message : errorText(e));
     } finally {

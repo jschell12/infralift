@@ -91,9 +91,10 @@ export function toggleGroup(group: Pick<ResourceGroup, "adoptableKeys">, selecte
   return out;
 }
 
-/** Picks that are still in the loaded list and still adoptable. A refresh can
- *  drop a resource someone else adopted meanwhile; its key must not ride along
- *  into the request. */
+/** Picks that are still in the loaded list and still adoptable. A refresh
+ *  reloads as many resources as were shown before it (the adopt page does
+ *  that), so what this drops is what left the account or was adopted
+ *  meanwhile; its key must not ride along into the request. */
 export function keepLoadedPicks(selected: ReadonlySet<string>, loaded: UnmanagedResource[]): Set<string> {
   const live = new Set(loaded.filter((r) => r.adoptable).map(resourceKey));
   return new Set([...selected].filter((k) => live.has(k)));
@@ -165,8 +166,9 @@ export function adoptFormProblem(form: AdoptForm, picked: number): string | null
 }
 
 /** The body for POST /connections/:id/adopt. Keys are sent in the order they
- *  appear in the loaded list, so the same picks always make the same body,
- *  which is what lets the API recognise a resend as a replay. */
+ *  appear in the loaded list, so the same picks always make the same body.
+ *  (The API compares a resend's picks as a set, so order is not what makes it
+ *  a replay.) Only picks in the loaded list are sent. */
 export function buildAdoptRequest(
   form: AdoptForm,
   selected: ReadonlySet<string>,
