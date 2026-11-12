@@ -122,7 +122,7 @@ export function ImportPanel({ onCreated }: { onCreated: () => void }) {
   if (!conns.length && !error) {
     return (
       <Note>
-        Connect GitHub under <a className="text-text underline" href="/connections">Connections</a> first. infralift reads
+        <a className="text-text underline" href="/connections/new?type=github">Connect GitHub</a> first. infralift reads
         the repository&apos;s Terraform with it and opens the import pull request.
       </Note>
     );

@@ -43,13 +43,26 @@ A rule belongs in a service. If you are looking for "why was this refused", star
 
 Everything a customer manages is a **project**, and a project is one of five kinds. In code it is a discriminated union, `Project` in [`packages/shared/src/projects.ts`](packages/shared/src/projects.ts); in the database it is one `TfProject` table, mapped to its kind in [`lib/projects/view.ts`](apps/api/src/lib/projects/view.ts).
 
-| Kind | What it is | Made by |
-| --- | --- | --- |
-| `stack` | A whole deploy setup (infrastructure, server scripts, CI) rendered from a stack template into the app repository, as a PR | `services/stacks.ts` |
-| `imported` | Existing Terraform in a repo, or cloud resources adopted as they run, behind the read-only import check | `services/imports.ts` |
-| `codegen` | Terraform generated from an assessment of a cloud account, for a migration target | `services/codegen.ts` |
-| `adopted` | Built around workspaces adopted from the customer's Terraform Cloud | `routes/workspaces.ts` |
-| `template` | One file rendered from a template version (legacy `/terraform` page) | `services/templates.ts` |
+Since [ADR 0010](docs/adr/0010-a-project-is-one-accounts-infrastructure.md) a project is the Terraform for one cloud account in one environment, not an app. The last column says how `/projects/new` starts each kind today. Kinds and stacks it no longer offers keep working for projects that already use them.
+
+| Kind | What it is | Made by | On `/projects/new` |
+| --- | --- | --- | --- |
+| `imported` | Existing Terraform in a repo, or cloud resources adopted as they run, behind the read-only import check | `services/imports.ts` | "Adopt from an account" (assess the connection, then adopt from the report) and "Bring existing Terraform" (scan a repository) |
+| `stack` | Modules rendered from a stack into the customer's repository, as a PR | `services/stacks.ts` | "Start from a stack", minus app stacks: `isAppStack` in `apps/dashboard/lib/stacks.ts` hides `app-foundry-hetzner` and anything with an app template. The catalog has no other stack yet |
+| `adopted` | Built around workspaces adopted from the customer's Terraform Cloud | `routes/workspaces.ts` | Not yet: the API exists (`/workspaces/remote`, `/workspaces/adopt`), the dashboard has no entry for it |
+| `codegen` | Terraform generated from an assessment of a cloud account, for a migration target | `services/codegen.ts` | No longer offered (ADR 0010); still reachable from an assessment's report and options pages |
+| `template` | One file rendered from a template version (legacy `/terraform` page) | `services/templates.ts` | No, it has its own page |
+
+### Dashboard pages
+
+Lists and creation are separate pages; a drawer is only for a small action on an existing item.
+
+| Page | What it is |
+| --- | --- |
+| `/projects` | The project list, with a "New project" link. A stack project's settings open in a drawer |
+| `/projects/new` | Three starting points, in ADR 0010's order; the choice is in the URL (`?start=adopt\|stack\|terraform`). Old `/projects?start=...` and `?assess=` links redirect here (`lib/new-project.ts`) |
+| `/connections` | One tile per connection, Terraform Cloud included, with verify, replace (a drawer) and remove. The tile is `components/connection-tile.tsx`; the dashboard home and the adopt step of `/projects/new` show connections with the same tile, never as rows inside one card |
+| `/connections/new` | Pick a type, then only that type's fields and setup help (`?type=aws`). Every type is stored through `createConnection()` in `apps/dashboard/lib/connections.ts`, which sends Terraform Cloud to `POST /workspaces/connections` and the rest to `POST /connections` |
 
 ## Patterns, and where to see them
 

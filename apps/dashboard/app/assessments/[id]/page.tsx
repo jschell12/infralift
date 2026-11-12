@@ -369,10 +369,13 @@ export default function AssessmentReportPage({
       </Card>
 
       {report.status === "completed" && (
-        <Card className="mb-5">
-          <CardTitle>Adopt as it runs</CardTitle>
-          <AdoptCard assessmentId={report.id} provider={report.provider} />
-        </Card>
+        // #adopt is where "Adopt resources" on /projects/new lands.
+        <div id="adopt">
+          <Card className="mb-5">
+            <CardTitle>Adopt as it runs</CardTitle>
+            <AdoptCard assessmentId={report.id} provider={report.provider} />
+          </Card>
+        </div>
       )}
 
       <div id="codegen" />

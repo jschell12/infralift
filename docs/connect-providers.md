@@ -1,6 +1,6 @@
 # Granting read-only access
 
-The assessment runs entirely against read-only credentials. You create the credential in your provider's console, paste it into the infralift dashboard (**Connections** page), and we verify it works before anything else happens. Credentials are encrypted at rest (AES-256-GCM), never displayed again, and never used to modify your infrastructure. See the [security model](./security.md).
+The assessment runs entirely against read-only credentials. You create the credential in your provider's console, paste it into the infralift dashboard (**Connections**, then **Add connection** and the provider), and we verify it works before anything else happens. Credentials are encrypted at rest (AES-256-GCM), never displayed again, and never used to modify your infrastructure. See the [security model](./security.md).
 
 Connect one provider or several. Each connection is assessed independently and combined into one report.
 
@@ -11,7 +11,7 @@ Connect one provider or several. Each connection is assessed independently and c
 1. Go to `vercel.com/account/tokens` and create a token.
 2. Scope it to the team you want assessed.
 3. Vercel tokens inherit the permissions of your role. For strict read-only, create the token from a member with the **Viewer** role.
-4. Paste the token in the dashboard under **Connections**, provider **Vercel**.
+4. Paste the token in the dashboard under **Connections**, **Add connection**, **Vercel**.
 
 **What we read:** projects, domains, environment variable *names* (never values), deployment and usage data.
 
@@ -39,7 +39,7 @@ Connect one provider or several. Each connection is assessed independently and c
 
 ## AWS
 
-AWS access works via a cross-account IAM role, not a pasted key. Select **AWS** on the **Connections** page to see your organization's external ID and the two policies below, already filled in, with copy buttons.
+AWS access works via a cross-account IAM role, not a pasted key. Choose **AWS** under **Connections**, **Add connection** to see your organization's external ID and the two policies below, already filled in, with copy buttons.
 
 1. Create an IAM role in your account with this **trust policy**. The principal is infralift's AWS account and the condition is your organization's external ID, which stops anyone else from pointing infralift at your role (the confused-deputy problem). Your external ID is generated once, is unique to your organization, and is never shown to another one.
 
@@ -74,7 +74,7 @@ AWS access works via a cross-account IAM role, not a pasted key. Select **AWS** 
 
 **What we read:** the Resource Groups Tagging API (`tag:GetResources`) in each region, which lists resources that carry, or once carried, a tag; untagged resources do not appear. The inventory stops at 1,000 resources and the report says so when it does. From Cost Explorer, last full month's total unblended cost (`ce:GetCostAndUsage`, which AWS bills at $0.01 per request). If the role lacks `ce:GetCostAndUsage`, the report has no monthly spend and says why. Neither action can create, modify, or delete anything.
 
-**Availability:** AWS connections need infralift's own AWS principal configured on the server. Until it is, the Connections page says AWS isn't available yet and adding an AWS connection is refused.
+**Availability:** AWS connections need infralift's own AWS principal configured on the server. Until it is, the AWS step of **Add connection** says AWS isn't available yet and adding an AWS connection is refused.
 
 ## Firebase / Google Cloud
 

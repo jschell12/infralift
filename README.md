@@ -1,6 +1,6 @@
 # infralift
 
-infralift writes and maintains your infrastructure as code in your own repository. Changes to a repository you work in (stacks, imports, adoptions) arrive as pull requests you review and merge. Start from an app template, assess a cloud account you already run, or import Terraform you already have, without touching what is running.
+infralift writes and maintains your infrastructure as code in your own repository. Changes to a repository you work in (stacks, imports, adoptions) arrive as pull requests you review and merge. A project is the Terraform for one cloud account in one environment: adopt what an account already runs, start from a stack, or bring Terraform you already have, without touching what is running.
 
 What it sells on:
 
