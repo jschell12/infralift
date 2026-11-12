@@ -41,7 +41,7 @@ function DailyChart({ days }: { days: AnalyticsData["days"] }) {
           />
         ))}
       </div>
-      <div className="mt-1.5 flex justify-between text-[11px] text-faint">
+      <div className="mt-1.5 flex justify-between text-xs text-faint">
         <span>{days[0].date}</span>
         <span>{days[days.length - 1].date}</span>
       </div>

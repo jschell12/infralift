@@ -7,7 +7,7 @@ import {
   type ProviderConnectionSummary,
 } from "@infralift/shared";
 import { api, formatCents, savingsNote, errorText } from "../lib/api";
-import { Dot, NUM, Skeleton } from "./ui";
+import { Dot, NUM, SMALL_BTN_SOLID, Skeleton } from "./ui";
 
 // "From existing infrastructure": assess a connected account, then pick a
 // target on the assessment's options page, which opens the project. Lives in
@@ -142,7 +142,7 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
                   type="button"
                   onClick={() => void run(c.id)}
                   disabled={submitting}
-                  className="cursor-pointer rounded-md border-0 bg-accent px-3 py-1.5 text-[13px] font-semibold text-bg hover:bg-accent/90 disabled:cursor-default disabled:opacity-50"
+                  className={SMALL_BTN_SOLID}
                 >
                   {completed.some((a) => a.provider === c.provider) ? "Assess again" : "Assess"}
                 </button>

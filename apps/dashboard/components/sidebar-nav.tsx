@@ -63,7 +63,7 @@ export function SidebarNav({
           >
             <span>{item.label}</span>
             {count ? (
-              <span className="ml-auto text-[11px] text-faint [font-variant-numeric:tabular-nums]">
+              <span className="ml-auto text-xs text-faint [font-variant-numeric:tabular-nums]">
                 {count}
               </span>
             ) : null}
@@ -123,7 +123,7 @@ export function AppNav() {
             aria-expanded={open}
             aria-controls="app-nav-menu"
             onClick={() => setOpen((v) => !v)}
-            className="-mr-2 flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-muted hover:text-text"
+            className="-mr-2 flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-muted hover:text-text active:bg-bg"
           >
             <MenuIcon open={open} />
           </button>

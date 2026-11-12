@@ -22,6 +22,8 @@ import {
   PrimaryButton,
   Skeleton,
   TableHead,
+  SMALL_BTN,
+  SMALL_BTN_DANGER,
 } from "../../components/ui";
 
 type FieldKind = "token" | "arn" | "json";
@@ -95,8 +97,6 @@ const SCOPE_HELP: Record<Provider, string> = {
 };
 
 const COLS = "grid-cols-[1fr_1fr_120px]";
-const SMALL_BTN =
-  "rounded-md border border-border bg-transparent px-2 py-1 text-xs text-muted hover:text-text disabled:opacity-50 cursor-pointer";
 
 function providerName(provider: string): string {
   return PROVIDER_LABELS[provider as Provider] ?? (provider === "tfc" ? "Terraform Cloud" : provider);
@@ -161,15 +161,16 @@ function ReplaceDrawer({
       <form onSubmit={submit}>
         {isTfc && (
           <>
-            <label className={LABEL}>Organization (blank keeps the current one)</label>
-            <input className={`${INPUT} mb-4`} value={organization} onChange={(e) => setOrganization(e.target.value)} />
-            <label className={LABEL}>Hostname (blank keeps the current one)</label>
-            <input className={`${INPUT} mb-4`} value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="app.terraform.io" />
+            <label htmlFor="replace-organization" className={LABEL}>Organization (blank keeps the current one)</label>
+            <input id="replace-organization" className={`${INPUT} mb-4`} value={organization} onChange={(e) => setOrganization(e.target.value)} />
+            <label htmlFor="replace-hostname" className={LABEL}>Hostname (blank keeps the current one)</label>
+            <input id="replace-hostname" className={`${INPUT} mb-4`} value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="app.terraform.io" />
           </>
         )}
-        <label className={LABEL}>{field?.label ?? "Team or user API token"}</label>
+        <label htmlFor="replace-token" className={LABEL}>{field?.label ?? "Team or user API token"}</label>
         {field?.kind === "json" ? (
           <textarea
+            id="replace-token"
             className={`${INPUT} mb-4 font-mono`}
             value={token}
             onChange={(e) => setToken(e.target.value)}
@@ -179,6 +180,7 @@ function ReplaceDrawer({
           />
         ) : (
           <input
+            id="replace-token"
             className={`${INPUT} mb-4 font-mono`}
             value={token}
             onChange={(e) => setToken(e.target.value)}
@@ -233,7 +235,7 @@ function ConnectionRow({ c, onChanged }: { c: ProviderConnectionSummary; onChang
         {confirming ? (
           <>
             <span className="text-xs text-muted">Remove &quot;{c.label}&quot; and its stored credential?</span>
-            <button className={SMALL_BTN.replace("text-muted hover:text-text", "text-danger")} disabled={busy} onClick={() => void act(`/connections/${c.id}`, "DELETE")}>
+            <button className={SMALL_BTN_DANGER} disabled={busy} onClick={() => void act(`/connections/${c.id}`, "DELETE")}>
               Remove
             </button>
             <button className={SMALL_BTN} disabled={busy} onClick={() => setConfirming(false)}>
@@ -302,14 +304,14 @@ function TfcConnectCard({ onAdded }: { onAdded: () => void }) {
         workspace in this organization, and the generated code points at it.
       </p>
       <form onSubmit={submit}>
-        <label className={LABEL}>Label</label>
-        <input className={`${INPUT} mb-4`} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. platform" required />
-        <label className={LABEL}>Organization</label>
-        <input className={`${INPUT} mb-4`} value={organization} onChange={(e) => setOrganization(e.target.value)} required />
-        <label className={LABEL}>Hostname (Terraform Enterprise only)</label>
-        <input className={`${INPUT} mb-4`} value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="app.terraform.io" />
-        <label className={LABEL}>Team or user API token</label>
-        <input className={`${INPUT} mb-3.5 font-mono`} type="password" value={token} onChange={(e) => setToken(e.target.value)} required />
+        <label htmlFor="tfc-label" className={LABEL}>Label</label>
+        <input id="tfc-label" className={`${INPUT} mb-4`} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. platform" required />
+        <label htmlFor="tfc-organization" className={LABEL}>Organization</label>
+        <input id="tfc-organization" className={`${INPUT} mb-4`} value={organization} onChange={(e) => setOrganization(e.target.value)} required />
+        <label htmlFor="tfc-hostname" className={LABEL}>Hostname (Terraform Enterprise only)</label>
+        <input id="tfc-hostname" className={`${INPUT} mb-4`} value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="app.terraform.io" />
+        <label htmlFor="tfc-token" className={LABEL}>Team or user API token</label>
+        <input id="tfc-token" className={`${INPUT} mb-3.5 font-mono`} type="password" value={token} onChange={(e) => setToken(e.target.value)} required />
         <div className="mb-5 rounded-lg border border-border bg-bg p-3 font-mono text-xs leading-relaxed text-muted">
           A team token with &quot;Manage workspaces&quot; on the organization is enough. infralift creates workspaces and
           queues plans; it never applies.
@@ -327,10 +329,10 @@ function CopyBlock({ title, text }: { title: string; text: string }) {
   return (
     <div className="mb-3">
       <div className="mb-1 flex items-center justify-between">
-        <span className={LABEL}>{title}</span>
+        <span className="text-[13px] font-semibold text-muted">{title}</span>
         <button
           type="button"
-          className="text-xs text-accent"
+          className={SMALL_BTN}
           onClick={() => {
             void navigator.clipboard.writeText(text).then(() => setCopied(true));
           }}
@@ -357,7 +359,7 @@ function AwsSetupPanel({ setup }: { setup: AwsSetup | null }) {
   }
   return (
     <div className="mb-1">
-      <label className={LABEL}>Your external ID</label>
+      <div className={LABEL}>Your external ID</div>
       <div className="mb-3 break-all rounded-lg border border-border bg-bg p-2 font-mono text-xs">{setup.externalId}</div>
       <CopyBlock title="Trust policy" text={setup.trustPolicy ?? ""} />
       <CopyBlock title="Permissions policy" text={setup.permissionsPolicy ?? ""} />
@@ -440,8 +442,8 @@ export default function ConnectionsPage() {
         <Card>
           <CardTitle>Connect a provider</CardTitle>
           <form onSubmit={submit}>
-            <label className={LABEL}>Provider</label>
-            <select
+            <label htmlFor="conn-provider" className={LABEL}>Provider</label>
+            <select id="conn-provider"
               className={`${INPUT} mb-4`}
               value={provider}
               onChange={(e) => setProvider(e.target.value as Provider)}
@@ -453,8 +455,8 @@ export default function ConnectionsPage() {
               ))}
             </select>
 
-            <label className={LABEL}>Label</label>
-            <input
+            <label htmlFor="conn-label" className={LABEL}>Label</label>
+            <input id="conn-label"
               className={`${INPUT} mb-4`}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
@@ -464,9 +466,10 @@ export default function ConnectionsPage() {
 
             {provider === "aws" && <AwsSetupPanel setup={awsSetup} />}
 
-            <label className={LABEL}>{field.label}</label>
+            <label htmlFor="conn-token" className={LABEL}>{field.label}</label>
             {field.kind === "json" ? (
               <textarea
+                id="conn-token"
                 className={`${INPUT} mb-3.5 font-mono`}
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
@@ -476,6 +479,7 @@ export default function ConnectionsPage() {
               />
             ) : (
               <input
+                id="conn-token"
                 className={`${INPUT} mb-3.5 font-mono`}
                 value={token}
                 onChange={(e) => setToken(e.target.value)}

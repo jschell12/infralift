@@ -261,6 +261,7 @@ export default function AssessmentReportPage({
             caps. Steady state applies the best committed-spend discount your
             annual spend really reaches.
           </p>
+          <div className="overflow-x-auto"><div className="min-w-[620px]">
           <TableHead cols={PROJ_COLS}>
             <span>Stack</span>
             <span>List</span>
@@ -290,6 +291,7 @@ export default function AssessmentReportPage({
               </Chip>
             </TableRow>
           ))}
+          </div></div>
           <div className="mt-4">
             <Note>
               Below roughly $1M/year of spend, enterprise discounts are not
@@ -306,7 +308,7 @@ export default function AssessmentReportPage({
         {report.findings.length === 0 ? (
           <p className="text-sm text-muted">No findings.</p>
         ) : (
-          <>
+          <div className="overflow-x-auto"><div className="min-w-[480px]">
             <TableHead cols={FIND_COLS}>
               <span>Severity</span>
               <span>Category</span>
@@ -328,7 +330,7 @@ export default function AssessmentReportPage({
                 </div>
               </TableRow>
             ))}
-          </>
+          </div></div>
         )}
       </Card>
 
@@ -347,7 +349,7 @@ export default function AssessmentReportPage({
         {report.inventory.length === 0 ? (
           <p className="text-sm text-muted">No resources found.</p>
         ) : (
-          <>
+          <div className="overflow-x-auto"><div className="min-w-[560px]">
             <TableHead cols={INV_COLS}>
               <span>Type</span>
               <span>Name</span>
@@ -362,7 +364,7 @@ export default function AssessmentReportPage({
                 <span className={NUM}>{formatCents(i.monthlyCostCents)}</span>
               </TableRow>
             ))}
-          </>
+          </div></div>
         )}
       </Card>
 
@@ -384,26 +386,28 @@ export default function AssessmentReportPage({
 
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <div>
-            <label className="block text-[11px] uppercase tracking-[0.06em] text-faint mb-1">
+            <label htmlFor="codegen-target" className="block text-[13px] font-semibold text-muted mb-1">
               Migration target
             </label>
             <select
+              id="codegen-target"
               value={codegenTarget}
               onChange={(e) => setCodegenTarget(e.target.value as "cloudflare" | "hetzner")}
-              className="bg-bg border border-border rounded-lg px-2.5 py-2 text-sm text-text focus:outline-none focus:border-accent"
+              className="min-h-11 bg-bg border border-border rounded-lg px-2.5 py-2 text-base text-text focus:outline-none focus:border-accent"
             >
               <option value="cloudflare">Cloudflare Workers + Neon</option>
               <option value="hetzner">Hetzner VPS + Docker + Neon</option>
             </select>
           </div>
           <div>
-            <label className="block text-[11px] uppercase tracking-[0.06em] text-faint mb-1">
+            <label htmlFor="codegen-backend" className="block text-[13px] font-semibold text-muted mb-1">
               State backend
             </label>
             <select
+              id="codegen-backend"
               value={codegenBackend}
               onChange={(e) => setCodegenBackend(e.target.value as "local" | "tfc" | "s3")}
-              className="bg-bg border border-border rounded-lg px-2.5 py-2 text-sm text-text focus:outline-none focus:border-accent"
+              className="min-h-11 bg-bg border border-border rounded-lg px-2.5 py-2 text-base text-text focus:outline-none focus:border-accent"
             >
               <option value="local">Local state</option>
               <option value="tfc">Terraform Cloud</option>
@@ -508,15 +512,15 @@ export default function AssessmentReportPage({
                           {step.title}
                         </span>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] ${OWNER_STYLE[step.owner]}`}
+                          className={`rounded-full px-2 py-0.5 text-xs ${OWNER_STYLE[step.owner]}`}
                         >
                           {OWNER_LABEL[step.owner]}
                         </span>
-                        <span className="rounded-full bg-bg px-2 py-0.5 text-[11px] text-faint">
+                        <span className="rounded-full bg-bg px-2 py-0.5 text-xs text-faint">
                           {step.phase}
                         </span>
                         {step.automatable && (
-                          <span className="rounded-full bg-accent-dim px-2 py-0.5 text-[11px] text-accent">
+                          <span className="rounded-full bg-accent-dim px-2 py-0.5 text-xs text-accent">
                             we can verify this
                           </span>
                         )}

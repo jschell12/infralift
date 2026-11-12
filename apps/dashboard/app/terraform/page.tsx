@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Project, TemplateProject } from "@infralift/shared";
 import { api, errorText } from "../../lib/api";
-import { Drawer } from "../../components/ui";
+import { Drawer, SMALL_BTN } from "../../components/ui";
 
 // -- API shapes ---------------------------------------------------------------
 
@@ -86,13 +86,14 @@ function ArgumentFields({
     <>
       {Object.entries(schema.properties ?? {}).map(([key, prop]) => (
         <div key={key}>
-          <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">
+          <label htmlFor={`tf-arg-${key}`} className="block text-sm font-semibold text-muted mt-3.5 mb-1">
             {key}
             {required.has(key) ? " *" : " (optional)"}
           </label>
           {prop.enum ? (
             <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+              id={`tf-arg-${key}`}
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-base mb-4 focus:outline-none focus:border-accent"
               value={String(values[key] ?? "")}
               onChange={(e) => onChange({ ...values, [key]: e.target.value })}
             >
@@ -105,7 +106,8 @@ function ArgumentFields({
             </select>
           ) : prop.type === "boolean" ? (
             <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+              id={`tf-arg-${key}`}
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-base mb-4 focus:outline-none focus:border-accent"
               value={String(values[key] ?? "")}
               onChange={(e) => onChange({ ...values, [key]: e.target.value })}
             >
@@ -115,7 +117,8 @@ function ArgumentFields({
             </select>
           ) : (
             <input
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+              id={`tf-arg-${key}`}
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-base mb-4 focus:outline-none focus:border-accent"
               type={
                 prop.type === "integer" || prop.type === "number"
                   ? "number"
@@ -311,7 +314,7 @@ export default function TerraformPage() {
 
       <div className="bg-surface border border-border rounded-xl p-6 mb-4">
         <h3 className="text-base font-semibold mb-1.5">Templates</h3>
-        <table className="w-full border-collapse text-sm">
+        <div className="overflow-x-auto"><table className="w-full min-w-[560px] border-collapse text-sm">
           <thead>
             <tr>
               <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Template</th>
@@ -330,7 +333,7 @@ export default function TerraformPage() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       <div className="bg-surface border border-border rounded-xl p-6 mb-4">
@@ -341,7 +344,7 @@ export default function TerraformPage() {
             destination repo.
           </p>
         ) : (
-          <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-auto"><table className="w-full min-w-[560px] border-collapse text-sm">
             <thead>
               <tr>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Project</th>
@@ -368,7 +371,7 @@ export default function TerraformPage() {
                   <td className="p-3 border-b border-border">{p.renderings.length}</td>
                   <td className="p-3 border-b border-border">
                     <button
-                      className="inline-block px-5 py-2 rounded-lg text-sm font-semibold cursor-pointer border border-border bg-transparent text-text hover:bg-surface"
+                      className={SMALL_BTN}
                       onClick={() => {
                         setFormError(null);
                         setRunProject(p);
@@ -382,10 +385,10 @@ export default function TerraformPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
         <button
-          className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90"
+          className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90 active:bg-accent/80"
           onClick={() => {
             setFormError(null);
             setShowNewProject(true);
@@ -399,9 +402,9 @@ export default function TerraformPage() {
         <h3 className="text-base font-semibold mb-1.5">Jobs</h3>
         {projects.length > 1 && (
           <>
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Project</label>
-            <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+            <label htmlFor="tf-project" className="block text-sm font-semibold text-muted mt-3.5 mb-1">Project</label>
+            <select id="tf-project"
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-base mb-4 focus:outline-none focus:border-accent"
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
             >
@@ -416,7 +419,7 @@ export default function TerraformPage() {
         {jobs.length === 0 ? (
           <p className="text-muted text-sm">No jobs yet for this project.</p>
         ) : (
-          <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-auto"><table className="w-full min-w-[560px] border-collapse text-sm">
             <thead>
               <tr>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Stage</th>
@@ -445,7 +448,7 @@ export default function TerraformPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
 
@@ -457,18 +460,18 @@ export default function TerraformPage() {
         >
           {formError && <DrawerError message={formError} />}
           <form onSubmit={createProject}>
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Project name * (lowercase, digits, dashes)</label>
-            <input
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+            <label htmlFor="tf-project-name" className="block text-sm font-semibold text-muted mt-3.5 mb-1">Project name * (lowercase, digits, dashes)</label>
+            <input id="tf-project-name"
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-base mb-4 focus:outline-none focus:border-accent"
               value={pName}
               onChange={(e) => setPName(e.target.value)}
               required
               pattern="[a-z0-9-]+"
               maxLength={32}
             />
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Template *</label>
-            <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+            <label htmlFor="tf-template" className="block text-sm font-semibold text-muted mt-3.5 mb-1">Template *</label>
+            <select id="tf-template"
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-base mb-4 focus:outline-none focus:border-accent"
               value={pTemplateSlug}
               onChange={(e) => {
                 setPTemplateSlug(e.target.value);
@@ -483,9 +486,9 @@ export default function TerraformPage() {
                 </option>
               ))}
             </select>
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Version *</label>
-            <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+            <label htmlFor="tf-version" className="block text-sm font-semibold text-muted mt-3.5 mb-1">Version *</label>
+            <select id="tf-version"
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-base mb-4 focus:outline-none focus:border-accent"
               value={pReleaseTag}
               onChange={(e) => setPReleaseTag(e.target.value)}
               required
@@ -498,34 +501,34 @@ export default function TerraformPage() {
                 </option>
               ))}
             </select>
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Destination repo * (owner/repo)</label>
-            <input
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+            <label htmlFor="tf-dest-repo" className="block text-sm font-semibold text-muted mt-3.5 mb-1">Destination repo * (owner/repo)</label>
+            <input id="tf-dest-repo"
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-base mb-4 focus:outline-none focus:border-accent"
               value={pDestRepo}
               onChange={(e) => setPDestRepo(e.target.value)}
               required
               placeholder="acme/infrastructure"
             />
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Destination path</label>
-            <input
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+            <label htmlFor="tf-dest-path" className="block text-sm font-semibold text-muted mt-3.5 mb-1">Destination path</label>
+            <input id="tf-dest-path"
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-base mb-4 focus:outline-none focus:border-accent"
               value={pDestPath}
               onChange={(e) => setPDestPath(e.target.value)}
             />
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Branch</label>
-            <input
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+            <label htmlFor="tf-branch" className="block text-sm font-semibold text-muted mt-3.5 mb-1">Branch</label>
+            <input id="tf-branch"
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-base mb-4 focus:outline-none focus:border-accent"
               value={pDestBranch}
               onChange={(e) => setPDestBranch(e.target.value)}
             />
-            <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">AWS region</label>
-            <input
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+            <label htmlFor="tf-aws-region" className="block text-sm font-semibold text-muted mt-3.5 mb-1">AWS region</label>
+            <input id="tf-aws-region"
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-base mb-4 focus:outline-none focus:border-accent"
               value={pRegion}
               onChange={(e) => setPRegion(e.target.value)}
             />
             <button
-              className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90 active:bg-accent/80 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={busy}
             >
               {busy ? "Creating..." : "Create project"}
@@ -549,14 +552,14 @@ export default function TerraformPage() {
             />
             <button
               type="button"
-              className="inline-block mt-4 px-5 py-2 rounded-lg text-sm font-semibold cursor-pointer border border-border bg-transparent text-text hover:bg-surface mr-2"
+              className={`mt-4 mr-2 ${SMALL_BTN}`}
               disabled={busy}
               onClick={previewRender}
             >
               Preview
             </button>{" "}
             <button
-              className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:bg-accent/90 active:bg-accent/80 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={busy}
             >
               {busy ? "Working..." : "Launch job"}

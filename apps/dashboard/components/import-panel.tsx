@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { ImportCheckResult, ProviderConnectionSummary } from "@infralift/shared";
 import { api, errorText } from "../lib/api";
-import { Chip, INPUT, LABEL, MONO, Note, PrimaryButton, Skeleton, type Tone } from "./ui";
+import { Chip, INPUT, LABEL, MONO, Note, PrimaryButton, Skeleton, TEXT_BTN, type Tone } from "./ui";
 
 // "From a Terraform repo": scan a GitHub repository for root modules and
 // import one. Importing adds a read-only plan check to the repository as a
@@ -137,8 +137,8 @@ export function ImportPanel({ onCreated }: { onCreated: () => void }) {
       </p>
       {conns.length > 1 && (
         <>
-          <label className={LABEL}>GitHub connection</label>
-          <select className={`${INPUT} mb-4`} value={connectionId} onChange={(e) => setConnectionId(e.target.value)}>
+          <label htmlFor="import-github-connection" className={LABEL}>GitHub connection</label>
+          <select id="import-github-connection" className={`${INPUT} mb-4`} value={connectionId} onChange={(e) => setConnectionId(e.target.value)}>
             {conns.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
@@ -149,12 +149,12 @@ export function ImportPanel({ onCreated }: { onCreated: () => void }) {
       )}
       <div className="grid grid-cols-[1fr_140px] gap-2 mb-4">
         <div>
-          <label className={LABEL}>Repository</label>
-          <input className={INPUT} placeholder="owner/name" value={repo} onChange={(e) => setRepo(e.target.value)} />
+          <label htmlFor="import-repository" className={LABEL}>Repository</label>
+          <input id="import-repository" className={INPUT} placeholder="owner/name" value={repo} onChange={(e) => setRepo(e.target.value)} />
         </div>
         <div>
-          <label className={LABEL}>Branch</label>
-          <input className={INPUT} placeholder="default" value={ref} onChange={(e) => setRef(e.target.value)} />
+          <label htmlFor="import-branch" className={LABEL}>Branch</label>
+          <input id="import-branch" className={INPUT} placeholder="default" value={ref} onChange={(e) => setRef(e.target.value)} />
         </div>
       </div>
       <PrimaryButton onClick={doScan} disabled={!/^[\w.-]+\/[\w.-]+$/.test(repo.trim()) || busy !== null}>
@@ -199,6 +199,8 @@ function RootCard({
   connectionId: string;
   onCreated: () => void;
 }) {
+  // One card per root module, so ids are per card, not per page.
+  const fieldId = useId();
   const [name, setName] = useState(suggestName(scan.repo, root.path));
   const [configFile, setConfigFile] = useState(root.backend.configFiles.length === 1 ? root.backend.configFiles[0] : "");
   const [busy, setBusy] = useState(false);
@@ -245,7 +247,7 @@ function RootCard({
         {root.tool === "tofu" ? "OpenTofu" : "Terraform"}
       </div>
       {root.providers.length > 0 && (
-        <div className={`text-[11px] text-faint mb-2 ${MONO}`}>{root.providers.map((p) => p.source).join(", ")}</div>
+        <div className={`text-xs text-faint mb-2 ${MONO}`}>{root.providers.map((p) => p.source).join(", ")}</div>
       )}
       {root.notes.map((n) => (
         <div key={n} className="text-xs text-warn mb-1">
@@ -281,8 +283,8 @@ function RootCard({
           )}
           {needsFile && (
             <>
-              <label className={LABEL}>Backend config file</label>
-              <select className={`${INPUT} mb-3`} value={configFile} onChange={(e) => setConfigFile(e.target.value)}>
+              <label htmlFor={`${fieldId}-config`} className={LABEL}>Backend config file</label>
+              <select id={`${fieldId}-config`} className={`${INPUT} mb-3`} value={configFile} onChange={(e) => setConfigFile(e.target.value)}>
                 <option value="">Pick one</option>
                 {root.backend.configFiles.map((f) => (
                   <option key={f} value={f}>
@@ -294,8 +296,8 @@ function RootCard({
           )}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
-              <label className={LABEL}>Project name</label>
-              <input className={INPUT} value={name} onChange={(e) => setName(e.target.value)} />
+              <label htmlFor={`${fieldId}-name`} className={LABEL}>Project name</label>
+              <input id={`${fieldId}-name`} className={INPUT} value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <PrimaryButton onClick={doImport} disabled={busy || !name || (needsFile && !configFile)}>
               {busy ? "Importing…" : "Import"}
@@ -355,7 +357,7 @@ export function ImportCheckStatus({ projectId, last }: { projectId: string; last
           type="button"
           onClick={() => void refresh()}
           disabled={busy}
-          className="text-xs font-semibold text-muted hover:text-text disabled:opacity-50"
+          className={`font-semibold ${TEXT_BTN}`}
         >
           {busy ? "Checking…" : "Re-check"}
         </button>
@@ -410,10 +412,10 @@ export function AdoptCard({ assessmentId, provider }: { assessmentId: string; pr
   }
 
   const field = (label: string, value: string, set: (v: string) => void, placeholder = "") => (
-    <div>
-      <label className={LABEL}>{label}</label>
+    <label className="block">
+      <span className={LABEL}>{label}</span>
       <input className={INPUT} value={value} placeholder={placeholder} onChange={(e) => set(e.target.value)} />
-    </div>
+    </label>
   );
 
   return (
@@ -428,8 +430,8 @@ export function AdoptCard({ assessmentId, provider }: { assessmentId: string; pr
         {field("Directory", path, setPath)}
         {field("Project name", name, setName)}
         <div>
-          <label className={LABEL}>State bucket</label>
-          <select className={INPUT} value={kind} onChange={(e) => setKind(e.target.value as "r2" | "s3")}>
+          <label htmlFor="import-state-bucket" className={LABEL}>State bucket</label>
+          <select id="import-state-bucket" className={INPUT} value={kind} onChange={(e) => setKind(e.target.value as "r2" | "s3")}>
             <option value="r2">Cloudflare R2</option>
             <option value="s3">AWS S3</option>
           </select>

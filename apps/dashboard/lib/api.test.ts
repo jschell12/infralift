@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, errorMessageFor, errorText } from "./api";
+import { ApiError, api, errorMessageFor, errorText, siteUrl } from "./api";
 
 // Each body with a file named beside it is one the API sends, copied from
 // where that file builds it. The last four cases have no source: they are the
@@ -79,5 +79,21 @@ describe("api() throws an ApiError carrying the human message", () => {
 describe("errorText never shows a thrown error's own message", () => {
   it("uses the network sentence for anything that is not an ApiError", () => {
     expect(errorText(new TypeError("Cannot read properties of undefined"))).not.toMatch(/Cannot read/);
+  });
+});
+
+describe("siteUrl builds a stack project's URL only from settings it has", () => {
+  // The settings shape a stack project stores, as in
+  // apps/api/src/lib/stacks/index.test.ts (zone_name "acme.io", subdomain "app").
+  const cases: [string, Record<string, unknown>, string | null][] = [
+    ["subdomain and zone", { name: "acme-web", zone_name: "acme.io", subdomain: "app" }, "https://app.acme.io"],
+    ["no subdomain: the apex", { zone_name: "acme.io", subdomain: "" }, "https://acme.io"],
+    ["neither key (what printed https://undefined.undefined)", { name: "acme-web", backend: "tfc" }, null],
+    ["a subdomain without a zone", { subdomain: "app" }, null],
+    ["a blank zone", { zone_name: "  ", subdomain: "app" }, null],
+    ["a non-string zone", { zone_name: 42, subdomain: "app" }, null],
+  ];
+  it.each(cases)("%s", (_name, settings, expected) => {
+    expect(siteUrl(settings)).toBe(expected);
   });
 });

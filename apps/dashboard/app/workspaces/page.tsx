@@ -40,7 +40,7 @@ export default function WorkspacesPage() {
         </div>
       ) : (
         <div className="bg-surface border border-border rounded-xl p-6 mb-4">
-          <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-auto"><table className="w-full min-w-[560px] border-collapse text-sm">
             <thead>
               <tr>
                 <th className="text-left p-3 border-b border-border text-muted font-medium text-xs">Workspace</th>
@@ -79,7 +79,7 @@ export default function WorkspacesPage() {
                   </td>
                   <td className="p-3 border-b border-border">
                     {w.connectionId ? (
-                      <button className="text-accent cursor-pointer" onClick={() => setOpen(w.id)}>
+                      <button className="inline-flex min-h-11 items-center cursor-pointer border-0 bg-transparent text-accent active:opacity-70" onClick={() => setOpen(w.id)}>
                         Runs
                       </button>
                     ) : (
@@ -89,7 +89,7 @@ export default function WorkspacesPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
 

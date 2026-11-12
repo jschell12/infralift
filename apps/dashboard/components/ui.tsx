@@ -1,6 +1,7 @@
 // Imported only by client components; Drawer uses hooks, so a server
 // component must not render it directly.
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { trappedFocusTarget } from "../lib/focus";
 
 /** The repeated utility strings, in one place. No transitions: hover is
  *  colour-only, per the design system. */
@@ -11,8 +12,24 @@ export const MONO = "font-mono";
 export const H1 = "text-[26px] font-bold tracking-[-0.02em] mb-1.5";
 export const LEAD = "text-muted mb-7 max-w-[640px]";
 export const LABEL = "block text-[13px] font-semibold text-muted mb-1.5";
+/** 16px text, not 14: iOS Safari zooms the whole page when a focused field's
+ *  text is under 16px, and does not zoom back out. */
 export const INPUT =
-  "w-full bg-bg border border-border rounded-lg px-2.5 py-2.5 text-text text-sm focus:outline-none focus:border-accent";
+  "w-full bg-bg border border-border rounded-lg px-2.5 py-2.5 text-text text-base focus:outline-none focus:border-accent";
+
+/** Small buttons. Every one is at least 44px tall (min-h-11), the touch-target
+ *  floor for a finger, however short its label; add min-w-11 for a button that
+ *  is an icon alone. One shape in four tones, each with a pressed (active:)
+ *  state. TEXT_BTN is an inline action that reads as a word ("edit", "Clear")
+ *  and still gets the full-height target. */
+const SMALL_BTN_SHAPE =
+  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold cursor-pointer disabled:cursor-default disabled:opacity-50";
+export const SMALL_BTN = `${SMALL_BTN_SHAPE} border border-border bg-transparent text-muted hover:bg-bg hover:text-text active:bg-border`;
+export const SMALL_BTN_ACCENT = `${SMALL_BTN_SHAPE} border border-accent/40 bg-transparent text-accent hover:bg-accent-dim/40 active:bg-accent-dim`;
+export const SMALL_BTN_DANGER = `${SMALL_BTN_SHAPE} border border-danger/40 bg-transparent text-danger hover:bg-danger/10 active:bg-danger/20`;
+export const SMALL_BTN_SOLID = `${SMALL_BTN_SHAPE} border-0 bg-accent text-bg hover:bg-accent/90 active:bg-accent/80`;
+export const TEXT_BTN =
+  "inline-flex min-h-11 items-center cursor-pointer border-0 bg-transparent px-1 text-[13px] text-muted hover:text-text active:text-text disabled:cursor-default disabled:opacity-50";
 
 export type Tone =
   | "accent"
@@ -28,7 +45,7 @@ const TONE: Record<Tone, string> = {
   warn: "bg-warn/20 text-warn",
   info: "bg-info/20 text-info",
   muted: "bg-border text-muted",
-  faint: "bg-border text-faint",
+  faint: "bg-border/50 text-faint",
 };
 
 const DOT: Record<Tone, string> = {
@@ -76,7 +93,7 @@ export function Chip({
 }) {
   return (
     <span
-      className={`inline-block w-fit justify-self-start whitespace-nowrap rounded-full px-2.5 py-0.5 font-semibold ${size === "xs" ? "text-[11px]" : "text-xs"} ${TONE[tone]}`}
+      className={`inline-block w-fit justify-self-start whitespace-nowrap rounded-full py-0.5 text-xs font-semibold ${size === "xs" ? "px-2" : "px-2.5"} ${TONE[tone]}`}
     >
       {children}
     </span>
@@ -114,7 +131,7 @@ export function StatCard({
           : "text-accent";
   return (
     <div className={`${CARD} ${center ? "text-center" : ""}`}>
-      <div className="text-[11px] uppercase tracking-[0.06em] text-muted mb-1.5">
+      <div className="text-[13px] text-muted mb-1.5">
         {label}
       </div>
       <div
@@ -140,7 +157,7 @@ export function PrimaryButton({
   full?: boolean;
   href?: string;
 }) {
-  const cls = `inline-block rounded-lg bg-accent px-6 py-3 text-[15px] font-semibold text-bg cursor-pointer border-0 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-default ${full ? "w-full" : ""}`;
+  const cls = `inline-block rounded-lg bg-accent px-6 py-3 text-[15px] font-semibold text-bg cursor-pointer border-0 hover:bg-accent/90 active:bg-accent/80 disabled:opacity-50 disabled:cursor-default ${full ? "w-full" : ""}`;
   if (href) {
     return (
       <a className={cls} href={href}>
@@ -167,7 +184,7 @@ export function FilterPill({
   return (
     <button
       onClick={onClick}
-      className={`rounded-full border px-3 py-1 text-xs cursor-pointer ${active ? "border-accent bg-accent-dim text-accent" : "border-border bg-transparent text-muted hover:text-text"}`}
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border px-3 text-xs cursor-pointer active:bg-bg ${active ? "border-accent bg-accent-dim text-accent" : "border-border bg-transparent text-muted hover:text-text"}`}
     >
       {children}
     </button>
@@ -185,7 +202,7 @@ export function TableHead({
 }) {
   return (
     <div
-      className={`grid ${cols} gap-2 border-b border-border pb-2 text-[11px] uppercase tracking-[0.06em] text-faint`}
+      className={`grid ${cols} gap-2 border-b border-border pb-2 text-xs font-medium text-muted`}
     >
       {children}
     </div>
@@ -231,12 +248,16 @@ export function Note({
   );
 }
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 /** Right-side slide-over. Forms live here rather than in a modal so the page
  *  behind them stays readable while a customer fills one in.
  *
  *  A dialog for assistive tech and the keyboard: Escape and the close button
  *  both close it, focus moves into it on open and back to whatever opened it
- *  on close. Focus is not trapped; the overlay already blocks the page. */
+ *  on close. Tab and Shift+Tab cycle inside the panel: it is aria-modal, so a
+ *  screen reader treats the page behind as gone, and focus must not reach it. */
 export function Drawer({
   title,
   subtitle,
@@ -261,6 +282,19 @@ export function Drawer({
     panel.current?.focus();
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") close.current();
+      if (e.key === "Tab") keepFocusInside(e);
+    }
+    function keepFocusInside(e: KeyboardEvent) {
+      const root = panel.current;
+      if (!root) return;
+      const focusable = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => el.getClientRects().length > 0
+      );
+      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const target = trappedFocusTarget(focusable, active, e.shiftKey);
+      if (target === null && focusable.length > 0) return;
+      e.preventDefault();
+      (target ?? root).focus();
     }
     document.addEventListener("keydown", onKey);
     return () => {
@@ -291,7 +325,7 @@ export function Drawer({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="-mr-2 -mt-2 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-muted hover:bg-bg hover:text-text"
+            className="-mr-2 -mt-2 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-muted hover:bg-bg hover:text-text active:bg-border"
           >
             <svg
               width="18"
@@ -358,7 +392,7 @@ export function ErrorState({
         <button
           type="button"
           onClick={onRetry}
-          className="min-h-11 cursor-pointer rounded-lg border border-border bg-transparent px-4 text-sm font-semibold text-text hover:bg-bg"
+          className="min-h-11 cursor-pointer rounded-lg border border-border bg-transparent px-4 text-sm font-semibold text-text hover:bg-bg active:bg-border"
         >
           Try again
         </button>
