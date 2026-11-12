@@ -9,7 +9,6 @@ import {
 import { api, errorText, formatCents, savingsNote } from "../lib/api";
 import {
   Card,
-  CardTitle,
   Chip,
   ErrorState,
   H1,
@@ -21,6 +20,7 @@ import {
   SkeletonCards,
   StatCard,
 } from "../components/ui";
+import { CONNECTION_GRID, ConnectionTile } from "../components/connection-tile";
 
 interface AuthUser {
   email: string;
@@ -306,25 +306,14 @@ export default function Dashboard() {
           savings are.
         </p>
 
-        <Card className="mb-5">
-          <CardTitle>Connected</CardTitle>
-          <div className="flex flex-col">
-            {connections.map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center justify-between border-b border-border py-2.5 last:border-0"
-              >
-                <div>
-                  <span className="font-medium capitalize">{c.provider}</span>
-                  <span className="ml-2 text-sm text-muted">{c.label}</span>
-                </div>
-                <Chip tone={c.status === "valid" ? "ok" : "danger"}>
-                  {c.status}
-                </Chip>
-              </div>
-            ))}
-          </div>
-        </Card>
+        {/* One tile per connection, the same tiles as /connections. Each
+            links there, where verify, replace and remove live. */}
+        <h2 className="mb-3 text-base font-semibold">Connected</h2>
+        <ul aria-label="Connected" className={`${CONNECTION_GRID} mb-6`}>
+          {connections.map((c) => (
+            <ConnectionTile key={c.id} c={c} href="/connections" />
+          ))}
+        </ul>
 
         <div className="rounded-xl border border-border bg-surface p-7 text-center">
           <h3 className="mb-2 text-[19px] font-semibold">

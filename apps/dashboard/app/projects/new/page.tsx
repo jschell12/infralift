@@ -93,9 +93,15 @@ function NewProject() {
               Change starting point
             </Link>
           </div>
-          <div className={CARD}>
-            <StartPanel start={chosen.key} assess={params.get("assess")} onCreated={() => router.push("/projects")} />
-          </div>
+          {/* Adopt is a grid of account tiles, so it gets no card around it;
+              the stack and import forms sit in one. */}
+          {chosen.key === "adopt" ? (
+            <AssessPanel highlight={params.get("assess")} />
+          ) : (
+            <div className={CARD}>
+              <StartPanel start={chosen.key} onCreated={() => router.push("/projects")} />
+            </div>
+          )}
         </section>
       )}
     </>
@@ -119,16 +125,7 @@ function StartingPointPicker() {
   );
 }
 
-function StartPanel({
-  start,
-  assess,
-  onCreated,
-}: {
-  start: StartingPoint;
-  assess: string | null;
-  onCreated: () => void;
-}) {
-  if (start === "adopt") return <AssessPanel highlight={assess} />;
+function StartPanel({ start, onCreated }: { start: Exclude<StartingPoint, "adopt">; onCreated: () => void }) {
   if (start === "terraform") return <ImportPanel onCreated={onCreated} />;
   return <StackStart onCreated={onCreated} />;
 }

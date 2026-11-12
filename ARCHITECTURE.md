@@ -61,7 +61,7 @@ Lists and creation are separate pages; a drawer is only for a small action on an
 | --- | --- |
 | `/projects` | The project list, with a "New project" link. A stack project's settings open in a drawer |
 | `/projects/new` | Three starting points, in ADR 0010's order; the choice is in the URL (`?start=adopt\|stack\|terraform`). Old `/projects?start=...` and `?assess=` links redirect here (`lib/new-project.ts`) |
-| `/connections` | One tile per connection, Terraform Cloud included, with verify, replace (a drawer) and remove |
+| `/connections` | One tile per connection, Terraform Cloud included, with verify, replace (a drawer) and remove. The tile is `components/connection-tile.tsx`; the dashboard home and the adopt step of `/projects/new` show connections with the same tile, never as rows inside one card |
 | `/connections/new` | Pick a type, then only that type's fields and setup help (`?type=aws`). Every type is stored through `createConnection()` in `apps/dashboard/lib/connections.ts`, which sends Terraform Cloud to `POST /workspaces/connections` and the rest to `POST /connections` |
 
 ## Patterns, and where to see them

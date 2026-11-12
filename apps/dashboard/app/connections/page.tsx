@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ProviderConnectionSummary } from "@infralift/shared";
 import { api, errorText } from "../../lib/api";
-import { connectionName, connectionStatus, connectionTypeInfo, isCloudAccount, TFC } from "../../lib/connections";
+import { connectionName, connectionTypeInfo, isCloudAccount, TFC } from "../../lib/connections";
+import { CONNECTION_GRID, ConnectionTile } from "../../components/connection-tile";
 import {
   CARD,
-  Chip,
   Drawer,
   ErrorState,
   H1,
@@ -109,19 +109,13 @@ function ReplaceDrawer({
   );
 }
 
-function formatVerified(iso: string | null): string {
-  if (!iso) return "Not verified yet";
-  return `Last verified ${new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`;
-}
-
-/** One connection: what it is, what state it is in and why, and the three
- *  ways to act on it. Remove asks once, inline, before it deletes. */
-function ConnectionTile({ c, onChanged }: { c: ProviderConnectionSummary; onChanged: () => void }) {
+/** One connection's tile with the three ways to act on it. Remove asks once,
+ *  inline, before it deletes. */
+function ManagedConnectionTile({ c, onChanged }: { c: ProviderConnectionSummary; onChanged: () => void }) {
   const [busy, setBusy] = useState<null | "verify" | "remove">(null);
   const [error, setError] = useState<string | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const status = connectionStatus(c);
 
   async function act(kind: "verify" | "remove", path: string, method: string) {
     setBusy(kind);
@@ -137,55 +131,42 @@ function ConnectionTile({ c, onChanged }: { c: ProviderConnectionSummary; onChan
     }
   }
 
-  return (
-    <li className={`${CARD} flex min-w-0 flex-col p-5`}>
-      <div className="mb-1 flex items-start gap-2">
-        <h2 className="min-w-0 flex-1 text-base font-semibold break-words">{connectionName(c.provider)}</h2>
-        <Chip tone={status.tone}>{status.text}</Chip>
-      </div>
-      <div className="mb-1 text-sm text-muted break-words">{c.label}</div>
-      <div className="text-xs text-faint">{formatVerified(c.lastVerifiedAt)}</div>
-      {c.status === "invalid" && c.lastError && (
-        <div className="mt-2 text-xs text-danger break-words">{c.lastError}</div>
+  const actions = (
+    <>
+      {confirming ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-full text-xs text-muted">Remove &quot;{c.label}&quot; and its stored credential?</span>
+          <button
+            type="button"
+            className={SMALL_BTN_DANGER}
+            disabled={busy !== null}
+            onClick={() => void act("remove", `/connections/${c.id}`, "DELETE")}
+          >
+            {busy === "remove" ? "Removing..." : "Remove"}
+          </button>
+          <button type="button" className={SMALL_BTN} disabled={busy !== null} onClick={() => setConfirming(false)}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={SMALL_BTN}
+            disabled={busy !== null}
+            onClick={() => void act("verify", `/connections/${c.id}/verify`, "POST")}
+          >
+            {busy === "verify" ? "Verifying..." : "Verify"}
+          </button>
+          <button type="button" className={SMALL_BTN} disabled={busy !== null} onClick={() => setReplacing(true)}>
+            Replace
+          </button>
+          <button type="button" className={SMALL_BTN} disabled={busy !== null} onClick={() => setConfirming(true)}>
+            Remove
+          </button>
+        </div>
       )}
-
-      <div className="mt-auto pt-4">
-        {confirming ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="w-full text-xs text-muted">Remove &quot;{c.label}&quot; and its stored credential?</span>
-            <button
-              type="button"
-              className={SMALL_BTN_DANGER}
-              disabled={busy !== null}
-              onClick={() => void act("remove", `/connections/${c.id}`, "DELETE")}
-            >
-              {busy === "remove" ? "Removing..." : "Remove"}
-            </button>
-            <button type="button" className={SMALL_BTN} disabled={busy !== null} onClick={() => setConfirming(false)}>
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={SMALL_BTN}
-              disabled={busy !== null}
-              onClick={() => void act("verify", `/connections/${c.id}/verify`, "POST")}
-            >
-              {busy === "verify" ? "Verifying..." : "Verify"}
-            </button>
-            <button type="button" className={SMALL_BTN} disabled={busy !== null} onClick={() => setReplacing(true)}>
-              Replace
-            </button>
-            <button type="button" className={SMALL_BTN} disabled={busy !== null} onClick={() => setConfirming(true)}>
-              Remove
-            </button>
-          </div>
-        )}
-        {error && <div role="alert" className="mt-2 text-xs text-danger">{error}</div>}
-      </div>
-
+      {error && <div role="alert" className="mt-2 text-xs text-danger">{error}</div>}
       {replacing && (
         <ReplaceDrawer
           c={c}
@@ -196,11 +177,11 @@ function ConnectionTile({ c, onChanged }: { c: ProviderConnectionSummary; onChan
           }}
         />
       )}
-    </li>
+    </>
   );
-}
 
-const GRID = "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3";
+  return <ConnectionTile c={c} actions={actions} />;
+}
 
 export default function ConnectionsPage() {
   const [connections, setConnections] = useState<ProviderConnectionSummary[] | null>(null);
@@ -241,7 +222,7 @@ export default function ConnectionsPage() {
       )}
 
       {connections === null && !error && (
-        <ul role="status" aria-label="Loading connections" className={GRID}>
+        <ul role="status" aria-label="Loading connections" className={CONNECTION_GRID}>
           {[0, 1, 2].map((i) => (
             <li key={i} className={`${CARD} p-5`}>
               <Skeleton className="h-4 w-1/2 mb-3" />
@@ -269,9 +250,9 @@ export default function ConnectionsPage() {
 
       {connections !== null && connections.length > 0 && (
         <>
-          <ul className={GRID} aria-label="Connections">
+          <ul className={CONNECTION_GRID} aria-label="Connections">
             {connections.map((c) => (
-              <ConnectionTile key={c.id} c={c} onChanged={() => void load()} />
+              <ManagedConnectionTile key={c.id} c={c} onChanged={() => void load()} />
             ))}
           </ul>
           {hasCloudAccount && (
