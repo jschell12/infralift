@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { listProviders } from "../lib/providers";
+import { THEME_BOOT_SCRIPT } from "../lib/theme";
 import "./globals.css";
 
 const TITLE = "infralift | bring click-ops infrastructure under Terraform";
@@ -51,7 +52,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Sets data-theme before the first paint so the page never flashes
+            the wrong palette. Built from lib/theme.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body>
         {children}
         <script dangerouslySetInnerHTML={{ __html: BEACON }} />

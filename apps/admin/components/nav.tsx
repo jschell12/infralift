@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import { ThemeControl } from "./theme-control";
+
 const ITEMS = [
   { href: "/", label: "Overview" },
   { href: "/leads", label: "Leads" },
@@ -108,6 +110,7 @@ export function AdminNav() {
         {open ? (
           <div className="border-t border-border px-3 py-3">
             <NavLinks pathname={pathname} onNavigate={() => setOpen(false)} />
+            <ThemeControl className="mt-3 border-t border-border px-3 pt-3" />
           </div>
         ) : null}
       </header>
@@ -117,6 +120,7 @@ export function AdminNav() {
           <Wordmark />
         </div>
         <NavLinks pathname={pathname} />
+        <ThemeControl className="mt-auto flex-wrap px-3 pt-6" />
       </aside>
     </>
   );

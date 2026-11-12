@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AppNav } from "../components/sidebar-nav";
+import { THEME_BOOT_SCRIPT } from "../lib/theme";
 
 export const metadata: Metadata = {
   title: "infralift",
@@ -13,7 +14,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Sets data-theme before the first paint so the page never flashes
+            the wrong palette. Built from lib/theme.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body>
         <div className="min-h-screen md:flex">
           <AppNav />

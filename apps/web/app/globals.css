@@ -1,57 +1,57 @@
 @import "tailwindcss";
 
-/* Palette chosen 2026-11-11, the same in all three apps. Dark is the default
-   and light follows the OS setting. Two quiet colors (bg, surface, border and
-   text, muted, faint) and one accent, which belongs to the primary action and
-   nothing else. Success states stay neutral; only warn and danger carry color.
-   apps/web/lib/palette.test.ts asserts every ratio quoted here, for all three
-   files, so an edit that drops a pair below AA fails CI.
+/* Palette chosen 2026-11-11, the same in all three apps. Two quiet colors
+   (bg, surface, border and text, muted, faint) and one accent, which belongs
+   to the primary action and nothing else. Success states stay neutral; only
+   warn and danger carry color. apps/web/lib/palette.test.ts asserts every
+   ratio quoted here, for all three files, so an edit that drops a pair below
+   AA fails CI.
+
+   Each token is light-dark(LIGHT, DARK), so there is one table and no copy to
+   drift. Which half applies follows color-scheme, set below from
+   <html data-theme>: the inline script in app/layout.tsx picks light from
+   07:00 to 19:00 on the viewer's clock and dark otherwise, unless they chose
+   one (lib/theme.ts). light-dark() needs Safari 17.5, Chrome 123, Firefox 120.
 
    faint is muted pulled toward the surface until it sits just above AA:
    dark #858881 is 5.15:1 on bg, 4.74:1 on surface; light #696d66 is 4.75:1 on
    bg, 5.06:1 on surface. control is the border of a form field, at 3:1 on both
    backgrounds (WCAG 1.4.11); border is a hairline and is not meant to be. */
 @theme {
-  --color-bg: #111412;
-  --color-surface: #191d1a;
-  --color-border: #2a2f2b;
-  --color-control: #676a64;
-  --color-text: #e8e6df;
-  --color-muted: #a4a69e;
-  --color-faint: #858881;
-  --color-accent: #4cc38a;
-  --color-on-accent: #111412;
-  --color-accent-dim: #1c3428;
-  --color-warn: #d4a72c;
-  --color-warn-dim: #342e17;
-  --color-danger: #e5534b;
-  --color-danger-dim: #241918;
+  --color-bg: light-dark(#f4f3ee, #111412);
+  --color-surface: light-dark(#fbfaf7, #191d1a);
+  --color-border: light-dark(#dad8d0, #2a2f2b);
+  --color-control: light-dark(#888b84, #676a64);
+  --color-text: light-dark(#111412, #e8e6df);
+  --color-muted: light-dark(#5a5e57, #a4a69e);
+  --color-faint: light-dark(#696d66, #858881);
+  --color-accent: light-dark(#1b7f53, #4cc38a);
+  --color-on-accent: light-dark(#ffffff, #111412);
+  --color-accent-dim: light-dark(#e0ebe3, #1c3428);
+  --color-warn: light-dark(#8a5d00, #d4a72c);
+  --color-warn-dim: light-dark(#ede7d9, #342e17);
+  --color-danger: light-dark(#b8322a, #e5534b);
+  --color-danger-dim: light-dark(#f3e2de, #241918);
 }
 
-html {
-  /* Native controls (select menus, scrollbars, date pickers) follow the mode. */
+/* color-scheme picks the light-dark() half and also themes native controls
+   (select menus, scrollbars, date pickers). */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* No data-theme means the script never ran (JavaScript off): follow the OS,
+   dark unless it asks for light, as before the clock. */
+:root:not([data-theme]) {
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: light) {
-  :root {
-    --color-bg: #f4f3ee;
-    --color-surface: #fbfaf7;
-    --color-border: #dad8d0;
-    --color-control: #888b84;
-    --color-text: #111412;
-    --color-muted: #5a5e57;
-    --color-faint: #696d66;
-    --color-accent: #1b7f53;
-    --color-on-accent: #ffffff;
-    --color-accent-dim: #e0ebe3;
-    --color-warn: #8a5d00;
-    --color-warn-dim: #ede7d9;
-    --color-danger: #b8322a;
-    --color-danger-dim: #f3e2de;
-  }
-
-  html {
+  :root:not([data-theme]) {
     color-scheme: light;
   }
 }
