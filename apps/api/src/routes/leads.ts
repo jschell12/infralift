@@ -1,10 +1,16 @@
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { InvalidInput, NotFound, handle } from "../lib/errors.js";
+import { isRecordNotFound } from "../lib/prisma-errors.js";
+import { intQuery } from "../lib/query.js";
 
 export const leadsRouter = Router();
 
 const VALID_STATUSES = ["new", "contacted", "dismissed", "converted"] as const;
+
+// ?days= look-back window and ?limit= page size. Out of range is a 400.
+const DAYS = { name: "days", fallback: 7, min: 1, max: 3650 };
+const LIMIT = { name: "limit", fallback: 100, min: 1, max: 500 };
 
 // List classified community leads with filtering.
 leadsRouter.get("/", handle(async (req, res) => {
@@ -17,8 +23,8 @@ leadsRouter.get("/", handle(async (req, res) => {
   const status = req.query.status
     ? String(req.query.status)
     : undefined;
-  const days = req.query.days ? Number(req.query.days) : 7;
-  const limit = req.query.limit ? Math.min(Number(req.query.limit), 500) : 100;
+  const days = intQuery(req.query.days, DAYS);
+  const limit = intQuery(req.query.limit, LIMIT);
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
@@ -41,7 +47,7 @@ leadsRouter.get("/", handle(async (req, res) => {
 
 // Summary counts by classification and status.
 leadsRouter.get("/summary", handle(async (req, res) => {
-  const days = req.query.days ? Number(req.query.days) : 7;
+  const days = intQuery(req.query.days, DAYS);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
   const [classificationCounts, statusCounts] = await Promise.all([
@@ -195,10 +201,7 @@ leadsRouter.patch("/:id", handle(async (req, res) => {
     });
     res.json(updated);
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
-    if (message.includes("Record to update not found")) {
-      throw new NotFound("Lead not found");
-    }
+    if (isRecordNotFound(e)) throw new NotFound("Lead not found");
     throw e;
   }
 }));
@@ -220,7 +223,7 @@ const INBOUND_STATUSES = [
 // /leads/summary mean two different things.
 leadsRouter.get("/inbound", handle(async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
-  const limit = Math.min(Number(req.query.limit) || 100, 500);
+  const limit = intQuery(req.query.limit, LIMIT);
 
   const leads = await prisma.inboundLead.findMany({
     where: status ? { status } : undefined,
@@ -255,9 +258,7 @@ leadsRouter.patch("/inbound/:id", handle(async (req, res) => {
     });
     res.json(lead);
   } catch (err) {
-    if (err instanceof Error && err.message.includes("Record to update not found")) {
-      throw new NotFound("lead not found");
-    }
+    if (isRecordNotFound(err)) throw new NotFound("lead not found");
     throw err;
   }
 }));

@@ -107,10 +107,26 @@ export async function createTemplateProject(orgId: string, input: TemplateProjec
   });
 }
 
-/** A project's renderings. Scoped by org: a project id is guessable, and its
- *  renderings carry the customer's infrastructure. */
+/** A project's renderings, newest 50, without their bodies: a list is for
+ *  choosing one, and GET /tf/jobs/:id returns the body of the rendering a job
+ *  wrote. Scoped by org: a project id is guessable, and its renderings carry
+ *  the customer's infrastructure. */
 export async function listRenderings(orgId: string, projectId: string) {
   const project = await prisma.tfProject.findFirst({ where: { id: projectId, orgId }, select: { id: true } });
   if (!project) throw new NotFound("project not found");
-  return prisma.tfRendering.findMany({ where: { projectId: project.id }, orderBy: { createdAt: "desc" } });
+  return prisma.tfRendering.findMany({
+    where: { projectId: project.id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      projectId: true,
+      templateVersionId: true,
+      fileName: true,
+      argumentsJson: true,
+      commitSha: true,
+      managed: true,
+      createdAt: true,
+    },
+  });
 }

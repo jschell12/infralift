@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
 import { Conflict, InvalidInput, NotFound } from "../lib/errors.js";
+import { enqueueJob, insertJob } from "../lib/jobs/enqueue.js";
 import { startJob } from "../lib/jobs/start.js";
 import { TfInputValidationError, type TfArguments } from "../lib/tf/render.js";
 import { TfcConnectionError, loadTfcConnection } from "../lib/tf/tfc-connection.js";
@@ -90,10 +91,8 @@ function deliveryMismatch(stack: StackManifest, host: GitHost, asked: unknown): 
   );
 }
 
-async function queueStackJob(projectId: string, settings: TfArguments) {
-  const job = await prisma.tfJob.create({ data: { projectId, kind: "stack", argumentsJson: settings } });
-  startJob(job.id);
-  return job;
+function queueStackJob(projectId: string, settings: TfArguments) {
+  return enqueueJob({ projectId, kind: "stack", argumentsJson: settings });
 }
 
 // -- preview ----------------------------------------------------------------------
@@ -227,9 +226,16 @@ export async function updateStackSettings(
     renderStack(stack, s);
     return s;
   });
-  const updated = await prisma.tfProject.update({
-    where: { id: project.id },
-    data: { providerConfig: settings, tfcConnectionId: tfc.tfcConnectionId },
-  });
-  return { project: updated, job: await queueStackJob(project.id, settings) };
+  // One transaction, so settings are not saved when the job is refused
+  // because one is already running: the dashboard would show settings that
+  // nothing rendered.
+  const { updated, job } = await prisma.$transaction(async (tx) => ({
+    updated: await tx.tfProject.update({
+      where: { id: project.id },
+      data: { providerConfig: settings, tfcConnectionId: tfc.tfcConnectionId },
+    }),
+    job: await insertJob({ projectId: project.id, kind: "stack", argumentsJson: settings }, tx),
+  }));
+  startJob(job.id);
+  return { project: updated, job };
 }

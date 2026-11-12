@@ -14,13 +14,15 @@ const h = vi.hoisted(() => ({
   runJob: vi.fn(async () => {}),
 }));
 
-vi.mock("../lib/db.js", () => ({
-  prisma: {
+vi.mock("../lib/db.js", () => {
+  const prisma = {
     tfProject: { findFirst: h.findFirst, create: h.projectCreate, update: h.projectUpdate },
     tfJob: { create: h.jobCreate },
     providerConnection: { findFirst: h.connFindFirst },
-  },
-}));
+  };
+  // An interactive transaction runs its callback against the same stubs.
+  return { prisma: { ...prisma, $transaction: (fn: (tx: typeof prisma) => unknown) => fn(prisma) } };
+});
 vi.mock("../lib/jobs/start.js", () => ({ startJob: h.runJob }));
 vi.mock("../lib/tf/tfc-connection.js", () => {
   class TfcConnectionError extends Error {}
@@ -232,6 +234,18 @@ describe("PUT /stacks/projects/:id/settings", () => {
     });
   });
 
+  it("409s while the project already has a job going, and starts nothing", async () => {
+    // Migration 0028's partial unique index refuses a second active job.
+    h.jobCreate.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("dup", { code: "P2002", clientVersion: "x" }));
+    h.findFirst.mockResolvedValueOnce(project);
+    const out = await call("put", "/stacks/projects/:id/settings", {
+      params: { id: "p1" },
+      body: { arguments: { ...example, server_type: "cx33" } },
+    });
+    expect(out).toMatchObject({ status: 409, body: { error: "a job is already running for this project" } });
+    expect(h.runJob).not.toHaveBeenCalled();
+  });
+
   it("takes tfc_organization from the Terraform Cloud connection, not from what was typed", async () => {
     h.findFirst.mockResolvedValueOnce(project);
     const out = await call("put", "/stacks/projects/:id/settings", {
@@ -298,5 +312,22 @@ describe("project names", () => {
       expect(out.status, name).toBe(400);
     }
     expect(h.projectCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /tf/jobs", () => {
+  it("409s a second job while one is pending or running, and starts nothing", async () => {
+    h.findFirst.mockResolvedValueOnce({ id: "p1", orgId: "org-a", source: "template", providerConfig: {} });
+    h.jobCreate.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("dup", { code: "P2002", clientVersion: "x" }));
+    const out = await call("post", "/jobs", { body: { projectId: "p1", arguments: {} } });
+    expect(out).toMatchObject({ status: 409, body: { error: "a job is already running for this project" } });
+    expect(h.runJob).not.toHaveBeenCalled();
+  });
+
+  it("queues and starts the job when none is going", async () => {
+    h.findFirst.mockResolvedValueOnce({ id: "p1", orgId: "org-a", source: "template", providerConfig: {} });
+    const out = await call("post", "/jobs", { body: { projectId: "p1", arguments: { region: "fsn1" } } });
+    expect(out.status).toBe(202);
+    expect(h.runJob).toHaveBeenCalledWith("job1");
   });
 });

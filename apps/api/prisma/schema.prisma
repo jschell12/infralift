@@ -97,6 +97,11 @@ model Assessment {
   inventory  InventoryItem[]
   findings   Finding[]
   tfProjects TfProject[]
+
+  @@index([orgId, createdAt])
+  @@index([connectionId])
+  // refuseConcurrentRun (services/assessments.ts).
+  @@index([orgId, connectionId, status])
 }
 
 model InventoryItem {
@@ -111,6 +116,8 @@ model InventoryItem {
   metadata         Json?
 
   assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([assessmentId])
 }
 
 model Finding {
@@ -124,6 +131,8 @@ model Finding {
   resourceRef         String?
 
   assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([assessmentId])
 }
 
 model Migration {
@@ -140,6 +149,8 @@ model Migration {
 
   org    Org              @relation(fields: [orgId], references: [id])
   phases MigrationPhase[]
+
+  @@index([orgId, createdAt])
 }
 
 model MigrationPhase {
@@ -576,6 +587,11 @@ model TfJob {
 
   @@index([projectId, createdAt])
   @@index([status, claimedAt])
+  // Also: a partial unique index, "TfJob_projectId_active_key", on
+  // (projectId) WHERE status IN ('pending', 'running'): one active job per
+  // project. Prisma cannot declare a partial index, so it exists only in
+  // migration 0028. If `prisma migrate dev` ever generates a migration that
+  // drops it, delete that statement from the generated file.
 }
 
 // Communities and forums where infralift's target audience discusses

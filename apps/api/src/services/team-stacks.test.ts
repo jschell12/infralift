@@ -34,7 +34,8 @@ const dup = () => new Prisma.PrismaClientKnownRequestError("dup", { code: "P2002
 const withVersions = (s: Row, include?: Row) => {
   if (!include?.versions) return { ...s };
   const vs = db.stackVersion.filter((v) => v.stackSourceId === s.id).sort((a, b) => a.createdAt - b.createdAt);
-  return { ...s, versions: include.versions.orderBy?.createdAt === "desc" ? vs.reverse() : vs };
+  const ordered = include.versions.orderBy?.createdAt === "desc" ? vs.reverse() : vs;
+  return { ...s, versions: include.versions.take ? ordered.slice(0, include.versions.take) : ordered };
 };
 
 const prisma = {
@@ -67,6 +68,7 @@ const prisma = {
       return v;
     },
     count: async ({ where }: Row) => db.stackVersion.filter((r) => matches(r, where)).length,
+    findMany: async ({ where }: Row) => db.stackVersion.filter((r) => matches(r, where)),
     findFirst: async ({ where }: Row) =>
       db.stackVersion.filter((r) => matches(r, where)).sort((a, b) => b.createdAt - a.createdAt)[0] ?? null,
   },

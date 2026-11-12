@@ -4,7 +4,9 @@ import { toInventoryItem } from "../lib/inventory.js";
 import { isAdmin } from "../lib/cf-auth.js";
 import { createRateLimiter } from "../lib/rate-limit.js";
 import { Conflict, InvalidInput, NotFound, TooManyRequests } from "../lib/errors.js";
+import { insertJob } from "../lib/jobs/enqueue.js";
 import { startJob } from "../lib/jobs/start.js";
+import { isUniqueViolation } from "../lib/prisma-errors.js";
 import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
 import { toCodegenSample } from "../lib/tf/sample.js";
 
@@ -134,7 +136,8 @@ export interface ApproveInput {
  *
  * Re-approving the same assessment and target reuses the codegen project and
  * adds a job, so the repository converges rather than forking into a second
- * project. A same-named project of any other kind is a conflict.
+ * project. A same-named project of any other kind is a conflict, and so is
+ * re-approving while that project's last job is still running.
  */
 export async function approveMigration(orgId: string, input: ApproveInput) {
   const assessment = await prisma.assessment.findFirst({
@@ -153,43 +156,51 @@ export async function approveMigration(orgId: string, input: ApproveInput) {
         : `project "${name}" already exists for a different assessment`
     );
   }
-  const project = existing
-    ? await prisma.tfProject.update({
-        where: { id: existing.id },
-        data: {
-          destRepo: input.repo,
-          destPath: input.destPath,
-          destBranch: input.destBranch,
-          migrationTarget: input.migrationTarget,
-        },
-      })
-    : await prisma.tfProject.create({
-        data: {
-          orgId,
-          name,
-          source: "codegen",
-          assessmentId: assessment.id,
-          migrationTarget: input.migrationTarget,
-          destRepo: input.repo,
-          destPath: input.destPath,
-          destBranch: input.destBranch,
-          // Codegen writes its own versions.tf and provider.tf, so this is
-          // recorded for reference rather than used to render a provider file.
-          providerConfig: { name: input.migrationTarget, target: input.migrationTarget, source: assessment.provider },
-        },
-      });
-  const job = await prisma.tfJob.create({
-    data: {
-      projectId: project.id,
-      kind: "codegen",
-      argumentsJson: {
-        backend: input.backend,
-        ...(input.tfcOrg ? { tfcOrg: input.tfcOrg } : {}),
-        ...(input.s3Bucket ? { s3Bucket: input.s3Bucket } : {}),
-        ...(input.s3Endpoint ? { s3Endpoint: input.s3Endpoint } : {}),
-      },
-    },
-  });
-  startJob(job.id);
-  return { project, job };
+  const jobArguments = {
+    backend: input.backend,
+    ...(input.tfcOrg ? { tfcOrg: input.tfcOrg } : {}),
+    ...(input.s3Bucket ? { s3Bucket: input.s3Bucket } : {}),
+    ...(input.s3Endpoint ? { s3Endpoint: input.s3Endpoint } : {}),
+  };
+  // The project change and the job are one transaction: a re-approval refused
+  // because a job is already running leaves the project as it was.
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      const project = existing
+        ? await tx.tfProject.update({
+            where: { id: existing.id },
+            data: {
+              destRepo: input.repo,
+              destPath: input.destPath,
+              destBranch: input.destBranch,
+              migrationTarget: input.migrationTarget,
+            },
+          })
+        : await tx.tfProject.create({
+            data: {
+              orgId,
+              name,
+              source: "codegen",
+              assessmentId: assessment.id,
+              migrationTarget: input.migrationTarget,
+              destRepo: input.repo,
+              destPath: input.destPath,
+              destBranch: input.destBranch,
+              // Codegen writes its own versions.tf and provider.tf, so this is
+              // recorded for reference rather than used to render a provider file.
+              providerConfig: { name: input.migrationTarget, target: input.migrationTarget, source: assessment.provider },
+            },
+          });
+      const job = await insertJob({ projectId: project.id, kind: "codegen", argumentsJson: jobArguments }, tx);
+      return { project, job };
+    });
+  } catch (err) {
+    // Two approvals at once both found no project above and both tried to
+    // create it; the second hit the (orgId, name) unique key.
+    if (isUniqueViolation(err)) throw new Conflict(`project "${name}" was just created by another request; reload and try again`);
+    throw err;
+  }
+  startJob(result.job.id);
+  return result;
 }

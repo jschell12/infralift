@@ -31,9 +31,22 @@ const rotateSchema = z.object({
 // List connections for the authenticated user's org.
 connectionsRouter.get("/", handle(async (req, res) => {
   const { orgId } = req.user!;
+  // Only the columns the summary shows, so the encrypted token is never read
+  // for a list. Newest 200: a ceiling, not a page size.
   const connections = await prisma.providerConnection.findMany({
     where: { orgId },
     orderBy: { createdAt: "desc" },
+    take: 200,
+    select: {
+      id: true,
+      provider: true,
+      label: true,
+      status: true,
+      createdAt: true,
+      lastVerifiedAt: true,
+      lastError: true,
+      expiresAt: true,
+    },
   });
   res.json(connections.map(toSummary));
 }));

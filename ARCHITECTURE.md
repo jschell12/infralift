@@ -70,6 +70,7 @@ Each is a well-known pattern, used under its usual name.
 | **Compare-and-set** | The queue's claim (`lib/jobs/queue.ts`), the drift claim (`services/drift.ts`), the stuck-work sweeps: an `updateMany` whose `WHERE` is the expected state, and the row count says who won | Two processes, or a sweep and a runner, cannot both act on one row |
 | **Sliding-window rate limiter** | [`lib/rate-limit.ts`](apps/api/src/lib/rate-limit.ts) `createRateLimiter()`, used by `/intake/lead`, `/intake/estimate` and codegen (`services/codegen.ts`) | One implementation of the window, the sweep and the per-caller bucket |
 | **Bulkhead (worker pool)** | [`lib/stacks/team.ts`](apps/api/src/lib/stacks/team.ts): `acquireRenderSlot()` caps concurrent team-stack trial renders and the queue behind them | A burst of stack checks cannot take every core |
+| **Unique index as the guard** | Migration 0028's partial unique index on `TfJob(projectId) WHERE status IN ('pending','running')`, mapped to 409 in [`lib/jobs/enqueue.ts`](apps/api/src/lib/jobs/enqueue.ts); `User.email` in first-login provisioning (`lib/cf-auth.ts`). P2002/P2025 are named in [`lib/prisma-errors.ts`](apps/api/src/lib/prisma-errors.ts) | A check-then-insert lets two simultaneous requests both through; the database refuses the second one |
 | **Shared contract** | [`lib/import/contract.ts`](apps/api/src/lib/import/contract.ts): the messages the import workflow writes and infralift reads back | Writer and reader cannot drift; a test fails if one changes alone |
 
 ## Flows
@@ -82,7 +83,7 @@ A response never carries a provider's or a library's own error text: a 5xx logs 
 
 ### A job
 
-Creating a stack project, importing a module, adopting resources, approving a migration or saving settings each create a `TfJob` row and call `startJob()`:
+Creating a stack project, importing a module, adopting resources, approving a migration or saving settings each create a `TfJob` row through `enqueueJob()` / `insertJob()` (`lib/jobs/enqueue.ts`) and call `startJob()`. A project has at most one job pending or running: a second one (a double-click, a second tab) is a 409, "a job is already running for this project". Where the same request also changes the project (stack settings, re-approving a migration), the change and the job insert share a transaction, so a refused job leaves the project as it was.
 
 1. The queue claims the row for this process (`lib/jobs/queue.ts`).
 2. The pipeline runs it (`lib/tf/pipeline.ts`), one runner per job kind: `stack`, `import`, `codegen`, `template`.
@@ -125,7 +126,7 @@ Two routes sit above `cfAuth` in `app.ts`, so they have no tenant and no session
 
 ### First login
 
-There is no sign-up form. The first time Cloudflare Access lets an email through, `cfAuth` (`lib/cf-auth.ts`) creates a user and an org named after it ("<name>'s workspace"). Everything after that is scoped to that org.
+There is no sign-up form. The first time Cloudflare Access lets an email through, `cfAuth` (`lib/cf-auth.ts`) creates a user and an org named after it ("<name>'s workspace"). Everything after that is scoped to that org. Emails are stored trimmed and lowercased. The first page load sends several requests at once; the org and user are created in one transaction, and the requests that lose the race on `User.email` roll back their org and read the winner's row, so one person gets one org.
 
 ## Failure modes
 
@@ -136,6 +137,8 @@ What happens when something infralift depends on is slow, down or restarts.
 - **Stuck jobs.** The job worker's sweep (every 15s) fails any claimed job still unfinished 30 minutes after its claim (`failOverdueJobs`, "timed out ... start it again"). If the job was only slow and later finishes, the runner's own write replaces that message.
 - **Stuck assessments.** A token assessment runs inside its HTTP request. The same sweep fails assessments still `running` 30 minutes after they started (`failStuckAssessments` in `services/assessments.ts`, "timed out ... run it again"), which covers a request that died with its process.
 - **Shutdown.** On SIGTERM or SIGINT, `server.ts` stops accepting connections, stops claiming jobs (`drainJobs`), and waits up to `SHUTDOWN_DRAIN_MS` (default 25s) for in-flight requests and jobs before exiting. The orchestrator's kill timeout must be longer than that, or the process is killed mid-wait. A job cut off is marked "interrupted" by the next process at boot; an assessment cut off is failed by the sweep above.
+- **Large lists.** `GET /assessments` returns the newest 50 (`?limit` up to 50; the next page's cursor is in the `X-Next-Cursor` header, used as `?cursor=`), built from a fixed number of queries whatever the page holds (`listAssessmentSummaries`). Other lists are capped rather than paged, far above today's sizes: projects 200 (newest 20 renderings each, metadata only), renderings 50 without bodies, connections 200, migrations 100, workspaces 500, team stacks 200. Leads take `?days` and `?limit` as whole numbers in range, or 400.
+- **Template file names.** A template project renders into one file, `<project>.tf`, rewritten by each job. Before 0028 each job wrote `<project>-job-<id>.tf`, so a rerun declared every resource twice. A project that already has a rendering keeps writing its newest file name; older job files already in a repository have to be deleted there.
 - **Not retried automatically:** jobs (they write to customers' repositories, so a person decides), assessments (the customer runs them again), timed-out HTTP calls inside jobs and assessments. The drift sweep and the analytics rollup simply try again on their next tick.
 
 ## Security model

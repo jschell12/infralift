@@ -4,10 +4,7 @@ import { z } from "zod";
 import type {
   AssessmentCostProjectionRow,
   AssessmentRecommendation,
-  AssessmentStatus,
-  AssessmentSummary,
   MigrationPlan,
-  FindingSeverity,
   Provider,
 } from "@infralift/shared";
 import { PROVIDERS } from "@infralift/shared";
@@ -27,10 +24,14 @@ import { buildReportExtras } from "../lib/report-extras.js";
 import { buildMigrationPlan } from "../lib/migration-plan.js";
 import { InvalidInput, NotFound, Upstream, handle, parseBody } from "../lib/errors.js";
 import {
-  assessmentSavings,
+  ASSESSMENT_PAGE_SIZE,
+  listAssessmentSummaries,
   refuseConcurrentRun,
   setReportedSpend,
+  summarizeAssessment as summarize,
 } from "../services/assessments.js";
+import { toInventoryItem } from "../lib/inventory.js";
+import { intQuery } from "../lib/query.js";
 import { markInvalidOnAuthFailure } from "../services/connections.js";
 
 export const assessmentsRouter = Router();
@@ -49,36 +50,6 @@ const runSchema = z.object({
 const spendSchema = z.object({
   monthlyUsd: z.number().min(0.01).max(10_000_000).nullable(),
 });
-
-async function summarize(assessmentId: string): Promise<AssessmentSummary | null> {
-  const a = await prisma.assessment.findUnique({
-    where: { id: assessmentId },
-    include: { findings: { select: { severity: true } } },
-  });
-  if (!a) return null;
-  const findingCounts: Record<FindingSeverity, number> = {
-    info: 0,
-    low: 0,
-    medium: 0,
-    high: 0,
-  };
-  for (const f of a.findings) {
-    findingCounts[f.severity as FindingSeverity] =
-      (findingCounts[f.severity as FindingSeverity] ?? 0) + 1;
-  }
-  return {
-    id: a.id,
-    provider: a.provider as Provider,
-    status: a.status as AssessmentStatus,
-    startedAt: a.startedAt?.toISOString() ?? null,
-    completedAt: a.completedAt?.toISOString() ?? null,
-    resourceCount: a.resourceCount,
-    estimatedMonthlyCostCents: a.estimatedMonthlyCostCents,
-    ...(await assessmentSavings(a)),
-    findingCounts,
-    connectionId: a.connectionId,
-  };
-}
 
 /** Write inventory, findings and the completed status in one transaction.
  * Shared by the token path and the bundle path so the two cannot persist the
@@ -123,16 +94,16 @@ async function persistAssessmentResult(
   ]);
 }
 
-// List assessments for the authenticated user's org.
+// The org's assessments, newest first, one page at a time. The body stays a
+// plain array, as the dashboard reads it; the first page is the latest 50.
+// The next page's cursor travels in the X-Next-Cursor header, absent on the
+// last page: GET /assessments?cursor=<that id>.
 assessmentsRouter.get("/", handle(async (req, res) => {
-  const { orgId } = req.user!;
-  const assessments = await prisma.assessment.findMany({
-    where: { orgId },
-    orderBy: { createdAt: "desc" },
-    select: { id: true },
-  });
-  const summaries = await Promise.all(assessments.map((a) => summarize(a.id)));
-  res.json(summaries.filter(Boolean));
+  const limit = intQuery(req.query.limit, { name: "limit", fallback: ASSESSMENT_PAGE_SIZE, min: 1, max: ASSESSMENT_PAGE_SIZE });
+  const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : undefined;
+  const { summaries, nextCursor } = await listAssessmentSummaries(req.user!.orgId, { limit, cursor });
+  if (nextCursor) res.setHeader("X-Next-Cursor", nextCursor);
+  res.json(summaries);
 }));
 
 // Run an assessment against a connection. Synchronous for now — connector
@@ -278,15 +249,7 @@ assessmentsRouter.get("/:id/options", handle(async (req, res) => {
     provider: assessment.provider,
     estimatedMonthlyCostCents: assessment.estimatedMonthlyCostCents,
     reportedMonthlySpendCents: assessment.reportedMonthlySpendCents,
-    inventory: assessment.inventory.map((i) => ({
-      provider: i.provider as Provider,
-      type: i.type,
-      externalId: i.externalId,
-      name: i.name,
-      region: i.region ?? undefined,
-      monthlyCostCents: i.monthlyCostCents ?? undefined,
-      metadata: (i.metadata as Record<string, unknown> | null) ?? undefined,
-    })),
+    inventory: assessment.inventory.map(toInventoryItem),
   });
   res.json(report);
 }));
@@ -319,6 +282,7 @@ assessmentsRouter.get("/:id", handle(async (req, res) => {
     prisma.inventoryItem.findMany({ where: { assessmentId: req.params.id } }),
     prisma.finding.findMany({ where: { assessmentId: req.params.id } }),
   ]);
+  const inventoryItems = inventory.map(toInventoryItem);
 
   // The cost projection and recommendation are advertised as part of the
   // report and used to live only on the options page. They are derived from
@@ -337,15 +301,7 @@ assessmentsRouter.get("/:id", handle(async (req, res) => {
         provider: summary.provider,
         estimatedMonthlyCostCents: summary.estimatedMonthlyCostCents,
         reportedMonthlySpendCents: owned.reportedMonthlySpendCents,
-        inventory: inventory.map((i) => ({
-          provider: i.provider as Provider,
-          type: i.type,
-          externalId: i.externalId,
-          name: i.name,
-          region: i.region ?? undefined,
-          monthlyCostCents: i.monthlyCostCents ?? undefined,
-          metadata: (i.metadata as Record<string, unknown> | null) ?? undefined,
-        })),
+        inventory: inventoryItems,
       });
       const built = buildReportExtras(options);
 
@@ -364,15 +320,7 @@ assessmentsRouter.get("/:id", handle(async (req, res) => {
         migrationPlan: buildMigrationPlan({
           provider: summary.provider,
           target: planTargetName,
-          inventory: inventory.map((i) => ({
-            provider: i.provider as Provider,
-            type: i.type,
-            externalId: i.externalId,
-            name: i.name,
-            region: i.region ?? undefined,
-            monthlyCostCents: i.monthlyCostCents ?? undefined,
-            metadata: (i.metadata as Record<string, unknown> | null) ?? undefined,
-          })),
+          inventory: inventoryItems,
         }),
       };
     } catch (err) {
@@ -383,15 +331,7 @@ assessmentsRouter.get("/:id", handle(async (req, res) => {
   res.json({
     ...summary,
     ...extras,
-    inventory: inventory.map((i) => ({
-      provider: i.provider,
-      type: i.type,
-      externalId: i.externalId,
-      name: i.name,
-      region: i.region ?? undefined,
-      monthlyCostCents: i.monthlyCostCents ?? undefined,
-      metadata: (i.metadata as Record<string, unknown> | null) ?? undefined,
-    })),
+    inventory: inventoryItems,
     findings: findings.map((f) => ({
       id: f.id,
       category: f.category,
