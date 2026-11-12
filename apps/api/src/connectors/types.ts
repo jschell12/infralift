@@ -35,6 +35,15 @@ export interface VerifyResult {
   timedOut?: boolean;
 }
 
+/** What an assess() call should fetch. Cost data can be a metered call (AWS
+ *  Cost Explorer bills per request), and a caller that only needs the
+ *  inventory, such as the unmanaged view, asks for none. Connectors whose
+ *  cost data is free, or comes with the inventory, ignore it. */
+export interface AssessOptions {
+  /** Default true. False: no cost calls; estimatedMonthlyCostCents is null. */
+  costs?: boolean;
+}
+
 export interface Connector {
   provider: Provider;
   /** Verify the read-only token is valid. Never mutates provider state. */
@@ -44,5 +53,5 @@ export interface Connector {
    *  reason. */
   check?(token: string): Promise<VerifyResult>;
   /** Inventory resources + produce findings. Read-only API calls only. */
-  assess(token: string): Promise<ConnectorAssessment>;
+  assess(token: string, opts?: AssessOptions): Promise<ConnectorAssessment>;
 }

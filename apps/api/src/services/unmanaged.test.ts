@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
@@ -20,6 +21,22 @@ const ZONE_2 = cf.zonesPage2.result[0].id as string;
 const RECORD_2 = "9a7806061c88ada191ed06f989cc3dac";
 const dnsZone2 = { ...cf.dnsRecords, result: [{ ...cf.dnsRecords.result[0], id: RECORD_2, name: "example.org" }] };
 
+// GCP: connectors/__fixtures__/gcp-api.json, Google's documented response
+// shapes (its _source says so), served to the real gcp connector, which signs
+// a JWT with the service account key, so the key is generated here.
+const gcp = JSON.parse(readFileSync(new URL("../connectors/__fixtures__/gcp-api.json", import.meta.url), "utf8"));
+const GCP_KEY = JSON.stringify({
+  type: "service_account",
+  project_id: gcp.projectId,
+  client_email: `infralift@${gcp.projectId}.iam.gserviceaccount.com`,
+  private_key: generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }),
+});
+
+// AWS: connectors/__fixtures__/aws-api.json through the real AWS connector
+// with hand-mocked SDK clients, as connectors/aws.test.ts does, counting
+// Cost Explorer calls.
+const aws = JSON.parse(readFileSync(new URL("../connectors/__fixtures__/aws-api.json", import.meta.url), "utf8"));
+
 const h = vi.hoisted(() => ({
   connFindFirst: vi.fn(),
   connUpdateMany: vi.fn(),
@@ -30,6 +47,7 @@ const h = vi.hoisted(() => ({
   jobCreate: vi.fn(),
   jobFindFirst: vi.fn(),
   runJob: vi.fn(),
+  costExplorerCalls: [] as unknown[],
 }));
 
 vi.mock("../lib/db.js", () => {
@@ -42,7 +60,29 @@ vi.mock("../lib/db.js", () => {
   };
   return { prisma };
 });
-vi.mock("../lib/crypto.js", () => ({ decryptToken: () => "token" }));
+vi.mock("../lib/crypto.js", () => ({ decryptToken: (enc: string) => enc }));
+// The org's AWS external id lives on the Org row; this suite has no Org table.
+vi.mock("./aws-access.js", () => ({ connectionSecret: async (_org: string, _provider: string, secret: string) => secret }));
+// The real AWS connector over mocked SDK clients; every other provider is real.
+vi.mock("../connectors/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../connectors/index.js")>();
+  const { createAwsConnector } = await import("../connectors/aws.js");
+  const { AssumeRoleCommand, GetCallerIdentityCommand } = await import("@aws-sdk/client-sts");
+  const fx = JSON.parse((await import("node:fs")).readFileSync(new URL("../connectors/__fixtures__/aws-api.json", import.meta.url), "utf8"));
+  const awsUnderTest = createAwsConnector({
+    sts: () => ({
+      send: async (cmd: unknown) => (cmd instanceof AssumeRoleCommand ? fx.AssumeRole : cmd instanceof GetCallerIdentityCommand ? fx.GetCallerIdentity : undefined),
+    }),
+    tagging: (region: string) => ({ send: async () => (region === "us-east-1" ? fx.GetResources : { ResourceTagMappingList: [] }) }),
+    costExplorer: () => ({
+      send: async (cmd: unknown) => {
+        h.costExplorerCalls.push(cmd);
+        return fx.GetCostAndUsage;
+      },
+    }),
+  } as unknown as Parameters<typeof createAwsConnector>[0]);
+  return { ...actual, getConnector: (p: string) => (p === "aws" ? awsUnderTest : actual.getConnector(p as never)) };
+});
 vi.mock("../lib/jobs/start.js", () => ({ startJob: h.runJob }));
 
 const { connectionsRouter } = await import("../routes/connections.js");
@@ -61,6 +101,10 @@ function fakeNetwork() {
     "fetch",
     vi.fn(async (input: string) => {
       const url = String(input);
+      if (url === "https://oauth2.googleapis.com/token") return json(gcp.token);
+      if (url === `https://sqladmin.googleapis.com/v1/projects/${gcp.projectId}/instances`) return json(gcp.sqlInstances);
+      if (url === `https://storage.googleapis.com/storage/v1/b?project=${gcp.projectId}`) return json(gcp.buckets);
+      if (url.includes("googleapis.com")) return json({ error: { code: 403, status: "PERMISSION_DENIED" } }, 403);
       if (url.startsWith("https://api.cloudflare.com/client/v4")) {
         if (url.includes("/accounts?per_page")) cloudflareCalls++;
         if (cloudflareStatus !== 200) return json({ success: false, errors: [] }, cloudflareStatus);
@@ -89,6 +133,14 @@ const CONNECTION = {
   status: "valid",
   updatedAt: new Date("2026-11-10T00:00:00Z"),
 };
+const GCP_CONNECTION = { ...CONNECTION, id: "gcp-conn", provider: "gcp", label: "gcp", encryptedToken: GCP_KEY };
+const AWS_CONNECTION = {
+  ...CONNECTION,
+  id: "aws-conn",
+  provider: "aws",
+  label: "aws",
+  encryptedToken: JSON.stringify({ roleArn: "arn:aws:iam::123456789012:role/infralift-readonly", externalId: "org-external-id-0123456789abcdef" }),
+};
 
 /** The org's own connections; any other id or org finds nothing, as the real
  *  org-scoped query would. */
@@ -96,6 +148,8 @@ function connections(where: { id?: string; orgId: string; provider?: string }) {
   if (where.orgId !== "org-a") return null;
   if (where.provider === "github") return { id: "gh-conn", orgId: "org-a", provider: "github", encryptedToken: "enc" };
   if (where.id === "cf-conn") return CONNECTION;
+  if (where.id === "gcp-conn") return GCP_CONNECTION;
+  if (where.id === "aws-conn") return AWS_CONNECTION;
   if (where.id === "gh-conn") return { ...CONNECTION, id: "gh-conn", provider: "github" };
   return null;
 }
@@ -146,6 +200,8 @@ beforeEach(() => {
   resetUnmanagedState();
   cloudflareCalls = 0;
   cloudflareStatus = 200;
+  h.costExplorerCalls.length = 0;
+  process.env.INFRALIFT_AWS_ACCOUNT_ID = "999999999999";
   h.connFindFirst.mockImplementation(async ({ where }: { where: { id?: string; orgId: string; provider?: string } }) => connections(where));
   h.connUpdateMany.mockResolvedValue({ count: 1 });
   h.ledgerFindMany.mockResolvedValue([]);
@@ -158,6 +214,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  delete process.env.INFRALIFT_AWS_ACCOUNT_ID;
 });
 
 // -- subtraction ---------------------------------------------------------------------------
@@ -325,6 +382,15 @@ describe("GET /connections/:id/unmanaged", () => {
     });
   });
 
+  it("reads an AWS account without calling Cost Explorer, which bills per request", async () => {
+    const out = await list({}, { id: "aws-conn" });
+    expect(out.status).toBe(200);
+    expect((out.body.resources as Row[]).map((r) => r.type)).toContain("aws:ec2_instance");
+    expect(h.costExplorerCalls).toHaveLength(0);
+    await list({ refresh: "1" }, { id: "aws-conn" });
+    expect(h.costExplorerCalls).toHaveLength(0);
+  });
+
   it("answers 502 without the provider's text, and marks the connection invalid on a 401", async () => {
     cloudflareStatus = 401;
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -478,6 +544,49 @@ describe("POST /connections/:id/adopt", () => {
       expect(out.body.error).toContain("not supported yet");
       expect(h.jobCreate).not.toHaveBeenCalled();
     });
+  });
+
+  describe("on GCP", () => {
+    const sql = { type: "gcp:cloud_sql", providerId: "orders-db" };
+
+    it("lists the project item as not adoptable, and Cloud SQL as adoptable", async () => {
+      const out = await list({}, { id: "gcp-conn" });
+      const rows = out.body.resources as Row[];
+      expect(rows.find((r) => r.type === "gcp:project")).toMatchObject({ providerId: gcp.projectId, adoptable: false });
+      expect(rows.find((r) => r.type === "gcp:cloud_sql")).toMatchObject({ adoptable: true, terraformType: "google_sql_database_instance" });
+    });
+
+    it("names the project in the provider block though only Cloud SQL was picked", async () => {
+      // Cloud SQL imports by bare instance name, which resolves against the
+      // provider's project; without it the import plan fails.
+      const out = await adopt({ resources: [sql], target: { ...target, name: "acme-gcp", path: "infra/gcp" } }, { id: "gcp-conn" });
+      expect(out.status).toBe(202);
+      const files = h.jobCreate.mock.calls[0][0].data.argumentsJson.adoptFiles as { path: string; content: string }[];
+      const provider = files.find((f) => f.path === "provider.tf")!.content;
+      expect(provider).toContain(`project = "${gcp.projectId}"`);
+      const imports = files.find((f) => f.path === "imports.tf")!.content;
+      expect(imports).toContain('id = "orders-db"');
+      expect(imports).not.toContain("google_storage_bucket");
+      expect((h.ledgerCreateMany.mock.calls[0][0].data as { resourceType: string }[]).map((r) => r.resourceType)).toEqual(["gcp:cloud_sql"]);
+    });
+
+    it("refuses the project item itself, with the reason", async () => {
+      const out = await adopt({ resources: [{ type: "gcp:project", providerId: gcp.projectId }], target }, { id: "gcp-conn" });
+      expect(out.status).toBe(400);
+      expect(out.body.refused).toEqual([{ type: "gcp:project", providerId: gcp.projectId, reason: "no Terraform import mapping for this kind yet" }]);
+    });
+  });
+
+  it("reports how many distinct resources a replay holds, not how many keys were sent", async () => {
+    h.projectFindFirst.mockResolvedValue({
+      id: "p-new",
+      name: "acme-cf",
+      destPath: "infra/cf",
+      managedResources: zones.map((z) => ({ resourceType: z.type, providerId: z.providerId })),
+    });
+    h.jobFindFirst.mockResolvedValue({ id: "job-new", status: "running" });
+    const out = await adopt({ resources: [...zones, ...zones], target });
+    expect(out.body).toMatchObject({ replayed: true, adopted: 2 });
   });
 
   it.each([

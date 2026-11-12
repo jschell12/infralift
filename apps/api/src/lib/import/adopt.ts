@@ -65,7 +65,15 @@ export function adoptionTarget(provider: Provider, item: ResourceInventoryItem):
   return block;
 }
 
-export function planAdoption(provider: Provider, inventory: ResourceInventoryItem[]): AdoptPlan {
+/** Import blocks for `inventory`. Provider settings (a Google project) are
+ *  read from `settingsInventory`, which defaults to the same list; a caller
+ *  adopting a selection passes the whole account, because the item that
+ *  carries the setting is not itself importable. */
+export function planAdoption(
+  provider: Provider,
+  inventory: ResourceInventoryItem[],
+  settingsInventory: ResourceInventoryItem[] = inventory
+): AdoptPlan {
   const imports: AdoptPlan["imports"] = [];
   const skipped: AdoptPlan["skipped"] = [];
   const taken = new Set<string>();
@@ -89,7 +97,7 @@ export function planAdoption(provider: Provider, inventory: ResourceInventoryIte
       imports.push({ to, id: block.id, type: item.type, name: item.name, externalId: item.externalId });
     }
   }
-  const settings: ProviderSettings = { ...providerSettings(provider, inventory) };
+  const settings: ProviderSettings = { ...providerSettings(provider, settingsInventory) };
   if (regions.size) settings.regions = [...regions].sort();
   return { imports, skipped, settings };
 }

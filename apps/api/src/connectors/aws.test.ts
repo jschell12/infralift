@@ -108,6 +108,17 @@ describe("aws assess", () => {
     expect(result.findings.some((f) => f.title.includes("stopped at"))).toBe(false);
   });
 
+  it("makes no Cost Explorer call when asked for the inventory only", async () => {
+    const { connector, calls } = mock();
+    const result = await connector.assess(TOKEN, { costs: false });
+    expect(calls.ce).toHaveLength(0);
+    expect(result.estimatedMonthlyCostCents).toBeNull();
+    expect(result.inventory.map((i) => i.type)).toEqual(["aws:account", "aws:ec2_instance", "aws:s3_bucket", "aws:lambda_function", "aws:rds_db"]);
+    // The default still prices it.
+    await connector.assess(TOKEN);
+    expect(calls.ce).toHaveLength(1);
+  });
+
   it("follows pagination and stops at the resource cap, and says so", async () => {
     let n = 0;
     const page = () => ({

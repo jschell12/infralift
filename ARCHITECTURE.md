@@ -128,8 +128,9 @@ A project manages one cloud account ([ADR 0010](docs/adr/0010-a-project-is-one-a
 ```
 GET /connections/:id/unmanaged          (services/unmanaged.ts listUnmanaged)
   connection, org-scoped (404 otherwise; git hosts and TFC are 400)
-  inventory: cache (5 min, per connection) or connector.assess(), the same
-             read-only call an assessment makes; provider reads limited to
+  inventory: cache (5 min, per connection) or connector.assess(secret,
+             { costs: false }), the read-only call an assessment makes minus
+             cost data (no Cost Explorer on AWS); provider reads limited to
              10 per 10 minutes per org (429); ?refresh=1 skips the cache
   minus ledger rows for the connection (pending and managed)
   each row: type, provider id, name, region, adoptable + reason (lib/import/adopt.ts adoptionTarget)
@@ -138,7 +139,9 @@ GET /connections/:id/unmanaged          (services/unmanaged.ts listUnmanaged)
 POST /connections/:id/adopt             (services/unmanaged.ts adoptSelected)
   same request again: the project it made, 200 replayed
   picked keys looked up in the inventory: missing 400, managed 409, not adoptable 400
-  openAdoption (services/imports.ts): render import blocks, refuse existing files,
+  openAdoption (services/imports.ts): render import blocks for the picked
+    resources, provider settings (a Google project) from the whole inventory,
+    refuse existing files,
     then one transaction: project (with providerConnectionId), ledger rows
     as pending (unique violation 409), import job; then start the job
   the job opens the adoption PR (lib/tf/pipeline.ts runImportJob)

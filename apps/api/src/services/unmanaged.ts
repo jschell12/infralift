@@ -42,8 +42,10 @@ export const UNMANAGED_PAGE_MAX = 200;
 /** Resources one adoption request may pick. */
 export const ADOPT_MAX_RESOURCES = 200;
 
-// A provider inventory is the slowest and, for AWS (Cost Explorer bills per
-// request), the only metered call a page load can make. Cache hits are free.
+// A provider inventory is the slowest call a page load can make, and it is
+// rate limited by the provider. It never includes cost data (assess with
+// costs: false), so AWS Cost Explorer, which bills per request, is not called.
+// Cache hits are free.
 const CLOUD_READS_PER_WINDOW = 10;
 const CLOUD_READ_WINDOW_MS = 10 * 60 * 1000;
 const cloudReads = createRateLimiter({ windowMs: CLOUD_READ_WINDOW_MS, max: CLOUD_READS_PER_WINDOW });
@@ -88,7 +90,8 @@ async function readInventory(connection: ProviderConnection): Promise<ResourceIn
   // AWS: the org's external id; 422 when AWS is off on this server.
   const secret = await connectionSecret(connection.orgId, connection.provider, decryptToken(connection.encryptedToken));
   try {
-    const { inventory } = await getConnector(connection.provider as Provider).assess(secret);
+    // Inventory only: no cost calls, which on AWS are billed per request.
+    const { inventory } = await getConnector(connection.provider as Provider).assess(secret, { costs: false });
     return inventory;
   } catch (err) {
     await markInvalidOnAuthFailure(connection, err, "connector", "an inventory of the account");
@@ -264,7 +267,7 @@ async function replayOf(orgId: string, connectionId: string, target: Extract<Ado
   const want = new Set(wanted.map(ledgerKey));
   if (have.size !== want.size || [...want].some((k) => !have.has(k))) return null;
   const job = await prisma.tfJob.findFirst({ where: { projectId: project.id, kind: "import" }, orderBy: { createdAt: "desc" } });
-  return { project, job };
+  return { project, job, adopted: want.size };
 }
 
 export async function adoptSelected(orgId: string, connectionId: string, input: AdoptSelectedInput): Promise<AdoptSelectedResult & { replayed: boolean }> {
@@ -280,7 +283,7 @@ export async function adoptSelected(orgId: string, connectionId: string, input: 
   const newTarget = target as Extract<AdoptTarget, { kind: "new" }>;
 
   const replay = await replayOf(orgId, connection.id, newTarget, input.resources);
-  if (replay) return toResult(replay.project, replay.job, input.resources.length, true);
+  if (replay) return toResult(replay.project, replay.job, replay.adopted, true);
 
   const provider = connection.provider as Provider;
   const inventory = await accountInventory(connection, { refresh: input.refresh });
@@ -296,6 +299,10 @@ export async function adoptSelected(orgId: string, connectionId: string, input: 
     backend: newTarget.backend,
     provider,
     inventory: picked,
+    // Provider settings come from the whole account: the google provider's
+    // project is the gcp:project / firebase:project item, which has no
+    // import of its own and so is never picked.
+    settingsInventory: inventory.items,
     assessmentId: null,
     providerConnectionId: connection.id,
   });
@@ -308,7 +315,7 @@ export async function adoptSelected(orgId: string, connectionId: string, input: 
     // this adoption, answer as a replay rather than 409.
     if (err instanceof Conflict) {
       const raced = await replayOf(orgId, connection.id, newTarget, input.resources);
-      if (raced) return toResult(raced.project, raced.job, input.resources.length, true);
+      if (raced) return toResult(raced.project, raced.job, raced.adopted, true);
     }
     throw err;
   }

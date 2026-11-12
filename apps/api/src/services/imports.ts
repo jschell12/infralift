@@ -199,6 +199,9 @@ export interface OpenAdoptionInput extends RepoRef {
   provider: Provider;
   /** The resources to adopt, as a connector reported them. */
   inventory: ResourceInventoryItem[];
+  /** The whole account's inventory, for provider settings (the google
+   *  provider's project) when `inventory` is a selection. Default: inventory. */
+  settingsInventory?: ResourceInventoryItem[];
   name: string;
   path: string;
   backend: AdoptBackend;
@@ -216,7 +219,7 @@ export interface OpenAdoptionInput extends RepoRef {
 export async function openAdoption(orgId: string, input: OpenAdoptionInput) {
   const { provider, inventory } = input;
   const path = input.path.replace(/^\/+|\/+$/g, "");
-  const plan = planAdoption(provider, inventory);
+  const plan = planAdoption(provider, inventory, input.settingsInventory);
   let rendered;
   try {
     rendered = renderAdoption({ provider, plan, backend: input.backend, path, label: path || "the repository root" });
