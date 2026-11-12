@@ -1,7 +1,8 @@
 // The adopt step of /projects/new (components/assess-panel.tsx) shows one
 // tile per cloud account. These decide what each tile says and which one
 // action on the page is the primary one, kept free of React so they can be
-// tested.
+// tested. The account's own page, /projects/new/adopt, uses
+// lib/adopt-account.ts.
 
 import type { AssessmentSummary, ProviderConnectionSummary } from "@infralift/shared";
 
@@ -19,36 +20,26 @@ export function latestCompletedAssessment<T extends Assessment>(assessments: T[]
   return latest;
 }
 
-export type PrimaryAdoptAction = { connectionId: string; action: "assess" | "adopt" } | null;
+/** Where "Find unmanaged resources" goes for one account: its own page, so
+ *  the browser's back button returns to the account tiles. */
+export function findUnmanagedHref(connectionId: string): string {
+  return `/projects/new/adopt?connection=${encodeURIComponent(connectionId)}`;
+}
 
 /**
- * The one action that gets the accent on the adopt step. Every other action
- * on the page is secondary, so the accent marks a single next step.
+ * The account whose "Find unmanaged resources" gets the accent on the adopt
+ * step. Every other action on the page is secondary, so the accent marks a
+ * single next step.
  *
- * In order: the account the link pointed at (?assess=<id>) if it can be
- * assessed; otherwise the account assessed most recently, whose next step is
- * to adopt what was found; otherwise the first account that can be assessed.
- * An account can be assessed only when its connection is valid.
+ * The account the link pointed at (?assess=<id>) if its connection is valid,
+ * otherwise the first valid one. Only a valid connection can read its
+ * account; null when there is none.
  */
-export function primaryAdoptAction(
+export function primaryFindAccount(
   accounts: Pick<ProviderConnectionSummary, "id" | "status">[],
-  assessments: Assessment[],
   highlight: string | null = null
-): PrimaryAdoptAction {
-  const assessable = accounts.filter((c) => c.status === "valid");
-  const nextStepFor = (id: string): PrimaryAdoptAction => ({
-    connectionId: id,
-    action: latestCompletedAssessment(assessments, id) ? "adopt" : "assess",
-  });
-
-  if (highlight && assessable.some((c) => c.id === highlight)) return nextStepFor(highlight);
-
-  let newest: { id: string; at: string } | null = null;
-  for (const c of assessable) {
-    const a = latestCompletedAssessment(assessments, c.id);
-    if (a && (!newest || (a.completedAt ?? "") > newest.at)) newest = { id: c.id, at: a.completedAt ?? "" };
-  }
-  if (newest) return { connectionId: newest.id, action: "adopt" };
-
-  return assessable[0] ? { connectionId: assessable[0].id, action: "assess" } : null;
+): string | null {
+  const readable = accounts.filter((c) => c.status === "valid");
+  if (highlight && readable.some((c) => c.id === highlight)) return highlight;
+  return readable[0]?.id ?? null;
 }

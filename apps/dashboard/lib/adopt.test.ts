@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssessmentSummary, ProviderConnectionSummary } from "@infralift/shared";
-import { latestCompletedAssessment, primaryAdoptAction } from "./adopt";
+import { findUnmanagedHref, latestCompletedAssessment, primaryFindAccount } from "./adopt";
 
 // Assessment rows carry the fields GET /assessments sends
 // (listAssessmentSummaries in apps/api/src/services/assessments.ts); only the
@@ -33,37 +33,29 @@ describe("latestCompletedAssessment", () => {
   });
 });
 
-describe("primaryAdoptAction gives the accent to one next step", () => {
-  it("is nothing when no account can be assessed", () => {
-    expect(primaryAdoptAction([], [])).toBeNull();
-    expect(primaryAdoptAction([conn("c1", "invalid"), conn("c2", "unverified")], [])).toBeNull();
+describe("primaryFindAccount gives the accent to one account", () => {
+  it("is nothing when no account's connection is valid", () => {
+    expect(primaryFindAccount([])).toBeNull();
+    expect(primaryFindAccount([conn("c1", "invalid"), conn("c2", "unverified")])).toBeNull();
   });
 
-  it("is Assess on the first valid account when nothing has been assessed", () => {
-    expect(primaryAdoptAction([conn("bad", "invalid"), conn("c1"), conn("c2")], [])).toEqual({
-      connectionId: "c1",
-      action: "assess",
-    });
+  it("is the first valid account by default", () => {
+    expect(primaryFindAccount([conn("bad", "invalid"), conn("c1"), conn("c2")])).toBe("c1");
   });
 
-  it("is Adopt on the account assessed most recently", () => {
-    const list = [done("a1", "c1", "2026-11-01T00:00:00Z"), done("a2", "c2", "2026-11-09T00:00:00Z")];
-    expect(primaryAdoptAction([conn("c1"), conn("c2")], list)).toEqual({ connectionId: "c2", action: "adopt" });
+  it("prefers the account a link pointed at (?assess=)", () => {
+    expect(primaryFindAccount([conn("c1"), conn("c2")], "c2")).toBe("c2");
   });
 
-  it("skips an assessment whose connection is no longer valid", () => {
-    const list = [done("a1", "c1", "2026-11-01T00:00:00Z"), done("a2", "c2", "2026-11-09T00:00:00Z")];
-    expect(primaryAdoptAction([conn("c1"), conn("c2", "invalid")], list)).toEqual({ connectionId: "c1", action: "adopt" });
+  it("ignores a link to an account that cannot be read", () => {
+    expect(primaryFindAccount([conn("c1"), conn("c2", "invalid")], "c2")).toBe("c1");
+    expect(primaryFindAccount([conn("c1")], "gone")).toBe("c1");
   });
+});
 
-  it("prefers the account a link pointed at (?assess=), with that account's own next step", () => {
-    const list = [done("a2", "c2", "2026-11-09T00:00:00Z")];
-    expect(primaryAdoptAction([conn("c1"), conn("c2")], list, "c1")).toEqual({ connectionId: "c1", action: "assess" });
-    expect(primaryAdoptAction([conn("c1"), conn("c2")], list, "c2")).toEqual({ connectionId: "c2", action: "adopt" });
-  });
-
-  it("ignores a link to an account that cannot be assessed", () => {
-    expect(primaryAdoptAction([conn("c1"), conn("c2", "invalid")], [], "c2")).toEqual({ connectionId: "c1", action: "assess" });
-    expect(primaryAdoptAction([conn("c1")], [], "gone")).toEqual({ connectionId: "c1", action: "assess" });
+describe("findUnmanagedHref", () => {
+  it("is the account's own page, with the id escaped", () => {
+    expect(findUnmanagedHref("c1")).toBe("/projects/new/adopt?connection=c1");
+    expect(findUnmanagedHref("a b&c")).toBe("/projects/new/adopt?connection=a%20b%26c");
   });
 });

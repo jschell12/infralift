@@ -36,10 +36,11 @@ import {
 // browser's back button returns to the picker.
 //
 // What each one reuses:
-//   adopt     AssessPanel: run a read-only assessment of a connection, then
-//             adopt its resources from the report (AdoptCard, POST
-//             /tf/imports/from-assessment). There is no one-step
-//             adopt-from-account endpoint yet; this is the existing flow.
+//   adopt     AssessPanel: one tile per cloud account. "Find unmanaged
+//             resources" goes to /projects/new/adopt?connection=<id>, which
+//             lists what no project manages and adopts the picks (POST
+//             /connections/:id/adopt). Assessing an account stays as a
+//             secondary action, and its report keeps its own adopt card.
 //   stack     The catalog (GET /tf/stacks) minus app stacks (isAppStack).
 //   terraform ImportPanel: scan a repository and import a root module behind
 //             the zero-change check.
