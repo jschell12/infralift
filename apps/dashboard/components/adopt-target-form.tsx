@@ -7,9 +7,16 @@
 // Not the shared BackendPicker from stack-settings.tsx: that one offers
 // Terraform Cloud, and POST /connections/:id/adopt accepts only an s3 or r2
 // backend, so offering it here would be a choice the request cannot carry.
+//
+// The R2 account is a select of the Cloudflare accounts the connection's
+// inventory found (UnmanagedPage.backendDefaults), with "Another account" for
+// a bucket kept elsewhere. One account comes preselected; with several the
+// select starts on "Choose an account". Only when infralift knows of none is
+// the id typed.
 
-import { PROVIDER_LABELS, type ProviderConnectionSummary } from "@infralift/shared";
-import type { AdoptForm } from "../lib/adopt-account";
+import { PROVIDER_LABELS, type CloudflareAccountRef, type ProviderConnectionSummary } from "@infralift/shared";
+import { useState } from "react";
+import { accountChoice, cloudflareAccountLabel, NO_ACCOUNT, OTHER_ACCOUNT, type AdoptForm } from "../lib/adopt-account";
 import { INPUT, LABEL, MONO, Note } from "./ui";
 
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text";
@@ -18,6 +25,66 @@ const BACKENDS: { key: AdoptForm["backendKind"]; title: string; body: string }[]
   { key: "r2", title: "Cloudflare R2", body: "State in an R2 bucket in your Cloudflare account." },
   { key: "s3", title: "AWS S3", body: "State in an S3 bucket in your AWS account." },
 ];
+
+function R2AccountField({
+  accountId,
+  accounts,
+  onChange,
+}: {
+  accountId: string;
+  accounts: CloudflareAccountRef[];
+  onChange: (id: string) => void;
+}) {
+  const typed = (
+    <Field
+      id="adopt-account-id"
+      label={accounts.length ? "Account id" : "Cloudflare account id"}
+      value={accountId}
+      onChange={onChange}
+      placeholder="32 hex characters"
+      mono
+    />
+  );
+  // Picking "Another account" empties the id for the text field, so the pick
+  // itself has to be remembered or the select would fall back to "Choose".
+  const [otherPicked, setOtherPicked] = useState(false);
+  if (accounts.length === 0) return typed;
+  const choice = accountChoice(accountId, accounts, otherPicked);
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <label htmlFor="adopt-account" className={LABEL}>
+          Cloudflare account
+        </label>
+        <select
+          id="adopt-account"
+          className={INPUT}
+          value={choice}
+          aria-describedby="adopt-account-hint"
+          onChange={(e) => {
+            const other = e.target.value === OTHER_ACCOUNT;
+            setOtherPicked(other);
+            onChange(other ? "" : e.target.value);
+          }}
+        >
+          <option value={NO_ACCOUNT} disabled>
+            Choose an account
+          </option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {cloudflareAccountLabel(a)}
+            </option>
+          ))}
+          <option value={OTHER_ACCOUNT}>Another account</option>
+        </select>
+        <div id="adopt-account-hint" className="mt-1 text-xs text-muted">
+          The account that holds the state bucket. These are the accounts this connection can see.
+        </div>
+      </div>
+      {choice === OTHER_ACCOUNT && typed}
+    </div>
+  );
+}
 
 function Field({
   id,
@@ -66,11 +133,14 @@ export function AdoptTargetForm({
   form,
   onChange,
   gitConnections,
+  cloudflareAccounts = [],
 }: {
   form: AdoptForm;
   onChange: (next: AdoptForm) => void;
   /** Valid GitHub connections of the org. The select shows only when there is more than one. */
   gitConnections: ProviderConnectionSummary[];
+  /** Cloudflare accounts the adopted connection can see; empty when unknown. */
+  cloudflareAccounts?: CloudflareAccountRef[];
 }) {
   const set = <K extends keyof AdoptForm>(key: K) => (value: AdoptForm[K]) => onChange({ ...form, [key]: value });
 
@@ -163,14 +233,7 @@ export function AdoptTargetForm({
         <Field id="adopt-state-key" label="State key" value={form.stateKey} onChange={set("stateKey")} mono />
       </div>
       {form.backendKind === "r2" ? (
-        <Field
-          id="adopt-account-id"
-          label="Cloudflare account id"
-          value={form.accountId}
-          onChange={set("accountId")}
-          placeholder="32 hex characters"
-          mono
-        />
+        <R2AccountField accountId={form.accountId} accounts={cloudflareAccounts} onChange={set("accountId")} />
       ) : (
         <Field id="adopt-region" label="Region" value={form.region} onChange={set("region")} mono />
       )}

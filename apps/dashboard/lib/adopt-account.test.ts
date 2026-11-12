@@ -2,16 +2,22 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AdoptSelectedResult, UnmanagedPage, UnmanagedResource } from "@infralift/shared";
 import {
+  accountChoice,
   adoptFormProblem,
   adoptProblemFor,
   AdoptRequestError,
   appendPage,
+  applyBackendDefaults,
   buildAdoptRequest,
+  cloudflareAccountLabel,
+  connectionProblemText,
   defaultAdoptForm,
   fetchUnmanagedPage,
   groupByType,
   groupSelection,
   keepLoadedPicks,
+  NO_ACCOUNT,
+  OTHER_ACCOUNT,
   postAdopt,
   resourceKey,
   toggleGroup,
@@ -153,6 +159,73 @@ describe("defaultAdoptForm", () => {
     expect(f).toMatchObject({ name: "cloudflare-adopted", path: "infra/cloudflare", backendKind: "r2", branch: "main" });
     expect(adoptFormProblem({ ...filled(), name: f.name }, 1)).toBeNull();
   });
+
+  it("starts an AWS account on an S3 backend, anything else on R2", () => {
+    expect(defaultAdoptForm("aws").backendKind).toBe("s3");
+    expect(defaultAdoptForm("gcp").backendKind).toBe("r2");
+  });
+});
+
+describe("backend defaults from the inventory", () => {
+  const defaults = fx.full.body.backendDefaults!;
+  const account = defaults.cloudflareAccounts[0]!;
+
+  it("arrive with the list, naming the connection's Cloudflare account", () => {
+    // Recaptured through the API harness: the fixture account is "Demo Account".
+    expect(defaults).toEqual({ cloudflareAccounts: [{ id: account.id, name: "Demo Account" }], awsRegion: null });
+  });
+
+  it("fill an empty R2 account id when the inventory found exactly one account", () => {
+    const f = applyBackendDefaults(defaultAdoptForm("cloudflare"), defaults);
+    expect(f.accountId).toBe(account.id);
+    expect(f.region).toBe("us-east-1");
+  });
+
+  it("leave the R2 account id empty when there are several accounts, rather than pick the first", () => {
+    const two = { cloudflareAccounts: [account, { id: "9f1c3e7a2b4d6f8091a2b3c4d5e6f708", name: "Client: Northwind" }], awsRegion: null };
+    const f = applyBackendDefaults(defaultAdoptForm("cloudflare"), two);
+    expect(f.accountId).toBe("");
+    expect(accountChoice(f.accountId, two.cloudflareAccounts)).toBe(NO_ACCOUNT);
+    // The form refuses to send until one is chosen.
+    expect(adoptFormProblem(filled({ accountId: f.accountId }), 1)).toMatch(/Cloudflare account id/);
+  });
+
+  it("never replace an account id already in the form", () => {
+    expect(applyBackendDefaults(filled(), defaults).accountId).toBe("0123456789abcdef0123456789abcdef");
+  });
+
+  it("fill the S3 region from the account's commonest region", () => {
+    const f = applyBackendDefaults(defaultAdoptForm("aws"), { cloudflareAccounts: [], awsRegion: "eu-west-2" });
+    expect(f).toMatchObject({ region: "eu-west-2", accountId: "", backendKind: "s3" });
+  });
+
+  it("leave the form alone when the API sent none (an older API)", () => {
+    const f = defaultAdoptForm("cloudflare");
+    expect(applyBackendDefaults(f, undefined)).toBe(f);
+    expect(applyBackendDefaults(f, { cloudflareAccounts: [], awsRegion: null })).toEqual(f);
+  });
+
+  it("show a known account as itself, an unlisted id or an Another pick as Another account, and nothing yet as Choose", () => {
+    expect(accountChoice(account.id, defaults.cloudflareAccounts)).toBe(account.id);
+    expect(accountChoice(` ${account.id} `, defaults.cloudflareAccounts)).toBe(account.id);
+    expect(accountChoice("", defaults.cloudflareAccounts)).toBe(NO_ACCOUNT);
+    expect(accountChoice("", defaults.cloudflareAccounts, true)).toBe(OTHER_ACCOUNT);
+    expect(accountChoice("0123456789abcdef0123456789abcdef", defaults.cloudflareAccounts)).toBe(OTHER_ACCOUNT);
+  });
+
+  it("label an account by name and the start of its id, or the id alone", () => {
+    expect(cloudflareAccountLabel(account)).toBe("Demo Account · 023e105f");
+    expect(cloudflareAccountLabel({ id: account.id, name: null })).toBe(account.id);
+  });
+});
+
+describe("connectionProblemText", () => {
+  it("never repeats the provider's text from lastError", () => {
+    const invalid = { status: "invalid" as const, lastError: "Cloudflare answered 401: Invalid API Token" };
+    expect(connectionProblemText(invalid)).toMatch(/refused/);
+    expect(connectionProblemText(invalid)).not.toContain("Invalid API Token");
+    expect(connectionProblemText({ status: "unverified" })).toMatch(/until its connection has been checked/);
+  });
 });
 
 describe("adoptFormProblem", () => {
@@ -227,7 +300,7 @@ describe("adoptProblemFor", () => {
   it("names each resource another project manages, from the API's 409", () => {
     const p = adoptProblemFor(fx.conflict.status, fx.conflict.body, all);
     expect(p.message).toMatch(/already managed by another project/);
-    expect(p.resources).toEqual([{ label: "example.com (cloudflare:zone)", detail: null }]);
+    expect(p.resources).toEqual([{ key: resourceKey(ZONE_1), label: "example.com (cloudflare:zone)", detail: null }]);
   });
 
   it("says which project when the ledger race named it", () => {
@@ -238,8 +311,26 @@ describe("adoptProblemFor", () => {
       managed: [{ type: "cloudflare:zone", providerId: ZONE_1.providerId, project: "acme-dns" }],
     };
     expect(adoptProblemFor(409, body, all).resources).toEqual([
-      { label: "example.com (cloudflare:zone)", detail: "managed by acme-dns" },
+      { key: resourceKey(ZONE_1), label: "example.com (cloudflare:zone)", detail: "managed by acme-dns" },
     ]);
+  });
+
+  it("keys two picked resources that share a name and type apart", () => {
+    // Two DNS records both named example.com: the labels collide, the keys
+    // (type and provider id) do not, so the error list has unique React keys.
+    const body = {
+      managed: [
+        { type: "cloudflare:dns_record", providerId: "rec-a" },
+        { type: "cloudflare:dns_record", providerId: "rec-b" },
+      ],
+    };
+    const loaded = [
+      { ...RECORD_1, providerId: "rec-a", name: "example.com" },
+      { ...RECORD_1, providerId: "rec-b", name: "example.com" },
+    ];
+    const rows = adoptProblemFor(409, body, loaded).resources;
+    expect(rows[0]!.label).toBe(rows[1]!.label);
+    expect(new Set(rows.map((r) => r.key)).size).toBe(2);
   });
 
   it("falls back to the provider id for a resource not in the loaded list", () => {
@@ -254,7 +345,9 @@ describe("adoptProblemFor", () => {
   it("asks for a refresh when picked resources left the account", () => {
     const p = adoptProblemFor(fx.missing.status, fx.missing.body, all);
     expect(p.message).toMatch(/no longer in the account/);
-    expect(p.resources).toEqual([{ label: "gone (cloudflare:zone)", detail: null }]);
+    expect(p.resources).toEqual([
+      { key: resourceKey({ type: "cloudflare:zone", providerId: "gone" }), label: "gone (cloudflare:zone)", detail: null },
+    ]);
   });
 
   it("gives each refused resource its reason", () => {
@@ -263,7 +356,11 @@ describe("adoptProblemFor", () => {
       refused: [{ type: "cloudflare:load_balancer", providerId: "lb", reason: fx.refusedRows[0]!.reason }],
     };
     expect(adoptProblemFor(400, body, withRefused).resources).toEqual([
-      { label: "lb (cloudflare:load_balancer)", detail: "no Terraform import mapping for this kind yet" },
+      {
+        key: resourceKey({ type: "cloudflare:load_balancer", providerId: "lb" }),
+        label: "lb (cloudflare:load_balancer)",
+        detail: "no Terraform import mapping for this kind yet",
+      },
     ]);
   });
 

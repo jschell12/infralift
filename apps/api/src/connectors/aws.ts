@@ -132,7 +132,7 @@ async function openSession(clients: AwsClients, payload: AwsConnectionPayload): 
 }
 
 /** "arn:aws:ec2:us-east-1:123:instance/i-abc" becomes an aws:ec2_instance named i-abc (or its Name tag). */
-function inventoryItem(m: { ResourceARN?: string; Tags?: { Key?: string; Value?: string }[] }, scanned: string): ResourceInventoryItem | null {
+export function inventoryItem(m: { ResourceARN?: string; Tags?: { Key?: string; Value?: string }[] }, scanned: string): ResourceInventoryItem | null {
   const arn = m.ResourceARN;
   if (!arn) return null;
   const [, , service = "unknown", region = "", , ...rest] = arn.split(":");

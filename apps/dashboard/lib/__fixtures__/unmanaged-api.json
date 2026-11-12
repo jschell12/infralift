@@ -1,5 +1,5 @@
 {
-  "_source": "Captured 2026-11-11 from apps/api's real connections router (GET /connections/:id/unmanaged, POST /connections/:id/adopt) over connectors/__fixtures__/cloudflare-api.json, using the harness in apps/api/src/services/unmanaged.test.ts (Prisma, jobs and network stubbed). cloudflare-api.json is Cloudflare's documented response examples, not a live account. refusedRows is subtractManaged() output for a worker with no account id and a load balancer.",
+  "_source": "Captured 2026-11-11 from apps/api's real connections router (GET /connections/:id/unmanaged, POST /connections/:id/adopt) over connectors/__fixtures__/cloudflare-api.json, using the harness in apps/api/src/services/unmanaged.test.ts (Prisma, jobs and network stubbed). cloudflare-api.json is Cloudflare's documented response examples, not a live account. refusedRows is subtractManaged() output for a worker with no account id and a load balancer. backendDefaults recaptured 2026-11-11 through the same harness after it was added; resources and cursors came back identical.",
   "full": {
     "status": 200,
     "body": {
@@ -54,7 +54,16 @@
           "reason": null,
           "terraformType": "cloudflare_zone"
         }
-      ]
+      ],
+      "backendDefaults": {
+        "cloudflareAccounts": [
+          {
+            "id": "023e105f4ecef8ad9ca31a8372d0c353",
+            "name": "Demo Account"
+          }
+        ],
+        "awsRegion": null
+      }
     }
   },
   "page1": {
@@ -85,7 +94,16 @@
           "reason": null,
           "terraformType": "cloudflare_dns_record"
         }
-      ]
+      ],
+      "backendDefaults": {
+        "cloudflareAccounts": [
+          {
+            "id": "023e105f4ecef8ad9ca31a8372d0c353",
+            "name": "Demo Account"
+          }
+        ],
+        "awsRegion": null
+      }
     }
   },
   "page2": {
@@ -116,7 +134,16 @@
           "reason": null,
           "terraformType": "cloudflare_zone"
         }
-      ]
+      ],
+      "backendDefaults": {
+        "cloudflareAccounts": [
+          {
+            "id": "023e105f4ecef8ad9ca31a8372d0c353",
+            "name": "Demo Account"
+          }
+        ],
+        "awsRegion": null
+      }
     }
   },
   "accepted": {

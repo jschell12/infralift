@@ -76,7 +76,8 @@ export const cloudflareConnector: Connector = {
     const capped: string[] = [];
 
     // Accounts. Account-scoped resources import as "<account_id>/<name>", so
-    // each item records its account.
+    // each item records its account, and the account's name for the adopt
+    // form's R2 account choice (backendDefaultsOf in services/unmanaged.ts).
     const { items: accounts, capped: accountsCapped } = await cfPaged(token, "/accounts", 50);
     if (accountsCapped) capped.push(`accounts (first ${accounts.length})`);
 
@@ -93,7 +94,7 @@ export const cloudflareConnector: Connector = {
             type: "cloudflare:worker",
             externalId: s.id,
             name: s.id,
-            metadata: { accountId: account.id, modifiedOn: s.modified_on ?? null },
+            metadata: { accountId: account.id, accountName: account.name ?? null, modifiedOn: s.modified_on ?? null },
           });
         }
       } catch {
@@ -114,6 +115,7 @@ export const cloudflareConnector: Connector = {
             name: p.name,
             metadata: {
               accountId: account.id,
+              accountName: account.name ?? null,
               productionBranch: p.production_branch ?? null,
               framework: p.build_config?.framework ?? null,
             },
@@ -143,7 +145,7 @@ export const cloudflareConnector: Connector = {
             type: "cloudflare:r2_bucket",
             externalId: b.name,
             name: b.name,
-            metadata: { accountId: account.id, jurisdiction: b.jurisdiction ?? "default", creationDate: b.creation_date ?? null },
+            metadata: { accountId: account.id, accountName: account.name ?? null, jurisdiction: b.jurisdiction ?? "default", creationDate: b.creation_date ?? null },
           });
         }
       } catch {
@@ -163,7 +165,7 @@ export const cloudflareConnector: Connector = {
           type: "cloudflare:zone",
           externalId: z.id,
           name: z.name,
-          metadata: { accountId: z.account?.id ?? null, status: z.status, plan: z.plan?.name ?? null },
+          metadata: { accountId: z.account?.id ?? null, accountName: z.account?.name ?? null, status: z.status, plan: z.plan?.name ?? null },
         });
       }
     } catch {

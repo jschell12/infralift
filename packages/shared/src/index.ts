@@ -528,4 +528,5 @@ export interface ApiError {
 
 export * from "./imports.js";
 export * from "./projects.js";
+export * from "./inventory-labels.js";
 export * from "./unmanaged.js";
