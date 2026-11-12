@@ -166,6 +166,17 @@ describe("deleteConnection", () => {
     expect(del).not.toHaveBeenCalled();
   });
 
+  it("counts a project that manages the connection's account as a use", async () => {
+    projectFindMany.mockResolvedValueOnce([{ name: "aws-prod" }]);
+    const err = await svc.deleteConnection("org_mine", "conn_1").catch((e) => e);
+    expect(err.status).toBe(409);
+    expect(projectFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: {
+      orgId: "org_mine",
+      OR: [{ gitConnectionId: "conn_1" }, { tfcConnectionId: "conn_1" }, { providerConnectionId: "conn_1" }],
+    } }));
+    expect(del).not.toHaveBeenCalled();
+  });
+
   it("deletes an unused connection", async () => {
     await svc.deleteConnection("org_mine", "conn_1");
     expect(del).toHaveBeenCalledWith({ where: { id: "conn_1" } });

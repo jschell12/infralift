@@ -170,7 +170,7 @@ export function createAwsConnector(clients: AwsClients = sdkClients, now: () => 
     check,
     verify: async (token) => (await check(token)).valid,
 
-    async assess(token): Promise<ConnectorAssessment> {
+    async assess(token, opts = {}): Promise<ConnectorAssessment> {
       const payload = parseAwsPayload(token);
       if (!payload) throw new Error("AWS connection must be an IAM role ARN or JSON {roleArn, regions?}");
       const session = await openSession(clients, payload);
@@ -222,6 +222,8 @@ export function createAwsConnector(clients: AwsClients = sdkClients, now: () => 
       if (failed.length) note("medium", `Could not scan ${failed.join(", ")}`, "AWS returned an error for these regions (often a region not enabled on the account). Resources there are not in this report.");
 
       let estimatedMonthlyCostCents: number | null = null;
+      // Cost Explorer bills per request; an inventory-only read skips it.
+      if (opts.costs === false) return { inventory, findings, estimatedMonthlyCostCents };
       try {
         const out = await clients.costExplorer(creds).send(
           new GetCostAndUsageCommand({ TimePeriod: lastFullMonth(now()), Granularity: "MONTHLY", Metrics: ["UnblendedCost"] })

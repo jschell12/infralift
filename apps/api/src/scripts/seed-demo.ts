@@ -135,6 +135,11 @@ async function removeDemo(orgId: string) {
     select: { id: true, provider: true },
   });
   for (const c of connections) {
+    // A project adopted from a demo assessment names the connection as its
+    // account (TfProject.providerConnectionId, ON DELETE RESTRICT) and holds
+    // ledger rows for it. Demo data only: unlink them so the delete goes through.
+    await prisma.managedResource.deleteMany({ where: { orgId, providerConnectionId: c.id } });
+    await prisma.tfProject.updateMany({ where: { orgId, providerConnectionId: c.id }, data: { providerConnectionId: null } });
     await prisma.assessment.deleteMany({ where: { connectionId: c.id } });
     await prisma.providerConnection.delete({ where: { id: c.id } });
     console.log(`removed demo ${c.provider} connection + assessments`);

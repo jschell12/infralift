@@ -13,16 +13,29 @@ const h = vi.hoisted(() => ({
   projectCreate: vi.fn(),
   jobCreate: vi.fn(),
   runJob: vi.fn(async () => {}),
+  ledgerFindMany: vi.fn(),
+  ledgerCreateMany: vi.fn(),
+  ledgerUpdateMany: vi.fn(),
+  ledgerDeleteMany: vi.fn(),
 }));
 
-vi.mock("../lib/db.js", () => ({
-  prisma: {
+vi.mock("../lib/db.js", () => {
+  const prisma = {
     providerConnection: { findFirst: h.connFindFirst },
     tfProject: { create: h.projectCreate, findFirst: h.projectFindFirst, update: h.projectUpdate },
     assessment: { findFirst: h.assessmentFindFirst },
     tfJob: { create: h.jobCreate, findFirst: h.jobFindFirst },
-  },
-}));
+    managedResource: {
+      findMany: h.ledgerFindMany,
+      createMany: h.ledgerCreateMany,
+      updateMany: h.ledgerUpdateMany,
+      deleteMany: h.ledgerDeleteMany,
+    },
+    // The adoption's project, ledger rows and job share one transaction.
+    $transaction: async (fn: (tx: unknown) => unknown) => fn(prisma),
+  };
+  return { prisma };
+});
 vi.mock("../lib/crypto.js", () => ({ decryptToken: () => "token" }));
 vi.mock("../lib/jobs/start.js", () => ({ startJob: h.runJob }));
 
@@ -85,6 +98,10 @@ beforeEach(() => {
   h.connFindFirst.mockResolvedValue({ id: "conn-1", encryptedToken: "enc" });
   h.projectCreate.mockImplementation(async ({ data }: { data: object }) => ({ id: "p1", ...data }));
   h.jobCreate.mockImplementation(async ({ data }: { data: object }) => ({ id: "job1", ...data }));
+  h.ledgerFindMany.mockResolvedValue([]);
+  h.ledgerCreateMany.mockResolvedValue({ count: 0 });
+  h.ledgerUpdateMany.mockResolvedValue({ count: 0 });
+  h.ledgerDeleteMany.mockResolvedValue({ count: 0 });
   fakeGitHub();
 });
 
@@ -181,7 +198,8 @@ describe("GET /tf/imports/:projectId/check", () => {
   function fakeChecks(
     opts: { conclusion: string; message: string; level: string } | null,
     prStatus = 200,
-    gen?: { parentRun: { conclusion: string; message: string; level: string }; files?: { filename: string }[] }
+    gen?: { parentRun: { conclusion: string; message: string; level: string }; files?: { filename: string }[] },
+    pr: { state: string; merged_at: string | null } = { state: "open", merged_at: null }
   ) {
     const json = (body: unknown, code = 200) => new Response(JSON.stringify(body), { status: code });
     const calls: string[] = [];
@@ -192,7 +210,7 @@ describe("GET /tf/imports/:projectId/check", () => {
         calls.push(path);
         if (path === "/repos/acme/infra/pulls/4")
           return prStatus === 200
-            ? json({ html_url: "https://github.com/acme/infra/pull/4", state: "open", merged_at: null, head: { sha: "head1" } })
+            ? json({ html_url: "https://github.com/acme/infra/pull/4", ...pr, head: { sha: "head1" } })
             : json({ message: "no" }, prStatus);
         if (path === "/repos/acme/infra/commits/head1")
           return json({
@@ -235,6 +253,50 @@ describe("GET /tf/imports/:projectId/check", () => {
     expect(h.projectFindFirst.mock.calls[0][0].where).toEqual({ id: "p1", orgId: "org-a", source: "imported" });
     expect(calls.some((c) => c.includes("check_name=Plan%20changes%20nothing"))).toBe(true);
     expect(h.projectUpdate.mock.calls[0][0].data.importCheckJson.state).toBe("changes");
+  });
+
+  describe("an adoption's ledger rows", () => {
+    const adoption = { id: "p1", orgId: "org-a", destRepo: "acme/infra", destPath: "infra", gitConnectionId: "conn-1", importCheckJson: null, importJson: { generateConfig: true } };
+    const passed = { conclusion: "success", level: "notice", message: "No changes: all 3 resources match the code." };
+
+    it.each([
+      ["the check passed on an open pull request", passed, { state: "open", merged_at: null }, "confirm"],
+      ["the check passed and the pull request merged", passed, { state: "closed", merged_at: "2026-11-11T00:00:00Z" }, "confirm"],
+      ["the plan would change resources", { conclusion: "failure", level: "failure", message: "2 of 9 resources would change." }, { state: "open", merged_at: null }, "none"],
+      ["the pull request was closed unmerged", passed, { state: "closed", merged_at: null }, "release"],
+    ])("when %s", async (_label, run, pr, expected) => {
+      h.projectFindFirst.mockResolvedValue(adoption);
+      fakeChecks(run, 200, undefined, pr);
+      expect((await call("/:projectId/check", {}, "get", { projectId: "p1" })).status).toBe(200);
+      if (expected === "confirm") {
+        expect(h.ledgerUpdateMany.mock.calls[0][0]).toMatchObject({
+          where: { orgId: "org-a", projectId: "p1", status: "pending" },
+          data: { status: "managed" },
+        });
+      } else {
+        expect(h.ledgerUpdateMany).not.toHaveBeenCalled();
+      }
+      if (expected === "release") expect(h.ledgerDeleteMany.mock.calls[0][0]).toEqual({ where: { orgId: "org-a", projectId: "p1" } });
+      else expect(h.ledgerDeleteMany).not.toHaveBeenCalled();
+    });
+
+    it("leaves a repository import alone: it has no ledger rows", async () => {
+      h.projectFindFirst.mockResolvedValue({ ...adoption, importJson: { generateConfig: false } });
+      fakeChecks(passed);
+      await call("/:projectId/check", {}, "get", { projectId: "p1" });
+      expect(h.ledgerUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it("still answers with the check when the ledger write fails", async () => {
+      h.projectFindFirst.mockResolvedValue(adoption);
+      h.ledgerUpdateMany.mockRejectedValue(new Error("db down"));
+      const err = vi.spyOn(console, "error").mockImplementation(() => {});
+      fakeChecks(passed);
+      const out = await call("/:projectId/check", {}, "get", { projectId: "p1" });
+      expect(out.body).toMatchObject({ state: "passed" });
+      expect(err).toHaveBeenCalled();
+      err.mockRestore();
+    });
   });
 
   it("takes the result from the run that made the generated-code commit", async () => {
@@ -280,7 +342,8 @@ describe("POST /tf/imports/from-assessment", () => {
   ];
 
   beforeEach(() => {
-    h.assessmentFindFirst.mockResolvedValue({ id: "as1", provider: "digitalocean", inventory });
+    // connectionId null: a bundle assessment, as most tests here need no ledger.
+    h.assessmentFindFirst.mockResolvedValue({ id: "as1", provider: "digitalocean", connectionId: null, inventory });
     const json = (body: unknown, code = 200) => new Response(JSON.stringify(body), { status: code });
     vi.stubGlobal(
       "fetch",
@@ -328,6 +391,58 @@ describe("POST /tf/imports/from-assessment", () => {
     expect(bad.status).toBe(400);
     const unsafe = await call("/from-assessment", { assessmentId: "as1", repo: "acme/infra", name: "acme-do", path: "infra/$(x)", backend });
     expect(unsafe.status).toBe(400);
+  });
+
+  it("links the project to the assessment's connection and reserves each import in the ledger", async () => {
+    h.assessmentFindFirst.mockResolvedValue({ id: "as1", provider: "digitalocean", connectionId: "do-conn", inventory });
+    const out = await call("/from-assessment", { assessmentId: "as1", repo: "acme/infra", name: "acme-do", path: "infra/do", backend });
+    expect(out.status).toBe(202);
+    expect(h.projectCreate.mock.calls[0][0].data.providerConnectionId).toBe("do-conn");
+    const rows = h.ledgerCreateMany.mock.calls[0][0].data as Record<string, string>[];
+    expect(rows.map((r) => [r.resourceType, r.providerId, r.terraformAddress, r.status])).toEqual([
+      ["digitalocean:droplet", "123", "digitalocean_droplet.web_1", "pending"],
+      ["digitalocean:database", "db-uuid", "digitalocean_database_cluster.main", "pending"],
+    ]);
+    expect(rows.every((r) => r.orgId === "org-a" && r.projectId === "p1" && r.providerConnectionId === "do-conn")).toBe(true);
+  });
+
+  it("leaves out what another project already manages, and says so", async () => {
+    h.assessmentFindFirst.mockResolvedValue({ id: "as1", provider: "digitalocean", connectionId: "do-conn", inventory });
+    h.ledgerFindMany.mockResolvedValueOnce([{ resourceType: "digitalocean:droplet", providerId: "123" }]);
+    const out = await call("/from-assessment", { assessmentId: "as1", repo: "acme/infra", name: "acme-do", path: "infra/do", backend });
+    expect(out.status).toBe(202);
+    expect(out.body.adopted).toBe(1);
+    expect(out.body.skipped).toContainEqual({ type: "digitalocean:droplet", name: "web-1", reason: "another project already manages it" });
+    expect(h.ledgerFindMany.mock.calls[0][0].where).toEqual({ orgId: "org-a", providerConnectionId: "do-conn" });
+  });
+
+  it("answers 409 and creates nothing when another project reserved a resource first", async () => {
+    h.assessmentFindFirst.mockResolvedValue({ id: "as1", provider: "digitalocean", connectionId: "do-conn", inventory });
+    h.ledgerCreateMany.mockRejectedValue(new Prisma.PrismaClientKnownRequestError("unique", { code: "P2002", clientVersion: "6" }));
+    const out = await call("/from-assessment", { assessmentId: "as1", repo: "acme/infra", name: "acme-do", path: "infra/do", backend });
+    expect(out.status).toBe(409);
+    expect(h.jobCreate).not.toHaveBeenCalled();
+    expect(h.runJob).not.toHaveBeenCalled();
+  });
+
+  it("404s an assessment whose connection is not the caller's org's, and creates nothing", async () => {
+    h.assessmentFindFirst.mockResolvedValue({ id: "as1", provider: "digitalocean", connectionId: "other-orgs-conn", inventory });
+    h.connFindFirst.mockImplementation(async ({ where }: { where: { id?: string; orgId: string; provider?: string } }) =>
+      where.provider === "github" ? { id: "conn-1", encryptedToken: "enc" } : null
+    );
+    const out = await call("/from-assessment", { assessmentId: "as1", repo: "acme/infra", name: "acme-do", path: "infra/do", backend });
+    expect(out.status).toBe(404);
+    expect(h.connFindFirst.mock.calls.some(([q]) => q.where.id === "other-orgs-conn" && q.where.orgId === "org-a")).toBe(true);
+    expect(h.projectCreate).not.toHaveBeenCalled();
+    expect(h.ledgerCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("writes no ledger rows for a bundle assessment, which has no connection", async () => {
+    const out = await call("/from-assessment", { assessmentId: "as1", repo: "acme/infra", name: "acme-do", path: "infra/do", backend });
+    expect(out.status).toBe(202);
+    expect(h.projectCreate.mock.calls[0][0].data.providerConnectionId).toBeNull();
+    expect(h.ledgerFindMany).not.toHaveBeenCalled();
+    expect(h.ledgerCreateMany).not.toHaveBeenCalled();
   });
 
   it("404s another org's assessment", async () => {

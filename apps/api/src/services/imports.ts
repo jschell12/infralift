@@ -6,7 +6,8 @@ import { decryptToken } from "../lib/crypto.js";
 import { Conflict, InvalidInput, NotFound, Upstream } from "../lib/errors.js";
 import { gitHostClient, type GitHostClient } from "../lib/git/hosts.js";
 import { GitCommitError } from "../lib/git/errors.js";
-import { enqueueJob } from "../lib/jobs/enqueue.js";
+import { enqueueJob, insertJob } from "../lib/jobs/enqueue.js";
+import { startJob } from "../lib/jobs/start.js";
 import { readRepoForScan } from "../lib/import/read.js";
 import { scanRepo } from "../lib/import/scan.js";
 import { CHECK_JOB_NAME, GENERATED_COMMIT_SUBJECT } from "../lib/import/contract.js";
@@ -14,6 +15,16 @@ import { checkEnv, checkSetupLines, checkWorkflowPath } from "../lib/import/chec
 import { AdoptInputError, planAdoption, renderAdoption, type AdoptBackend } from "../lib/import/adopt.js";
 import { classifyCheck, type ImportCheckResult } from "../lib/import/result.js";
 import { PREFER_USABLE_CONNECTION } from "../lib/connection-order.js";
+import { isUniqueViolation } from "../lib/prisma-errors.js";
+import {
+  confirmAdoption,
+  ledgerKey,
+  managedKeys,
+  ownedConnection,
+  refuseManagedElsewhere,
+  releaseAdoption,
+  reserve,
+} from "./managed-resources.js";
 
 // ---------------------------------------------------------------------------
 // Importing existing Terraform, and adopting resources built by hand.
@@ -26,7 +37,11 @@ import { PREFER_USABLE_CONNECTION } from "../lib/connection-order.js";
 //                         request adding the read-only plan check
 //   adoptFromAssessment   a cloud account's resources, as they run: import
 //                         blocks plus a check that generates their code
-//   readImportCheck       what that check said, read back from GitHub
+//   openAdoption          the part of an adoption both starting points share
+//                         (an assessment, or resources picked from the
+//                         unmanaged view in services/unmanaged.ts)
+//   readImportCheck       what that check said, read back from GitHub; a
+//                         passing adoption check confirms its ledger rows
 // ---------------------------------------------------------------------------
 
 /** The org's GitHub connection and a client for it. */
@@ -157,9 +172,54 @@ export async function adoptFromAssessment(orgId: string, input: AdoptInput) {
     throw new InvalidInput(`unknown provider ${assessment.provider}`);
   }
   const provider = assessment.provider as Provider;
-  const inventory: ResourceInventoryItem[] = assessment.inventory.map(toInventoryItem);
+  let inventory: ResourceInventoryItem[] = assessment.inventory.map(toInventoryItem);
+  // An assessment adopts the whole account, so what another project already
+  // manages is left out and said so, rather than refusing the lot. A bundle
+  // assessment has no connection, and so no ledger to consult or write.
+  const alreadyManaged: { type: string; name: string; reason: string }[] = [];
+  if (assessment.connectionId) {
+    const managed = await managedKeys(orgId, assessment.connectionId);
+    inventory = inventory.filter((item) => {
+      if (!managed.has(ledgerKey({ type: item.type, providerId: item.externalId }))) return true;
+      alreadyManaged.push({ type: item.type, name: item.name, reason: "another project already manages it" });
+      return false;
+    });
+  }
+  const opened = await openAdoption(orgId, {
+    ...input,
+    provider,
+    inventory,
+    assessmentId: assessment.id,
+    providerConnectionId: assessment.connectionId,
+  });
+  return { ...opened, skipped: [...alreadyManaged, ...opened.skipped] };
+}
+
+export interface OpenAdoptionInput extends RepoRef {
+  provider: Provider;
+  /** The resources to adopt, as a connector reported them. */
+  inventory: ResourceInventoryItem[];
+  /** The whole account's inventory, for provider settings (the google
+   *  provider's project) when `inventory` is a selection. Default: inventory. */
+  settingsInventory?: ResourceInventoryItem[];
+  name: string;
+  path: string;
+  backend: AdoptBackend;
+  assessmentId?: string | null;
+  /** The account the resources are in. Null only for a bundle assessment,
+   *  which has no connection: then no ledger rows are written. */
+  providerConnectionId: string | null;
+}
+
+/** Plans and renders the import blocks, refuses what cannot land, then
+ *  creates the project, reserves its resources in the ledger and queues the
+ *  import job in one transaction, so any refusal leaves nothing behind. The
+ *  job opens the pull request (lib/tf/pipeline.ts runImportJob); merging it
+ *  applies by saved plan (ADR 0008). */
+export async function openAdoption(orgId: string, input: OpenAdoptionInput) {
+  const { provider, inventory } = input;
   const path = input.path.replace(/^\/+|\/+$/g, "");
-  const plan = planAdoption(provider, inventory);
+  const plan = planAdoption(provider, inventory, input.settingsInventory);
   let rendered;
   try {
     rendered = renderAdoption({ provider, plan, backend: input.backend, path, label: path || "the repository root" });
@@ -178,21 +238,64 @@ export async function adoptFromAssessment(orgId: string, input: AdoptInput) {
       throw new Conflict(`${p} already exists in ${input.repo}; pick another path`);
     }
   }
-  const project = await createProject({
-    orgId,
-    name: input.name,
-    source: "imported",
-    assessmentId: assessment.id,
-    gitHost: "github",
-    gitConnectionId: gh.conn.id,
-    destRepo: input.repo,
-    destBranch: ref,
-    destPath: path,
-    providerConfig: {},
-    importJson: rendered.root as unknown as Prisma.InputJsonValue,
+
+  const ledger = input.providerConnectionId
+    ? plan.imports.map((i) => ({ type: i.type, providerId: i.externalId, terraformAddress: i.to }))
+    : [];
+  if (input.providerConnectionId) {
+    // The project may only name its own org's connection.
+    await ownedConnection(orgId, input.providerConnectionId);
+    await refuseManagedElsewhere(orgId, input.providerConnectionId, provider, ledger);
+  }
+
+  const { project, job } = await prisma.$transaction(async (tx) => {
+    let project;
+    try {
+      project = await tx.tfProject.create({
+        data: {
+          orgId,
+          name: input.name,
+          source: "imported",
+          assessmentId: input.assessmentId ?? null,
+          providerConnectionId: input.providerConnectionId,
+          gitHost: "github",
+          gitConnectionId: gh.conn.id,
+          destRepo: input.repo,
+          destBranch: ref,
+          destPath: path,
+          providerConfig: {},
+          importJson: rendered.root as unknown as Prisma.InputJsonValue,
+        },
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) throw new Conflict(`a project named ${input.name} already exists`);
+      throw err;
+    }
+    if (input.providerConnectionId) {
+      await reserve(tx, { orgId, projectId: project.id, providerConnectionId: input.providerConnectionId, provider, resources: ledger });
+    }
+    const job = await insertJob(
+      { projectId: project.id, kind: "import", argumentsJson: { backendConfigFile: null, adoptFiles: rendered.files } },
+      tx
+    );
+    return { project, job };
   });
-  const job = await queueImportJob(project.id, { backendConfigFile: null, adoptFiles: rendered.files });
+  // After the commit, or the runner cannot see the row yet.
+  startJob(job.id);
   return { project, job, adopted: plan.imports.length, skipped: plan.skipped };
+}
+
+/** Moves an adoption's ledger rows on what its check said: a pass confirms
+ *  them, a pull request closed unmerged releases them. Only for an adoption
+ *  (generated code), and never fails the read it rides on. */
+async function settleLedger(project: { id: string; orgId: string; importJson: unknown }, result: ImportCheckResult) {
+  if ((project.importJson as { generateConfig?: unknown } | null)?.generateConfig !== true) return;
+  try {
+    if (result.prState === "closed") await releaseAdoption(project.orgId, project.id);
+    else if (result.state === "passed") await confirmAdoption(project.orgId, project.id);
+  } catch (err) {
+    console.error(`could not update the managed-resource ledger for project ${project.id}:`, err);
+  }
 }
 
 // -- read the check back ----------------------------------------------------------
@@ -238,5 +341,6 @@ export async function readImportCheck(orgId: string, projectId: string): Promise
     where: { id: project.id },
     data: { importCheckJson: result as unknown as Prisma.InputJsonValue },
   });
+  await settleLedger(project, result);
   return result;
 }

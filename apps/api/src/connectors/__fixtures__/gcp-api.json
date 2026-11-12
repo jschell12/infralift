@@ -1,0 +1,32 @@
+{
+  "_source": "Not captured from a live project. Each body follows the response schema in Google's REST reference for that method (oauth2 token exchange; Cloud SQL Admin v1 instances.list, a list of DatabaseInstance; Cloud Storage JSON v1 buckets.list, a list of Bucket), with example values, trimmed to the fields the gcp connector reads, written 2026-11-11. Cloud Run and Compute are absent: the connector skips an API that answers with an error, as it does for one that is not enabled. Replace with captured responses.",
+  "projectId": "acme-prod-381511",
+  "token": { "access_token": "ya29.example-access-token", "expires_in": 3599, "token_type": "Bearer" },
+  "sqlInstances": {
+    "kind": "sql#instancesList",
+    "items": [
+      {
+        "kind": "sql#instance",
+        "name": "orders-db",
+        "project": "acme-prod-381511",
+        "region": "us-central1",
+        "databaseVersion": "POSTGRES_15",
+        "state": "RUNNABLE",
+        "settings": { "kind": "sql#settings", "tier": "db-custom-2-7680", "dataDiskSizeGb": "100" }
+      }
+    ]
+  },
+  "buckets": {
+    "kind": "storage#buckets",
+    "items": [
+      {
+        "kind": "storage#bucket",
+        "id": "acme-prod-uploads",
+        "name": "acme-prod-uploads",
+        "location": "US",
+        "storageClass": "STANDARD",
+        "versioning": { "enabled": true }
+      }
+    ]
+  }
+}

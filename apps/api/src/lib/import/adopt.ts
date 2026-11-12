@@ -1,7 +1,7 @@
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { providerSource } from "../tf/codegen.js";
 import { PROVIDER_ENV, type RootModule } from "./scan.js";
-import { adopterFor, isSkip, providerBlocks, providerSettings, regionAlias, type ProviderSettings } from "./adopters/index.js";
+import { adopterFor, isSkip, providerBlocks, providerSettings, regionAlias, type AdoptTarget, type ProviderSettings } from "./adopters/index.js";
 import { attr, blank, block, comment, expr, file as hcl } from "../hcl/write.js";
 
 // ---------------------------------------------------------------------------
@@ -27,7 +27,7 @@ export interface AdoptBackend {
 export interface AdoptPlan {
   /** `provider` is an alias address (aws.us_west_2) when the import is not on
    *  the default provider. */
-  imports: { to: string; id: string; type: string; name: string; provider?: string }[];
+  imports: { to: string; id: string; type: string; name: string; externalId: string; provider?: string }[];
   /** Inventory items left out, with the reason, so a partial adoption never
    *  reads as a whole one. */
   skipped: { type: string; name: string; reason: string }[];
@@ -50,26 +50,40 @@ function commentSafe(name: string): string {
  *  string or start an interpolation is refused, not escaped. */
 const SAFE_ID = /^[A-Za-z0-9._:/@=+-]+$/;
 
-export function planAdoption(provider: Provider, inventory: ResourceInventoryItem[]): AdoptPlan {
+/** Usage lines (":usage" types) are billing figures, not resources. */
+export const isUsageLine = (item: { type: string }) => item.type.endsWith(":usage");
+
+/** Whether one inventory item can be adopted today: its import block, or the
+ *  reason it cannot. The rule planAdoption applies to each item, exported so
+ *  the unmanaged view (services/unmanaged.ts) says "adoptable" for exactly
+ *  the items an adoption would import. */
+export function adoptionTarget(provider: Provider, item: ResourceInventoryItem): AdoptTarget | { reason: string } {
+  const block = adopterFor(provider).map(item);
+  if (!block) return { reason: "no Terraform import mapping for this kind yet" };
+  if (isSkip(block)) return { reason: block.skip };
+  if (!SAFE_ID.test(block.id)) return { reason: "its id has characters infralift will not write into code" };
+  return block;
+}
+
+/** Import blocks for `inventory`. Provider settings (a Google project) are
+ *  read from `settingsInventory`, which defaults to the same list; a caller
+ *  adopting a selection passes the whole account, because the item that
+ *  carries the setting is not itself importable. */
+export function planAdoption(
+  provider: Provider,
+  inventory: ResourceInventoryItem[],
+  settingsInventory: ResourceInventoryItem[] = inventory
+): AdoptPlan {
   const imports: AdoptPlan["imports"] = [];
   const skipped: AdoptPlan["skipped"] = [];
   const taken = new Set<string>();
   const regions = new Set<string>();
-  const adopter = adopterFor(provider);
   const alias = providerSource(provider)?.name ?? provider;
   for (const item of inventory) {
-    if (item.type.endsWith(":usage")) continue;
-    const block = adopter.map(item);
-    if (!block) {
-      skipped.push({ type: item.type, name: item.name, reason: "no Terraform import mapping for this kind yet" });
-      continue;
-    }
-    if (isSkip(block)) {
-      skipped.push({ type: item.type, name: item.name, reason: block.skip });
-      continue;
-    }
-    if (!SAFE_ID.test(block.id)) {
-      skipped.push({ type: item.type, name: item.name, reason: "its id has characters infralift will not write into code" });
+    if (isUsageLine(item)) continue;
+    const block = adoptionTarget(provider, item);
+    if ("reason" in block) {
+      skipped.push({ type: item.type, name: item.name, reason: block.reason });
       continue;
     }
     // Two resources with the same name would claim one address.
@@ -78,12 +92,12 @@ export function planAdoption(provider: Provider, inventory: ResourceInventoryIte
     taken.add(to);
     if (block.region) {
       regions.add(block.region);
-      imports.push({ to, id: block.id, type: item.type, name: item.name, provider: `${alias}.${regionAlias(block.region)}` });
+      imports.push({ to, id: block.id, type: item.type, name: item.name, externalId: item.externalId, provider: `${alias}.${regionAlias(block.region)}` });
     } else {
-      imports.push({ to, id: block.id, type: item.type, name: item.name });
+      imports.push({ to, id: block.id, type: item.type, name: item.name, externalId: item.externalId });
     }
   }
-  const settings: ProviderSettings = { ...providerSettings(provider, inventory) };
+  const settings: ProviderSettings = { ...providerSettings(provider, settingsInventory) };
   if (regions.size) settings.regions = [...regions].sort();
   return { imports, skipped, settings };
 }

@@ -28,6 +28,7 @@ model Org {
   workspaces  Workspace[]
   templates   TfTemplate[]
   stackSources StackSource[]
+  managedResources ManagedResource[]
 }
 
 model User {
@@ -66,6 +67,8 @@ model ProviderConnection {
   assessments Assessment[]
   workspaces  Workspace[]
   stackSources StackSource[]
+  projects    TfProject[]
+  managedResources ManagedResource[]
 
   @@unique([orgId, provider, label])
 }
@@ -461,6 +464,13 @@ model TfProject {
   // The org's Terraform Cloud connection the project's workspace lives in
   // (ProviderConnection, provider "tfc"). Null = no workspace is created.
   tfcConnectionId   String?
+  // The one cloud account this project's Terraform manages (ADR 0010): a
+  // ProviderConnection of the same org, for a provider such as aws or
+  // cloudflare. Null for projects made before migration 0029 that it could
+  // not attribute, and for kinds with no single account (template, stack,
+  // a repository import, Terraform Cloud workspaces). Restrict: a connection
+  // a project manages cannot be deleted out from under it.
+  providerConnectionId String?
   destRepo          String // owner/repo
   destPath          String   @default("") // work dir inside repo, "" = root
   destBranch        String   @default("main")
@@ -474,9 +484,56 @@ model TfProject {
   jobs            TfJob[]
   workspaces      Workspace[]
   stackVersion    StackVersion? @relation(fields: [stackVersionId], references: [id])
+  providerConnection ProviderConnection? @relation(fields: [providerConnectionId], references: [id], onDelete: Restrict)
+  managedResources ManagedResource[]
 
   @@unique([orgId, name])
   @@index([assessmentId])
+  @@index([providerConnectionId])
+}
+
+// The ledger of cloud resources infralift's projects manage, one row per
+// resource (ADR 0011). The unmanaged view (services/unmanaged.ts) is the
+// account's live inventory minus these rows.
+//
+// The key is the connector's identity for a resource, not Terraform's:
+// resourceType is the inventory type ("aws:ec2:instance", "cloudflare:zone")
+// and providerId the inventory's externalId, because that is what an
+// inventory can be compared against. The Terraform side is terraformAddress.
+//
+// Unique per (connection, provider, type, id): through one connection, a
+// cloud resource has one owning project. Two connections to the same account
+// are not detected (ADR 0011). A second adoption of it is refused with 409 rather than
+// opening a second pull request that would import it into a second state.
+model ManagedResource {
+  id                   String    @id @default(cuid())
+  orgId                String
+  projectId            String
+  providerConnectionId String
+  provider             String
+  resourceType         String
+  providerId           String
+  terraformAddress     String
+  // adopted - an import block infralift wrote (adoption from an account or
+  //           from an assessment). The only source that writes rows today:
+  //           repository imports and stacks do not know provider ids.
+  source               String    @default("adopted")
+  // pending - reserved when the adoption pull request is opened
+  // managed - the pull request's import check passed: the plan imports it
+  //           and changes nothing (lib/import/result.ts, state "passed")
+  // A project's rows are deleted when its adoption pull request is closed
+  // unmerged (services/managed-resources.ts releaseAdoption).
+  status               String    @default("pending")
+  firstSeenAt          DateTime  @default(now())
+  adoptedAt            DateTime?
+
+  org                Org                @relation(fields: [orgId], references: [id])
+  project            TfProject          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  providerConnection ProviderConnection @relation(fields: [providerConnectionId], references: [id], onDelete: Restrict)
+
+  @@unique([providerConnectionId, provider, resourceType, providerId])
+  @@index([projectId, status])
+  @@index([orgId])
 }
 
 // A stack a team keeps in its own repository (ADR 0009). Private to its org
