@@ -12,7 +12,7 @@ infralift manages cloud infrastructure. It does not build, host or deploy applic
 - one directory in one repository, which holds the code;
 - one state backend (OpenTofu with R2, or a Terraform Cloud workspace).
 
-A project contains modules, in the sense of ADR 0009: a database, a bucket, a network or a DNS zone, each with what exists only to serve it. Infrastructure that spans accounts or providers is several projects, and a stack can tie them together. A project does not reach across connections.
+A project contains modules, in the sense of ADR 0009: a database, a bucket, a network or a DNS zone, each with what exists only to serve it. Infrastructure that spans accounts or providers is several projects, and one project reads another's outputs through remote state. A project does not reach across connections. A stack still renders into one project, as in ADR 0009; stacks that span projects would extend that ADR and do not exist yet.
 
 **How a project starts.** `/projects/new` is a page, not a drawer. It offers three starting points, in this order:
 
@@ -24,7 +24,10 @@ A project contains modules, in the sense of ADR 0009: a database, a bucket, a ne
 
 - app templates;
 - creating a repository from an app template (`TfProject.createRepo`);
-- stacks that deliver an application, meaning a Dockerfile, app CI and hosting. `app-foundry-hetzner` is the only one today.
+- stacks that deliver an application, meaning a Dockerfile, app CI and hosting. `app-foundry-hetzner` is the only one today;
+- codegen projects that rebuild an assessed app on a migration target (`TfProject.source = codegen` with `migrationTarget` cloudflare or hetzner). The assessment's cost comparison stays.
+
+The `template` kind (one Terraform file rendered from a template version, the legacy `/terraform` page) is Terraform, not an app, and this decision does not change it. `adopted` projects (Terraform Cloud workspaces) are starting point 3.
 
 These come out of `/projects/new` and out of the catalog. Existing projects that use them keep working: their rows, renderings and jobs are untouched. The code is removed in a later change, once no project depends on it. Moving off a PaaS stays possible, because a database or bucket created on the PaaS can be adopted like any other resource, but it is not a starting point of its own.
 
@@ -36,6 +39,7 @@ The product is bringing click-built infrastructure under Terraform and keeping i
 
 ## Cost
 
+- This describes a target model. `TfProject` has no provider connection field today, only `tfcConnectionId` and `gitConnectionId`, so "one provider connection per project" is a schema change still to make.
 - The catalog has no infrastructure stacks yet. The new-project page starts with adopt and import carrying it until the first catalog stacks land.
-- Someone used to one project covering AWS plus Cloudflare DNS now has two projects. Outputs from one feed the other through a stack or remote state, which is more wiring than a single root module.
+- Someone used to one project covering AWS plus Cloudflare DNS now has two projects. Outputs from one feed the other through remote state, which is more wiring than a single root module.
 - The app-hosting code stays in the repository, hidden, until a follow-up removes it. Until then it has to keep passing tests.
