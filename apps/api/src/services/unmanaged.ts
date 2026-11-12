@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { ProviderConnection } from "@prisma/client";
-import type { AdoptSelectedResult, Provider, ResourceInventoryItem, UnmanagedPage, UnmanagedResource } from "@infralift/shared";
+import type {
+  AdoptBackendDefaults,
+  AdoptSelectedResult,
+  CloudflareAccountRef,
+  Provider,
+  ResourceInventoryItem,
+  UnmanagedPage,
+  UnmanagedResource,
+} from "@infralift/shared";
 import { prisma } from "../lib/db.js";
 import { decryptToken } from "../lib/crypto.js";
 import { getConnector } from "../connectors/index.js";
@@ -157,6 +165,67 @@ export function subtractManaged(provider: Provider, inventory: ResourceInventory
   return out.sort((a, b) => compareKeys(a, b));
 }
 
+const CLOUDFLARE_ACCOUNT_ID = /^[a-f0-9]{32}$/;
+
+/** The Cloudflare accounts an inventory found resources in, in the order
+ *  first seen, each with the first name recorded for it. The connector puts
+ *  accountId (and accountName) in each account-scoped item's metadata. An
+ *  account with nothing in it is not listed: the inventory never saw it. */
+export function cloudflareAccountsOf(inventory: ResourceInventoryItem[]): CloudflareAccountRef[] {
+  const byId = new Map<string, CloudflareAccountRef>();
+  for (const item of inventory) {
+    if (item.provider !== "cloudflare") continue;
+    const id = item.metadata?.accountId;
+    if (typeof id !== "string" || !CLOUDFLARE_ACCOUNT_ID.test(id)) continue;
+    const name = typeof item.metadata?.accountName === "string" && item.metadata.accountName.trim() ? item.metadata.accountName.trim() : null;
+    const seen = byId.get(id);
+    if (!seen) byId.set(id, { id, name });
+    else if (!seen.name && name) seen.name = name;
+  }
+  return [...byId.values()];
+}
+
+/** The region most of an AWS inventory's regional resources are in; ties go
+ *  to the alphabetically first. Global resources (IAM, CloudFront, Route 53)
+ *  carry no region in their ARN and are left out. */
+export function commonAwsRegion(inventory: ResourceInventoryItem[]): string | null {
+  const counts = new Map<string, number>();
+  for (const item of inventory) {
+    if (item.provider !== "aws" || isUsageLine(item)) continue;
+    const arn = typeof item.metadata?.arn === "string" ? item.metadata.arn : item.externalId;
+    const region = arn.startsWith("arn:") ? arn.split(":")[3] : item.region;
+    if (!region) continue;
+    counts.set(region, (counts.get(region) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  for (const [region, n] of [...counts].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    if (best === null || n > counts.get(best)!) best = region;
+  }
+  return best;
+}
+
+/** What the adopt form can fill in from the inventory instead of asking. */
+export function backendDefaultsOf(provider: Provider, inventory: ResourceInventoryItem[]): AdoptBackendDefaults {
+  return {
+    cloudflareAccounts: provider === "cloudflare" ? cloudflareAccountsOf(inventory) : [],
+    awsRegion: provider === "aws" ? commonAwsRegion(inventory) : null,
+  };
+}
+
+/** An R2 backend sent without an account id gets the connection's Cloudflare
+ *  account when the inventory found exactly one. With several, which one holds
+ *  the bucket is the caller's to say. Anything else is returned unchanged and
+ *  validateBackend (lib/import/adopt.ts) judges it. */
+export function withKnownAccount(provider: Provider, backend: AdoptBackend, inventory: ResourceInventoryItem[]): AdoptBackend {
+  if (backend.kind !== "r2" || backend.accountId?.trim() || provider !== "cloudflare") return backend;
+  const accounts = cloudflareAccountsOf(inventory);
+  if (accounts.length === 1) return { ...backend, accountId: accounts[0]!.id };
+  if (accounts.length > 1) {
+    throw new InvalidInput(`accountId: this connection sees ${accounts.length} Cloudflare accounts; say which one holds the state bucket`);
+  }
+  return backend;
+}
+
 function compareKeys(a: LedgerKey, b: LedgerKey): number {
   if (a.type !== b.type) return a.type < b.type ? -1 : 1;
   if (a.providerId !== b.providerId) return a.providerId < b.providerId ? -1 : 1;
@@ -204,6 +273,7 @@ export async function listUnmanaged(
     total: rows.length,
     adoptable: rows.filter((r) => r.adoptable).length,
     resources: page,
+    backendDefaults: backendDefaultsOf(connection.provider as Provider, inventory.items),
     nextCursor,
   };
 }
@@ -289,6 +359,7 @@ export async function adoptSelected(orgId: string, connectionId: string, input: 
   const inventory = await accountInventory(connection, { refresh: input.refresh });
   const managed = await managedKeys(orgId, connection.id);
   const picked = pickResources(provider, inventory.items, managed, input.resources);
+  const backend = withKnownAccount(provider, newTarget.backend, inventory.items);
 
   const open = () => openAdoption(orgId, {
     repo: newTarget.repo,
@@ -296,7 +367,7 @@ export async function adoptSelected(orgId: string, connectionId: string, input: 
     connectionId: newTarget.gitConnectionId,
     name: newTarget.name,
     path: newTarget.path,
-    backend: newTarget.backend,
+    backend,
     provider,
     inventory: picked,
     // Provider settings come from the whole account: the google provider's

@@ -10,8 +10,10 @@ import {
   AdoptRequestError,
   INVENTORY_MAX_AGE_MINUTES,
   adoptFormProblem,
+  applyBackendDefaults,
   appendPage,
   buildAdoptRequest,
+  connectionProblemText,
   defaultAdoptForm,
   fetchUnmanagedPage,
   fetchedAtText,
@@ -116,10 +118,7 @@ function AdoptFromAccount() {
   } else if (account.status !== "valid") {
     body = (
       <div className={CARD}>
-        <p className="mb-3 text-sm text-text">
-          infralift can&apos;t read this account until its connection is fixed
-          {account.lastError ? `: ${account.lastError}` : "."}
-        </p>
+        <p className="mb-3 text-sm text-text">{connectionProblemText(account)}</p>
         <a className={`${SMALL_BTN_STRONG} ${FOCUS}`} href="/connections">
           Fix on Connections
         </a>
@@ -179,6 +178,8 @@ function AdoptWorkspace({
   // How many resources were on screen before a refresh, so the refresh reads
   // back at least as far and picks made after "Load more" are not dropped.
   const loadedCount = useRef(0);
+  // Whether the inventory's backend defaults have gone into the form yet.
+  const defaultsApplied = useRef(false);
 
   const loadFirst = useCallback(
     async (refresh: boolean) => {
@@ -200,6 +201,12 @@ function AdoptWorkspace({
         }
         if (seq !== requestSeq.current) return;
         loadedCount.current = resources.length;
+        // The form is not on screen until this first answer, so filling it
+        // here cannot overwrite anything typed. A refresh leaves it alone.
+        if (!defaultsApplied.current) {
+          defaultsApplied.current = true;
+          setForm((f) => applyBackendDefaults(f, meta.backendDefaults));
+        }
         setList({ status: "ready", page: meta, resources, nextCursor });
         setSelected((s) => keepLoadedPicks(s, resources));
       } catch (e) {
@@ -355,7 +362,12 @@ function AdoptWorkspace({
         <p className="mb-4 text-sm text-muted">
           Adopted resources go into a new project. Adding them to an existing project isn&apos;t supported yet.
         </p>
-        <AdoptTargetForm form={form} onChange={setForm} gitConnections={gitConnections} />
+        <AdoptTargetForm
+          form={form}
+          onChange={setForm}
+          gitConnections={gitConnections}
+          cloudflareAccounts={page.backendDefaults?.cloudflareAccounts ?? []}
+        />
 
         <p aria-live="polite" className={`mt-5 mb-3 text-sm font-semibold ${NUM}`}>
           {picked === 0
@@ -369,7 +381,7 @@ function AdoptWorkspace({
             {submitError.resources.length > 0 && (
               <ul className="mt-2 list-disc pl-5">
                 {submitError.resources.map((r) => (
-                  <li key={r.label} className="break-words">
+                  <li key={r.key} className="break-words">
                     {r.label}
                     {r.detail ? `: ${r.detail}` : ""}
                   </li>

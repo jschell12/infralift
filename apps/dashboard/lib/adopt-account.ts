@@ -11,7 +11,15 @@
 // Shapes are @infralift/shared's (packages/shared/src/unmanaged.ts), which the
 // API route (apps/api/src/routes/connections.ts) answers with.
 
-import type { AdoptSelectedRequest, AdoptSelectedResult, UnmanagedPage, UnmanagedResource } from "@infralift/shared";
+import type {
+  AdoptBackendDefaults,
+  AdoptSelectedRequest,
+  AdoptSelectedResult,
+  CloudflareAccountRef,
+  ProviderConnectionSummary,
+  UnmanagedPage,
+  UnmanagedResource,
+} from "@infralift/shared";
 import { API_URL, errorMessageFor } from "./api";
 
 /** Most picks one request may carry (ADOPT_MAX_RESOURCES in
@@ -121,7 +129,8 @@ export interface AdoptForm {
 }
 
 /** Sensible starting values for a provider ("aws" gives aws-adopted in
- *  infra/aws). The name is cut to fit the API's 32-character rule. */
+ *  infra/aws). The name is cut to fit the API's 32-character rule. An AWS
+ *  account starts on an S3 backend, anything else on R2. */
 export function defaultAdoptForm(provider: string): AdoptForm {
   const slug = provider.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   return {
@@ -130,12 +139,51 @@ export function defaultAdoptForm(provider: string): AdoptForm {
     branch: "main",
     gitConnectionId: "",
     path: `infra/${slug}`,
-    backendKind: "r2",
+    backendKind: provider === "aws" ? "s3" : "r2",
     bucket: "",
     stateKey: `${slug}/terraform.tfstate`,
     accountId: "",
     region: "us-east-1",
   };
+}
+
+/** The form with what the account's inventory already says filled in: the
+ *  first Cloudflare account it found as the R2 account (when none is typed),
+ *  and the AWS region most resources are in. Applied once, when the list first
+ *  loads and before the form is on screen, so it never overwrites typing. */
+export function applyBackendDefaults(form: AdoptForm, defaults: AdoptBackendDefaults | undefined): AdoptForm {
+  if (!defaults) return form;
+  const firstAccount = defaults.cloudflareAccounts[0]?.id;
+  return {
+    ...form,
+    accountId: form.accountId.trim() || !firstAccount ? form.accountId : firstAccount,
+    region: defaults.awsRegion ?? form.region,
+  };
+}
+
+/** The select's value for "Another account", where the id is typed. */
+export const OTHER_ACCOUNT = "other";
+
+/** Which entry the R2 account select shows: a known account when the form's
+ *  id is one, otherwise "Another account" (an empty id included, which is
+ *  what picking "Another account" leaves for the text field to fill). */
+export function accountChoice(accountId: string, accounts: CloudflareAccountRef[]): string {
+  const id = accountId.trim();
+  return accounts.some((a) => a.id === id) ? id : OTHER_ACCOUNT;
+}
+
+/** "Demo Account · 023e105f" for the account select, the id alone without a name. */
+export function cloudflareAccountLabel(a: CloudflareAccountRef): string {
+  return a.name ? `${a.name} · ${a.id.slice(0, 8)}` : a.id;
+}
+
+/** Why the page cannot read an account whose connection is not valid, in our
+ *  words. The connection's lastError can carry the provider's own text, which
+ *  stays on the Connections page and in the API's logs, not here. */
+export function connectionProblemText(account: Pick<ProviderConnectionSummary, "status">): string {
+  return account.status === "unverified"
+    ? "infralift can't read this account until its connection has been checked."
+    : "infralift can't read this account: its credential was refused the last time infralift checked it.";
 }
 
 // The API's own field rules (adoptSchema in apps/api/src/routes/connections.ts
@@ -202,7 +250,9 @@ export function buildAdoptRequest(
  *  resources it is about when the API named them. */
 export interface AdoptProblem {
   message: string;
-  resources: { label: string; detail: string | null }[];
+  /** `key` is resourceKey() of the resource, unique where labels are not
+   *  (two DNS records can share a name). */
+  resources: { key: string; label: string; detail: string | null }[];
 }
 
 type KeyList = { type?: unknown; providerId?: unknown; project?: unknown; reason?: unknown }[];
@@ -217,6 +267,10 @@ function labelFor(item: { type?: unknown; providerId?: unknown }, loaded: Unmana
   const id = String(item.providerId ?? "");
   const known = loaded.find((r) => r.type === type && r.providerId === id);
   return known ? `${known.name} (${type})` : `${id} (${type})`;
+}
+
+function keyOf(item: { type?: unknown; providerId?: unknown }): string {
+  return resourceKey({ type: String(item.type ?? ""), providerId: String(item.providerId ?? "") });
 }
 
 function listOf(body: unknown, field: "managed" | "missing" | "refused"): KeyList {
@@ -249,6 +303,7 @@ export function adoptProblemFor(status: number | null, body: unknown, loaded: Un
           ? "One resource you picked is already managed by another project. Unpick it, or refresh the list, and try again."
           : `${managed.length} resources you picked are already managed by another project. Unpick them, or refresh the list, and try again.`,
       resources: managed.map((m) => ({
+        key: keyOf(m),
         label: labelFor(m, loaded),
         detail: typeof m.project === "string" && m.project ? `managed by ${m.project}` : null,
       })),
@@ -259,7 +314,7 @@ export function adoptProblemFor(status: number | null, body: unknown, loaded: Un
   if (missing.length) {
     return {
       message: "Some resources you picked are no longer in the account. Refresh the list and pick again.",
-      resources: missing.map((m) => ({ label: labelFor(m, loaded), detail: null })),
+      resources: missing.map((m) => ({ key: keyOf(m), label: labelFor(m, loaded), detail: null })),
     };
   }
 
@@ -268,6 +323,7 @@ export function adoptProblemFor(status: number | null, body: unknown, loaded: Un
     return {
       message: "Some resources you picked cannot be adopted yet. Unpick them and try again.",
       resources: refused.map((m) => ({
+        key: keyOf(m),
         label: labelFor(m, loaded),
         detail: typeof m.reason === "string" ? m.reason : null,
       })),

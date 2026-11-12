@@ -9,7 +9,7 @@
 // select-all rules are in lib/adopt-account.ts.
 
 import { useEffect, useId, useRef } from "react";
-import type { UnmanagedResource } from "@infralift/shared";
+import { inventoryTypeLabel, type UnmanagedResource } from "@infralift/shared";
 import { groupSelection, resourceKey, type ResourceGroup } from "../lib/adopt-account";
 import { CARD, MONO, NUM } from "./ui";
 
@@ -17,7 +17,8 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
 const CHECKBOX = `h-5 w-5 shrink-0 cursor-pointer accent-text disabled:cursor-default ${FOCUS}`;
 
 /** A native checkbox that can also show the mixed state, which has no HTML
- *  attribute and is set on the element instead. */
+ *  attribute and is set on the element instead. The indeterminate property
+ *  is what assistive tech reads as mixed, so no aria-checked on top. */
 function Checkbox({
   checked,
   mixed = false,
@@ -44,7 +45,6 @@ function Checkbox({
       type="checkbox"
       className={CHECKBOX}
       checked={checked}
-      aria-checked={mixed ? "mixed" : checked}
       disabled={disabled}
       aria-describedby={describedBy}
       onChange={onChange}
@@ -117,10 +117,10 @@ function GroupTile({
   const pickedHere = group.adoptableKeys.filter((k) => selected.has(k)).length;
   const blocked = group.resources.length - group.adoptableKeys.length;
   return (
-    <li className={`${CARD} min-w-0 p-4 sm:p-5`} aria-labelledby={headingId}>
+    <li className={`${CARD} min-w-0 p-4 sm:p-5`}>
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h3 id={headingId} className={`min-w-0 flex-1 text-sm font-semibold break-all ${MONO}`}>
-          {group.type}
+        <h3 id={headingId} className="min-w-0 flex-1 text-sm font-semibold break-words">
+          {inventoryTypeLabel(group.type)}
         </h3>
         <span className={`text-xs text-muted ${NUM}`}>
           {group.resources.length} found

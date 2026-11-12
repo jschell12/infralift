@@ -86,7 +86,9 @@ vi.mock("../connectors/index.js", async (importOriginal) => {
 vi.mock("../lib/jobs/start.js", () => ({ startJob: h.runJob }));
 
 const { connectionsRouter } = await import("../routes/connections.js");
-const { INVENTORY_TTL_MS, encodeCursor, resetUnmanagedState, subtractManaged } = await import("./unmanaged.js");
+const { INVENTORY_TTL_MS, cloudflareAccountsOf, commonAwsRegion, encodeCursor, resetUnmanagedState, subtractManaged, withKnownAccount } = await import(
+  "./unmanaged.js"
+);
 const { ledgerKey } = await import("./managed-resources.js");
 const { cloudflareConnector } = await import("../connectors/cloudflare.js");
 
@@ -274,6 +276,71 @@ describe("subtractManaged", () => {
 
 // -- GET /connections/:id/unmanaged ------------------------------------------------------
 
+// -- what the adopt form can fill in --------------------------------------------------------
+
+describe("backend defaults", () => {
+  // Items in the shape the Cloudflare connector writes: an account-scoped
+  // resource carries metadata.accountId and metadata.accountName.
+  const A = "0123456789abcdef0123456789abcdef";
+  const B = "fedcba9876543210fedcba9876543210";
+  const cfItem = (id: string, accountId: unknown, accountName: unknown = null): ResourceInventoryItem => ({
+    provider: "cloudflare",
+    type: "cloudflare:r2_bucket",
+    externalId: id,
+    name: id,
+    metadata: { accountId, accountName },
+  });
+  const r2 = { kind: "r2" as const, bucket: "acme-state", key: "cf/terraform.tfstate" };
+
+  it("lists each account once, in the order seen, keeping the first name found", () => {
+    const items = [cfItem("a1", A), cfItem("b1", B, "Staging"), cfItem("a2", A, "Production"), cfItem("a3", A, "Other")];
+    expect(cloudflareAccountsOf(items)).toEqual([
+      { id: A, name: "Production" },
+      { id: B, name: "Staging" },
+    ]);
+  });
+
+  it("ignores an item without a well-formed account id, such as a DNS record", () => {
+    expect(cloudflareAccountsOf([cfItem("x", null), cfItem("y", "not-an-id"), cfItem("z", A.toUpperCase())])).toEqual([]);
+  });
+
+  it("fills the account id only when the request leaves it out and exactly one account is known", () => {
+    expect(withKnownAccount("cloudflare", r2, [cfItem("a1", A)])).toEqual({ ...r2, accountId: A });
+    expect(withKnownAccount("cloudflare", { ...r2, accountId: B }, [cfItem("a1", A)])).toEqual({ ...r2, accountId: B });
+    expect(withKnownAccount("cloudflare", r2, [])).toEqual(r2);
+  });
+
+  it("refuses to guess between several accounts", () => {
+    expect(() => withKnownAccount("cloudflare", r2, [cfItem("a1", A), cfItem("b1", B)])).toThrow(/2 Cloudflare accounts/);
+  });
+
+  it("leaves an S3 backend, and any other provider's connection, alone", () => {
+    const s3 = { kind: "s3" as const, bucket: "acme-state", key: "k", region: "us-east-1" };
+    expect(withKnownAccount("cloudflare", s3, [cfItem("a1", A)])).toEqual(s3);
+    expect(withKnownAccount("aws", r2, [cfItem("a1", A)])).toEqual(r2);
+  });
+
+  it("picks the commonest region from AWS ARNs, skipping global resources and breaking ties alphabetically", () => {
+    const awsItem = (arn: string, region: string): ResourceInventoryItem => ({
+      provider: "aws",
+      type: "aws:x",
+      externalId: arn,
+      name: arn,
+      region,
+      metadata: { arn },
+    });
+    const items = [
+      awsItem("arn:aws:iam::123456789012:role/a", "eu-west-1"),
+      awsItem("arn:aws:iam::123456789012:role/b", "eu-west-1"),
+      awsItem("arn:aws:ec2:us-west-2:123456789012:instance/i-1", "us-west-2"),
+      awsItem("arn:aws:ec2:eu-central-1:123456789012:instance/i-2", "eu-central-1"),
+    ];
+    expect(commonAwsRegion(items)).toBe("eu-central-1");
+    expect(commonAwsRegion([...items, awsItem("arn:aws:rds:us-west-2:123456789012:db:x", "us-west-2")])).toBe("us-west-2");
+    expect(commonAwsRegion([])).toBeNull();
+  });
+});
+
 describe("GET /connections/:id/unmanaged", () => {
   it("returns the account minus the ledger, read for this org and connection", async () => {
     h.ledgerFindMany.mockResolvedValue([{ resourceType: "cloudflare:zone", providerId: ZONE_1 }]);
@@ -382,6 +449,21 @@ describe("GET /connections/:id/unmanaged", () => {
     });
   });
 
+  it("names the Cloudflare account the inventory found, for the R2 backend's account id", async () => {
+    const out = await list();
+    // One account in the fixture; the account list's name wins over the name
+    // the zone payload carries for the same id, because it is seen first.
+    expect(out.body.backendDefaults).toEqual({
+      cloudflareAccounts: [{ id: cf.accounts.result[0].id, name: cf.accounts.result[0].name }],
+      awsRegion: null,
+    });
+  });
+
+  it("offers the region most of an AWS account's resources are in, for an S3 backend", async () => {
+    const out = await list({}, { id: "aws-conn" });
+    expect(out.body.backendDefaults).toEqual({ cloudflareAccounts: [], awsRegion: "us-east-1" });
+  });
+
   it("reads an AWS account without calling Cost Explorer, which bills per request", async () => {
     const out = await list({}, { id: "aws-conn" });
     expect(out.status).toBe(200);
@@ -445,6 +527,22 @@ describe("POST /connections/:id/adopt", () => {
       ["cloudflare:zone", ZONE_2, "cloudflare_zone.example_org", "pending", "cf-conn"],
     ]);
     expect(h.runJob).toHaveBeenCalledWith("job-new");
+  });
+
+  it("fills in an R2 backend's account id from the connection's only Cloudflare account", async () => {
+    const { accountId: _omitted, ...noAccount } = backend;
+    const out = await adopt({ resources: zones, target: { ...target, backend: noAccount } });
+    expect(out.status).toBe(202);
+    const files = h.jobCreate.mock.calls[0][0].data.argumentsJson.adoptFiles as { path: string; content: string }[];
+    const account = cf.accounts.result[0].id as string;
+    expect(files.some((f) => f.content.includes(`https://${account}.r2.cloudflarestorage.com`))).toBe(true);
+  });
+
+  it("keeps an R2 account id the request names, even when the connection sees another", async () => {
+    expect((await adopt({ resources: zones, target })).status).toBe(202);
+    const files = h.jobCreate.mock.calls[0][0].data.argumentsJson.adoptFiles as { path: string; content: string }[];
+    expect(files.some((f) => f.content.includes(`https://${backend.accountId}.r2.cloudflarestorage.com`))).toBe(true);
+    expect(files.some((f) => f.content.includes(`https://${cf.accounts.result[0].id}.r2.cloudflarestorage.com`))).toBe(false);
   });
 
   it("404s another org's connection and creates nothing", async () => {

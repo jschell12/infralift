@@ -35,6 +35,27 @@ export interface UnmanagedPage {
   /** How many of those can be adopted today. */
   adoptable: number;
   resources: UnmanagedResource[];
+  /** What the inventory already says about the state backend, so the adopt
+   *  form can fill it in rather than ask. Absent from older API versions. */
+  backendDefaults?: AdoptBackendDefaults;
+}
+
+/** A Cloudflare account the connection's token can see, as the inventory
+ *  records it on the account's resources. */
+export interface CloudflareAccountRef {
+  id: string;
+  /** The account's name in Cloudflare, when the inventory has it. */
+  name: string | null;
+}
+
+export interface AdoptBackendDefaults {
+  /** Cloudflare connections: the accounts the inventory found resources in,
+   *  by name. An R2 backend's account id is one of these unless the bucket
+   *  lives elsewhere. Empty for other providers. */
+  cloudflareAccounts: CloudflareAccountRef[];
+  /** AWS connections: the region most of the account's regional resources are
+   *  in, as a starting value for an S3 backend's region. Null otherwise. */
+  awsRegion: string | null;
 }
 
 /** POST /connections/:id/adopt. `resources` are keys from the unmanaged list.
@@ -52,6 +73,8 @@ export interface AdoptSelectedRequest {
         ref?: string;
         gitConnectionId?: string;
         path: string;
+        /** An r2 backend without accountId gets the connection's Cloudflare
+         *  account when the inventory found exactly one. */
         backend: { kind: "s3" | "r2"; bucket: string; key: string; region?: string; accountId?: string };
       }
     | { kind: "existing"; projectId: string };
