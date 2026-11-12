@@ -15,44 +15,41 @@ export const LABEL = "block text-[13px] font-semibold text-muted mb-1.5";
 /** 16px text, not 14: iOS Safari zooms the whole page when a focused field's
  *  text is under 16px, and does not zoom back out. */
 export const INPUT =
-  "w-full bg-bg border border-border rounded-lg px-2.5 py-2.5 text-text text-base focus:outline-none focus:border-accent";
+  "w-full bg-bg border border-control rounded-lg px-2.5 py-2.5 text-text text-base focus:outline-none focus:border-text";
 
 /** Small buttons. Every one is at least 44px tall (min-h-11), the touch-target
  *  floor for a finger, however short its label; add min-w-11 for a button that
- *  is an icon alone. One shape in four tones, each with a pressed (active:)
+ *  is an icon alone. One shape in four styles, each with a pressed (active:)
  *  state. TEXT_BTN is an inline action that reads as a word ("edit", "Clear")
  *  and still gets the full-height target. */
 const SMALL_BTN_SHAPE =
   "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold cursor-pointer disabled:cursor-default disabled:opacity-50";
 export const SMALL_BTN = `${SMALL_BTN_SHAPE} border border-border bg-transparent text-muted hover:bg-bg hover:text-text active:bg-border`;
-export const SMALL_BTN_ACCENT = `${SMALL_BTN_SHAPE} border border-accent/40 bg-transparent text-accent hover:bg-accent-dim/40 active:bg-accent-dim`;
+/** A secondary action that should still stand out from SMALL_BTN. Neutral on
+ *  purpose: the accent is for the one primary action on a screen. */
+export const SMALL_BTN_STRONG = `${SMALL_BTN_SHAPE} border border-control bg-transparent text-text hover:bg-bg active:bg-border`;
 export const SMALL_BTN_DANGER = `${SMALL_BTN_SHAPE} border border-danger/40 bg-transparent text-danger hover:bg-danger/10 active:bg-danger/20`;
-export const SMALL_BTN_SOLID = `${SMALL_BTN_SHAPE} border-0 bg-accent text-bg hover:bg-accent/90 active:bg-accent/80`;
+export const SMALL_BTN_SOLID = `${SMALL_BTN_SHAPE} border-0 bg-accent text-on-accent hover:brightness-95 active:brightness-90`;
 export const TEXT_BTN =
   "inline-flex min-h-11 items-center cursor-pointer border-0 bg-transparent px-1 text-[13px] text-muted hover:text-text active:text-text disabled:cursor-default disabled:opacity-50";
 
-export type Tone =
-  | "accent"
-  | "danger"
-  | "warn"
-  | "info"
-  | "muted"
-  | "faint";
+/** Status tones. Only warn and danger carry color; "ok" is a success state,
+ *  shown in muted text with a check mark so it never reads as the accent,
+ *  which belongs to the primary action alone. */
+export type Tone = "ok" | "danger" | "warn" | "muted" | "faint";
 
 const TONE: Record<Tone, string> = {
-  accent: "bg-accent-dim text-accent",
-  danger: "bg-danger/20 text-danger",
-  warn: "bg-warn/20 text-warn",
-  info: "bg-info/20 text-info",
+  ok: "border border-border text-muted",
+  danger: "bg-danger-dim text-danger",
+  warn: "bg-warn-dim text-warn",
   muted: "bg-border text-muted",
-  faint: "bg-border/50 text-faint",
+  faint: "border border-border text-faint",
 };
 
 const DOT: Record<Tone, string> = {
-  accent: "bg-accent",
+  ok: "bg-muted",
   danger: "bg-danger",
   warn: "bg-warn",
-  info: "bg-info",
   muted: "bg-border",
   faint: "bg-border",
 };
@@ -95,6 +92,7 @@ export function Chip({
     <span
       className={`inline-block w-fit justify-self-start whitespace-nowrap rounded-full py-0.5 text-xs font-semibold ${size === "xs" ? "px-2" : "px-2.5"} ${TONE[tone]}`}
     >
+      {tone === "ok" ? <span aria-hidden="true">{"\u2713 "}</span> : null}
       {children}
     </span>
   );
@@ -112,7 +110,7 @@ export function StatCard({
   label,
   value,
   sub,
-  tone = "accent",
+  tone = "muted",
   center = false,
 }: {
   label: string;
@@ -126,9 +124,7 @@ export function StatCard({
       ? "text-danger"
       : tone === "warn"
         ? "text-warn"
-        : tone === "muted"
-          ? "text-text"
-          : "text-accent";
+        : "text-text";
   return (
     <div className={`${CARD} ${center ? "text-center" : ""}`}>
       <div className="text-[13px] text-muted mb-1.5">
@@ -157,7 +153,7 @@ export function PrimaryButton({
   full?: boolean;
   href?: string;
 }) {
-  const cls = `inline-block rounded-lg bg-accent px-6 py-3 text-[15px] font-semibold text-bg cursor-pointer border-0 hover:bg-accent/90 active:bg-accent/80 disabled:opacity-50 disabled:cursor-default ${full ? "w-full" : ""}`;
+  const cls = `inline-block rounded-lg bg-accent px-6 py-3 text-[15px] font-semibold text-on-accent cursor-pointer border-0 hover:brightness-95 active:brightness-90 disabled:opacity-50 disabled:cursor-default ${full ? "w-full" : ""}`;
   if (href) {
     return (
       <a className={cls} href={href}>
@@ -184,7 +180,7 @@ export function FilterPill({
   return (
     <button
       onClick={onClick}
-      className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border px-3 text-xs cursor-pointer active:bg-bg ${active ? "border-accent bg-accent-dim text-accent" : "border-border bg-transparent text-muted hover:text-text"}`}
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border px-3 text-xs cursor-pointer active:bg-bg ${active ? "border-text bg-transparent text-text font-semibold" : "border-border bg-transparent text-muted hover:text-text"}`}
     >
       {children}
     </button>
@@ -237,11 +233,11 @@ export function Note({
   tone = "plain",
 }: {
   children: ReactNode;
-  tone?: "plain" | "accent";
+  tone?: "plain" | "emphasis";
 }) {
   return (
     <div
-      className={`rounded-lg p-3.5 text-[13px] leading-relaxed ${tone === "accent" ? "bg-accent-dim/40 border border-accent/15 text-text" : "bg-bg border border-border text-muted"}`}
+      className={`rounded-lg p-3.5 text-[13px] leading-relaxed ${tone === "emphasis" ? "bg-surface border border-control text-text" : "bg-bg border border-border text-muted"}`}
     >
       {children}
     </div>

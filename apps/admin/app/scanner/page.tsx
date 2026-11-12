@@ -35,7 +35,7 @@ const HEALTH: { name: string; detail: string; state: "ok" | "warn" }[] = [
   { name: "dedupe index", detail: "ok \u00b7 0 collisions", state: "ok" },
 ];
 
-const HEALTH_TONE: Record<"ok" | "warn", Tone> = { ok: "accent", warn: "warn" };
+const HEALTH_TONE: Record<"ok" | "warn", Tone> = { ok: "ok", warn: "warn" };
 const PLATFORM_COLS = "grid-cols-[1fr_90px]";
 
 function formatTimeAgo(date: Date): string {

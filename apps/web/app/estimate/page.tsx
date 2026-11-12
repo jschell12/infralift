@@ -50,13 +50,13 @@ export default function EstimatePage() {
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <a
-              className="rounded-lg bg-accent px-6 py-3 text-[15px] font-semibold text-bg hover:bg-accent/90"
+              className="rounded-lg bg-accent px-6 py-3 text-[15px] font-semibold text-on-accent hover:brightness-95"
               href={DASHBOARD_URL}
             >
               Run the free assessment
             </a>
             <Link
-              className="rounded-lg border border-border px-6 py-3 text-[15px] font-semibold text-text hover:border-accent"
+              className="rounded-lg border border-border px-6 py-3 text-[15px] font-semibold text-text hover:border-control"
               href="/docs/migration-process"
             >
               How the migration works

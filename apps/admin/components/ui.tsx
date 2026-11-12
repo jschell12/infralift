@@ -10,30 +10,25 @@ export const H1 = "text-[26px] font-bold tracking-[-0.02em] mb-1.5";
 export const LEAD = "text-muted mb-7 max-w-[640px]";
 export const LABEL = "block text-[13px] font-semibold text-muted mb-1.5";
 export const INPUT =
-  "w-full bg-bg border border-border rounded-lg px-2.5 py-2.5 text-text text-sm focus:outline-none focus:border-accent";
+  "w-full bg-bg border border-control rounded-lg px-2.5 py-2.5 text-text text-sm focus:outline-none focus:border-text";
 
-export type Tone =
-  | "accent"
-  | "danger"
-  | "warn"
-  | "info"
-  | "muted"
-  | "faint";
+/** Status tones. Only warn and danger carry color; "ok" is a success state,
+ *  shown in muted text with a check mark so it never reads as the accent,
+ *  which belongs to the primary action alone. */
+export type Tone = "ok" | "danger" | "warn" | "muted" | "faint";
 
 const TONE: Record<Tone, string> = {
-  accent: "bg-accent-dim text-accent",
-  danger: "bg-danger/20 text-danger",
-  warn: "bg-warn/20 text-warn",
-  info: "bg-info/20 text-info",
+  ok: "border border-border text-muted",
+  danger: "bg-danger-dim text-danger",
+  warn: "bg-warn-dim text-warn",
   muted: "bg-border text-muted",
-  faint: "bg-border/50 text-faint",
+  faint: "border border-border text-faint",
 };
 
 const DOT: Record<Tone, string> = {
-  accent: "bg-accent",
+  ok: "bg-muted",
   danger: "bg-danger",
   warn: "bg-warn",
-  info: "bg-info",
   muted: "bg-border",
   faint: "bg-border",
 };
@@ -76,6 +71,7 @@ export function Chip({
     <span
       className={`inline-block w-fit justify-self-start whitespace-nowrap rounded-full py-0.5 text-xs font-semibold ${size === "xs" ? "px-2" : "px-2.5"} ${TONE[tone]}`}
     >
+      {tone === "ok" ? <span aria-hidden="true">{"\u2713 "}</span> : null}
       {children}
     </span>
   );
@@ -93,7 +89,7 @@ export function StatCard({
   label,
   value,
   sub,
-  tone = "accent",
+  tone = "muted",
   center = false,
 }: {
   label: string;
@@ -107,9 +103,7 @@ export function StatCard({
       ? "text-danger"
       : tone === "warn"
         ? "text-warn"
-        : tone === "muted"
-          ? "text-text"
-          : "text-accent";
+        : "text-text";
   return (
     <div className={`${CARD} ${center ? "text-center" : ""}`}>
       <div className="text-[13px] text-muted mb-1.5 first-letter:uppercase">
@@ -138,7 +132,7 @@ export function PrimaryButton({
   full?: boolean;
   href?: string;
 }) {
-  const cls = `inline-block rounded-lg bg-accent px-6 py-3 text-[15px] font-semibold text-bg cursor-pointer border-0 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-default ${full ? "w-full" : ""}`;
+  const cls = `inline-block rounded-lg bg-accent px-6 py-3 text-[15px] font-semibold text-on-accent cursor-pointer border-0 hover:brightness-95 disabled:opacity-50 disabled:cursor-default ${full ? "w-full" : ""}`;
   if (href) {
     return (
       <a className={cls} href={href}>
@@ -165,7 +159,7 @@ export function FilterPill({
   return (
     <button
       onClick={onClick}
-      className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border px-3 text-xs cursor-pointer active:bg-bg ${active ? "border-accent bg-accent-dim text-accent" : "border-border bg-transparent text-muted hover:text-text"}`}
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border px-3 text-xs cursor-pointer active:bg-bg ${active ? "border-text bg-transparent text-text font-semibold" : "border-border bg-transparent text-muted hover:text-text"}`}
     >
       {children}
     </button>
@@ -271,11 +265,11 @@ export function Note({
   tone = "plain",
 }: {
   children: ReactNode;
-  tone?: "plain" | "accent";
+  tone?: "plain" | "emphasis";
 }) {
   return (
     <div
-      className={`rounded-lg p-3.5 text-[13px] leading-relaxed ${tone === "accent" ? "bg-accent-dim/40 border border-accent/15 text-text" : "bg-bg border border-border text-muted"}`}
+      className={`rounded-lg p-3.5 text-[13px] leading-relaxed ${tone === "emphasis" ? "bg-surface border border-control text-text" : "bg-bg border border-border text-muted"}`}
     >
       {children}
     </div>

@@ -14,7 +14,7 @@ const ITEMS = [
 function Wordmark() {
   return (
     <a className="block text-lg font-bold text-text" href="/">
-      infra<span className="text-accent">lift</span>
+      infra<span className="text-muted">lift</span>
     </a>
   );
 }

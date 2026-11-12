@@ -231,7 +231,7 @@ export default function Home() {
                 target is an OAuth redirect off this domain, which is a
                 surprising thing for a hero button to do before the page has
                 said what signing in gets you. */}
-            <a className={`${BTN} bg-accent text-bg hover:bg-accent/90`} href="#assessment">
+            <a className={`${BTN} bg-accent text-on-accent hover:brightness-95`} href="#assessment">
               Find what is unmanaged
             </a>
             <a
@@ -309,11 +309,11 @@ export default function Home() {
               <ul className="mb-6 flex flex-col">
                 {PLAN_LINES.map((line) => (
                   <li key={line} className="border-t border-border py-1.5 text-[15px] text-muted">
-                    <span className="text-accent" aria-hidden>&#10003;</span> {line}
+                    <span className="text-muted" aria-hidden>&#10003;</span> {line}
                   </li>
                 ))}
               </ul>
-              <a className={`${BTN} mt-auto bg-accent text-bg hover:bg-accent/90`} href={DASHBOARD_URL}>
+              <a className={`${BTN} mt-auto bg-accent text-on-accent hover:brightness-95`} href={DASHBOARD_URL}>
                 Start with the free assessment
               </a>
             </div>
@@ -323,7 +323,7 @@ export default function Home() {
                 <thead className="bg-surface">
                   <tr>
                     <th scope="col" className="px-4 py-3 font-semibold">Work</th>
-                    <th scope="col" className="px-4 py-3 font-semibold text-accent">infralift</th>
+                    <th scope="col" className="px-4 py-3 font-semibold text-text">infralift</th>
                     <th scope="col" className="px-4 py-3 font-semibold">By hand</th>
                   </tr>
                 </thead>
@@ -368,7 +368,7 @@ export default function Home() {
           </div>
           <div className="grid gap-5 grid-cols-1 md:grid-cols-2 mt-5">
             <div className={`${CARD} text-center`}>
-              <div className="text-4xl font-bold text-accent tracking-[-0.02em] mb-2">
+              <div className="text-4xl font-bold text-text tracking-[-0.02em] mb-2">
                 $850 vs $80
               </div>
               <p className="text-muted text-[15px]">
@@ -378,7 +378,7 @@ export default function Home() {
               </p>
             </div>
             <div className={`${CARD} text-center`}>
-              <div className="text-4xl font-bold text-accent tracking-[-0.02em] mb-2">
+              <div className="text-4xl font-bold text-text tracking-[-0.02em] mb-2">
                 {ASSESSED_PROVIDERS.length} providers
               </div>
               <p className="text-muted text-[15px]">
@@ -407,11 +407,11 @@ export default function Home() {
                 <h3 className="text-lg font-semibold">{s.title}</h3>
                 <p className="text-muted text-[15px]">{s.body}</p>
                 <div className="grid grid-cols-2 gap-3 mt-1">
-                  <div className="flex flex-col gap-1 p-3.5 rounded-lg bg-danger/5 border border-danger/15">
+                  <div className="flex flex-col gap-1 p-3.5 rounded-lg bg-danger-dim border border-danger/15">
                     <span className="text-[13px] text-muted">
                       {s.beforeLabel}
                     </span>
-                    <span className="text-[28px] font-bold leading-[1.1] text-danger-bright [font-variant-numeric:tabular-nums]">
+                    <span className="text-[28px] font-bold leading-[1.1] text-danger [font-variant-numeric:tabular-nums]">
                       {s.before}
                       <small className="text-sm font-normal text-muted">
                         /mo
@@ -421,11 +421,11 @@ export default function Home() {
                       {s.beforeDetail}
                     </span>
                   </div>
-                  <div className="flex flex-col gap-1 p-3.5 rounded-lg bg-accent/5 border border-accent/15">
+                  <div className="flex flex-col gap-1 p-3.5 rounded-lg bg-surface border border-border">
                     <span className="text-[13px] text-muted">
                       After migration
                     </span>
-                    <span className="text-[28px] font-bold leading-[1.1] text-accent [font-variant-numeric:tabular-nums]">
+                    <span className="text-[28px] font-bold leading-[1.1] text-text [font-variant-numeric:tabular-nums]">
                       {s.after}
                       <small className="text-sm font-normal text-muted">
                         /mo
@@ -437,7 +437,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="text-[15px] text-muted pt-1 border-t border-border mt-auto">
-                  Save <strong className="text-accent font-bold">{s.savings}</strong>{" "}
+                  Save <strong className="text-text font-bold">{s.savings}</strong>{" "}
                   {s.extra}
                 </div>
               </div>
@@ -473,7 +473,7 @@ export default function Home() {
           <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((s, i) => (
               <div key={s.title} className={CARD}>
-                <span className="inline-flex w-8 h-8 items-center justify-center rounded-full bg-accent-dim text-accent font-bold mb-3.5">
+                <span className="inline-flex w-8 h-8 items-center justify-center rounded-full border border-border text-text font-bold mb-3.5">
                   {i + 1}
                 </span>
                 <h3 className="text-lg font-semibold mb-2">{s.title}</h3>
@@ -512,7 +512,7 @@ export default function Home() {
               what it costs today. No card, no sales call.
             </p>
             <div className="text-center">
-              <a className={`${BTN} bg-accent text-bg hover:bg-accent/90`} href={DASHBOARD_URL}>
+              <a className={`${BTN} bg-accent text-on-accent hover:brightness-95`} href={DASHBOARD_URL}>
                 Start your free assessment
               </a>
               <p className="mt-3.5 text-sm text-muted">

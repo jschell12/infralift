@@ -15,7 +15,7 @@ import { verifiedMonth } from "../../lib/prices";
 // service token for it.
 
 const FIELD =
-  "w-full rounded-lg border border-border bg-bg px-3.5 py-2.5 text-[15px] text-text placeholder:text-faint focus:border-accent focus:outline-none";
+  "w-full rounded-lg border border-control bg-bg px-3.5 py-2.5 text-[15px] text-text placeholder:text-faint focus:border-text focus:outline-none";
 const LABEL_CLS = "block text-[13px] font-semibold text-muted mb-1.5";
 const HINT = "mt-1 text-[13px] text-muted";
 
@@ -366,7 +366,7 @@ export function Calculator() {
           <button
             type="submit"
             disabled={state === "running"}
-            className="rounded-lg border-0 bg-accent px-6 py-3 text-[15px] font-semibold text-bg hover:bg-accent/90 disabled:cursor-default disabled:opacity-50"
+            className="rounded-lg border-0 bg-accent px-6 py-3 text-[15px] font-semibold text-on-accent hover:brightness-95 disabled:cursor-default disabled:opacity-50"
           >
             {state === "running" ? "Working..." : "Show me the number"}
           </button>
@@ -392,8 +392,8 @@ function Result({ result }: { result: EstimateResult }) {
           telling someone not to move is what makes the rest of the page
           believable, and it saves both sides a call. */}
       {best && best.netAnnualSavingsCents !== null ? (
-        <div className="rounded-xl border border-accent/20 bg-accent-dim/40 p-6">
-          <div className="text-[15px] font-semibold text-accent">
+        <div className="rounded-xl border border-border bg-surface p-6">
+          <div className="text-[15px] font-semibold text-text">
             Best fit: {best.name}
           </div>
           <div className="mt-2 text-4xl font-bold tracking-[-0.02em]">
@@ -426,7 +426,7 @@ function Result({ result }: { result: EstimateResult }) {
             key={t.slug}
             className={`rounded-xl border p-6 ${
               t.slug === bestSlug
-                ? "border-accent/30 bg-surface"
+                ? "border-control bg-surface"
                 : "border-border bg-surface"
             } ${t.eligible ? "" : "opacity-70"}`}
           >
@@ -474,7 +474,7 @@ function Result({ result }: { result: EstimateResult }) {
                 <span className="text-muted">Net against your bill: </span>
                 <span
                   className={`font-semibold tabular-nums ${
-                    t.netMonthlySavingsCents > 0 ? "text-accent" : "text-danger"
+                    t.netMonthlySavingsCents > 0 ? "text-text" : "text-danger"
                   }`}
                 >
                   {t.netMonthlySavingsCents > 0 ? "saves " : "costs "}

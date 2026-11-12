@@ -9,7 +9,7 @@ import { SiteFooter, SiteHeader } from "../../site-chrome";
 const CONTAINER = "max-w-[880px] mx-auto px-4 sm:px-6";
 const CARD = "bg-surface border border-border rounded-xl p-6";
 const BTN =
-  "inline-block px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-bg hover:opacity-90";
+  "inline-block px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-on-accent hover:brightness-95";
 
 export const dynamicParams = false;
 
@@ -73,12 +73,12 @@ export default async function LeavingPage({
         </section>
 
         <section className="pb-10">
-          <div className={`${CARD} border-accent/20`}>
+          <div className={CARD}>
             <div className="flex items-baseline justify-between mb-1">
               <h2 className="text-lg font-semibold">
                 The same workload on {page.exitName}
               </h2>
-              <span className="text-accent text-[26px] font-bold tracking-[-0.02em]">
+              <span className="text-text text-[26px] font-bold tracking-[-0.02em]">
                 {page.exitTotal}
               </span>
             </div>
@@ -98,7 +98,7 @@ export default async function LeavingPage({
                   ) : null}
                 </span>
                 <span
-                  className={`font-semibold shrink-0 ${row.perMonth === "$0" ? "text-accent" : ""}`}
+                  className={`font-semibold shrink-0 ${row.perMonth === "$0" ? "text-text" : ""}`}
                 >
                   {row.perMonth}
                 </span>

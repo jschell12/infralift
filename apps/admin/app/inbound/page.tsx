@@ -36,11 +36,11 @@ interface Payload {
 const STATUSES = ["new", "contacted", "qualified", "dismissed", "converted"];
 
 const STATUS_CLS: Record<string, string> = {
-  new: "bg-accent-dim text-accent",
+  new: "border border-border text-text",
   contacted: "bg-warn-dim text-warn",
-  qualified: "bg-accent-dim text-accent",
+  qualified: "border border-border text-text",
   dismissed: "bg-surface text-faint",
-  converted: "bg-accent-dim text-accent",
+  converted: "border border-border text-muted",
 };
 
 export default function InboundLeadsPage() {
@@ -97,7 +97,7 @@ export default function InboundLeadsPage() {
       <div className="mb-5 flex flex-wrap gap-2">
         <button
           onClick={() => setFilter("")}
-          className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold ${filter === "" ? "bg-accent text-bg" : "border border-border text-muted"}`}
+          className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold ${filter === "" ? "bg-text text-bg" : "border border-border text-muted"}`}
         >
           All
         </button>
@@ -105,7 +105,7 @@ export default function InboundLeadsPage() {
           <button
             key={s}
             onClick={() => setFilter(s)}
-            className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold ${filter === s ? "bg-accent text-bg" : "border border-border text-muted"}`}
+            className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold ${filter === s ? "bg-text text-bg" : "border border-border text-muted"}`}
           >
             {s} {data.byStatus[s] ? `(${data.byStatus[s]})` : ""}
           </button>

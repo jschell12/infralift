@@ -21,7 +21,7 @@ export const NAV_LINKS = [
 ];
 
 const CTA =
-  "inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-[15px] font-semibold text-bg hover:bg-accent/90 active:bg-accent/80";
+  "inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-[15px] font-semibold text-on-accent hover:brightness-95 active:brightness-90";
 const NAV_LINK =
   "inline-flex min-h-11 items-center text-[15px] text-muted hover:text-text";
 
@@ -36,7 +36,7 @@ export function SiteHeader() {
           href="/"
           className="inline-flex min-h-11 items-center text-xl font-bold tracking-[-0.02em] text-text"
         >
-          infra<span className="text-accent">lift</span>
+          infra<span className="text-muted">lift</span>
         </Link>
         <div className="hidden items-center gap-6 md:flex">
           {NAV_LINKS.map((l) => (

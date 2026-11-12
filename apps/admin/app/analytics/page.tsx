@@ -35,7 +35,7 @@ function DailyChart({ days }: { days: AnalyticsData["days"] }) {
         {days.map((d) => (
           <div
             key={d.date}
-            className="group relative flex-1 rounded-t-sm bg-accent/60 hover:bg-accent"
+            className="group relative flex-1 rounded-t-sm bg-muted/60 hover:bg-muted"
             style={{ height: `${Math.max((d.views / max) * 100, 2)}%` }}
             title={`${d.date}: ${d.views} views, ${d.visitors} visitors`}
           />

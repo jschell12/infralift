@@ -71,7 +71,7 @@ export default function CommunitiesPage() {
           <div className="min-w-[150px] flex-1">
             <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Platform</label>
             <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+              className="w-full bg-bg border border-control rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-text"
               value={platform}
               onChange={(e) => setPlatform(e.target.value)}
             >
@@ -89,7 +89,7 @@ export default function CommunitiesPage() {
           <div className="min-w-[150px] flex-1">
             <label className="block text-sm font-semibold text-muted mt-3.5 mb-1">Category</label>
             <select
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-accent"
+              className="w-full bg-bg border border-control rounded-lg px-3 py-2 text-text text-sm mb-4 focus:outline-none focus:border-text"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
             >

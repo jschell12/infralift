@@ -14,10 +14,10 @@ const POLL_MS = 5000;
 
 function tone(r: TfcRunSummary): Tone {
   if (r.isConfirmable) return "warn";
-  if (["applied", "planned_and_finished", "planned_and_saved"].includes(r.status)) return "accent";
+  if (["applied", "planned_and_finished", "planned_and_saved"].includes(r.status)) return "ok";
   if (["errored", "policy_soft_failed"].includes(r.status)) return "danger";
   if (["discarded", "canceled", "force_canceled"].includes(r.status)) return "muted";
-  return "info";
+  return "muted";
 }
 
 function counts(r: TfcRunSummary): string {

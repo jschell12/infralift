@@ -57,10 +57,10 @@ const CLASS_LABEL: Record<string, string> = {
 };
 
 const STATUS_TONE: Record<string, Tone> = {
-  new: "accent",
-  contacted: "info",
+  new: "muted",
+  contacted: "muted",
   dismissed: "faint",
-  converted: "accent",
+  converted: "ok",
 };
 
 const FILTERS: { label: string; value: string }[] = [
@@ -92,7 +92,7 @@ function LeadBody({ lead }: { lead: Lead }) {
           href={lead.sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-accent hover:underline"
+          className="text-text underline"
         >
           Open original
         </a>
@@ -121,7 +121,7 @@ function LeadActions({
   return (
     <div className="flex gap-1.5">
       <button
-        className="inline-flex min-h-11 items-center cursor-pointer rounded-md border-0 bg-info/20 px-3 text-xs text-info hover:bg-info/30 active:bg-info/40 disabled:cursor-default disabled:opacity-35"
+        className="inline-flex min-h-11 items-center cursor-pointer rounded-md border border-control bg-transparent px-3 text-xs text-text hover:bg-bg active:bg-border disabled:cursor-default disabled:opacity-35"
         disabled={busy || lead.status === "contacted"}
         onClick={() => onStatus("contacted")}
       >
@@ -265,7 +265,7 @@ export default function LeadsPage() {
                     <Chip tone={CLASS_TONE[l.classification] ?? "muted"} size="xs">
                       {CLASS_LABEL[l.classification] ?? l.classification}
                     </Chip>
-                    <Chip tone={STATUS_TONE[l.status] ?? "accent"} size="xs">
+                    <Chip tone={STATUS_TONE[l.status] ?? "muted"} size="xs">
                       {l.status}
                     </Chip>
                     <span className={`ml-auto text-xs text-faint ${NUM}`}>
@@ -273,7 +273,7 @@ export default function LeadsPage() {
                     </span>
                   </div>
                   <button
-                    className="block w-full cursor-pointer border-0 bg-transparent p-0 text-left text-sm text-accent"
+                    className="block w-full cursor-pointer border-0 bg-transparent p-0 text-left text-sm text-text underline"
                     onClick={() => toggle(l.id)}
                   >
                     {l.title}
@@ -309,7 +309,7 @@ export default function LeadsPage() {
                     <Chip tone={CLASS_TONE[l.classification] ?? "muted"} size="xs">
                       {CLASS_LABEL[l.classification] ?? l.classification}
                     </Chip>
-                    <Chip tone={STATUS_TONE[l.status] ?? "accent"} size="xs">
+                    <Chip tone={STATUS_TONE[l.status] ?? "muted"} size="xs">
                       {l.status}
                     </Chip>
                     <span className="text-xs text-muted">
@@ -317,7 +317,7 @@ export default function LeadsPage() {
                     </span>
                     <div className="min-w-0">
                       <button
-                        className="block w-full cursor-pointer truncate border-0 bg-transparent p-0 text-left text-accent hover:underline"
+                        className="block w-full cursor-pointer truncate border-0 bg-transparent p-0 text-left text-text underline"
                         onClick={() => toggle(l.id)}
                       >
                         {l.title}

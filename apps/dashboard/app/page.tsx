@@ -208,7 +208,7 @@ export default function Dashboard() {
             <>
               {" "}
               We found{" "}
-              <span className="font-semibold text-accent">
+              <span className="font-semibold text-text">
                 {formatCents(totalSavings)}/mo
               </span>{" "}
               in net savings after operations work.
@@ -239,7 +239,7 @@ export default function Dashboard() {
                 ? "after operations work"
                 : `${notCompared} of ${completed.length} not counted yet`
             }
-            tone="accent"
+            tone="muted"
           />
           <StatCard
             label="Resources found"
@@ -253,13 +253,13 @@ export default function Dashboard() {
             <a
               key={a.id}
               href={`/assessments/${a.id}`}
-              className={`block bg-surface border border-border rounded-xl p-5 hover:border-accent`}
+              className={`block bg-surface border border-border rounded-xl p-5 hover:border-control`}
             >
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-sm font-semibold capitalize">
                   {a.provider}
                 </span>
-                <Chip tone="accent">{a.status}</Chip>
+                <Chip tone="ok">{a.status}</Chip>
               </div>
               <div className={`mb-1 text-2xl font-bold text-danger ${NUM}`}>
                 {a.currentSpend.monthlyCents === null
@@ -276,7 +276,7 @@ export default function Dashboard() {
         </div>
 
         {totalSavings > 0 && (
-          <div className="rounded-xl border border-accent/20 bg-accent-dim/40 p-7 text-center">
+          <div className="rounded-xl border border-border bg-surface p-7 text-center">
             <h3 className="mb-2 text-[19px] font-semibold">
               Save {formatCents(totalSavings * 12)}/year with a fixed-fee
               migration
@@ -318,7 +318,7 @@ export default function Dashboard() {
                   <span className="font-medium capitalize">{c.provider}</span>
                   <span className="ml-2 text-sm text-muted">{c.label}</span>
                 </div>
-                <Chip tone={c.status === "valid" ? "accent" : "danger"}>
+                <Chip tone={c.status === "valid" ? "ok" : "danger"}>
                   {c.status}
                 </Chip>
               </div>
@@ -326,7 +326,7 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        <div className="rounded-xl border border-accent/20 bg-accent-dim/40 p-7 text-center">
+        <div className="rounded-xl border border-border bg-surface p-7 text-center">
           <h3 className="mb-2 text-[19px] font-semibold">
             See what you&apos;re actually paying
           </h3>
@@ -364,7 +364,7 @@ export default function Dashboard() {
             <a
               key={key}
               href={`/connections?provider=${key}`}
-              className="group block rounded-xl border border-border bg-surface p-5 hover:border-accent"
+              className="group block rounded-xl border border-border bg-surface p-5 hover:border-control"
             >
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-[17px] font-semibold">{p.label}</h3>
@@ -373,7 +373,7 @@ export default function Dashboard() {
                 </span>
               </div>
               <p className="mb-3.5 text-sm text-muted">{p.detail}</p>
-              <span className="text-sm font-medium text-accent">
+              <span className="text-sm font-medium text-text underline">
                 Connect {p.label} account &rarr;
               </span>
             </a>
@@ -395,7 +395,7 @@ export default function Dashboard() {
               <a
                 key={key}
                 href={`/connections?provider=${key}`}
-                className="block rounded-lg bg-bg px-3 py-2 text-sm text-muted hover:text-accent"
+                className="block rounded-lg bg-bg px-3 py-2 text-sm text-muted hover:text-text"
               >
                 {p.label}
               </a>
@@ -409,7 +409,7 @@ export default function Dashboard() {
         <StatCard label="Access level" value="Read-only" sub="never write" />
       </div>
 
-      <Note tone="accent">
+      <Note tone="emphasis">
         Tokens are encrypted with AES-256 before storage, never displayed again,
         and only used for read-only API calls. Revoke from your provider at any
         time.
