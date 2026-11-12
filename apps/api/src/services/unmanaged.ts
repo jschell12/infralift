@@ -287,7 +287,7 @@ export async function adoptSelected(orgId: string, connectionId: string, input: 
   const managed = await managedKeys(orgId, connection.id);
   const picked = pickResources(provider, inventory.items, managed, input.resources);
 
-  const opened = await openAdoption(orgId, {
+  const open = () => openAdoption(orgId, {
     repo: newTarget.repo,
     ref: newTarget.ref,
     connectionId: newTarget.gitConnectionId,
@@ -299,6 +299,19 @@ export async function adoptSelected(orgId: string, connectionId: string, input: 
     assessmentId: null,
     providerConnectionId: connection.id,
   });
+  let opened;
+  try {
+    opened = await open();
+  } catch (err) {
+    // Two identical requests at once both miss replayOf above, and the one
+    // that loses on the project name lands here. If the winner made exactly
+    // this adoption, answer as a replay rather than 409.
+    if (err instanceof Conflict) {
+      const raced = await replayOf(orgId, connection.id, newTarget, input.resources);
+      if (raced) return toResult(raced.project, raced.job, input.resources.length, true);
+    }
+    throw err;
+  }
   return toResult(opened.project, opened.job, opened.adopted, false);
 }
 

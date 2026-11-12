@@ -426,6 +426,21 @@ describe("POST /connections/:id/adopt", () => {
     expect(cloudflareCalls).toBe(0);
   });
 
+  it("answers as a replay when an identical request won the race to create the project", async () => {
+    h.projectFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: "p-won",
+      name: "acme-cf",
+      destPath: "infra/cf",
+      managedResources: zones.map((z) => ({ resourceType: z.type, providerId: z.providerId })),
+    });
+    h.jobFindFirst.mockResolvedValue({ id: "job-won", status: "pending" });
+    h.projectCreate.mockRejectedValue(new Prisma.PrismaClientKnownRequestError("unique", { code: "P2002", clientVersion: "6" }));
+    const out = await adopt({ resources: zones, target });
+    expect(out.status).toBe(200);
+    expect(out.body).toMatchObject({ projectId: "p-won", jobId: "job-won", replayed: true });
+    expect(h.jobCreate).not.toHaveBeenCalled();
+  });
+
   it("does not replay onto a project of that name holding other resources: the name conflicts", async () => {
     h.projectFindFirst.mockResolvedValue({
       id: "p-old",

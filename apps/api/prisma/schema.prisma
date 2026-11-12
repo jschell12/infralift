@@ -501,8 +501,9 @@ model TfProject {
 // and providerId the inventory's externalId, because that is what an
 // inventory can be compared against. The Terraform side is terraformAddress.
 //
-// Unique per (connection, provider, type, id): one cloud resource has one
-// owning project. A second adoption of it is refused with 409 rather than
+// Unique per (connection, provider, type, id): through one connection, a
+// cloud resource has one owning project. Two connections to the same account
+// are not detected (ADR 0011). A second adoption of it is refused with 409 rather than
 // opening a second pull request that would import it into a second state.
 model ManagedResource {
   id                   String    @id @default(cuid())
