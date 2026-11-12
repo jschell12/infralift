@@ -7,11 +7,14 @@ import {
   type ProviderConnectionSummary,
 } from "@infralift/shared";
 import { api, formatCents, savingsNote, errorText } from "../lib/api";
+import { connectionName, isCloudAccount } from "../lib/connections";
 import { Dot, NUM, SMALL_BTN_SOLID, Skeleton } from "./ui";
 
-// "From existing infrastructure": assess a connected account, then pick a
-// target on the assessment's options page, which opens the project. Lives in
-// the Projects drawer; Connections links here with ?assess=<connectionId>.
+// "Adopt from an account" on /projects/new: assess a connected cloud account,
+// then adopt what it found from the assessment's report (AdoptCard there).
+// Connections links here with ?assess=<connectionId>. The codegen "choose a
+// target" path is no longer offered from here (ADR 0010); the report and
+// options pages still have it for existing assessments.
 
 /** Log lines revealed while an assessment runs. The API reports status only, so
  *  these are staged locally against elapsed progress: the point is to show the
@@ -104,13 +107,16 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
 
   const step = Math.min(SCAN_LINES.length - 1, Math.floor(progress / 18));
   const completed = assessments.filter((a) => a.status === "completed");
-  const valid = connections.filter((c) => c.status === "valid" && c.provider !== "github");
+  // Cloud accounts only: a repository host or a Terraform Cloud organization
+  // has nothing to assess (ADR 0010, one project per account).
+  const valid = connections.filter((c) => c.status === "valid" && isCloudAccount(c.provider));
 
   return (
     <div>
       <p className="text-sm text-muted mb-4">
-        Read-only. infralift inventories what the account runs and what it costs, then ranks
-        where it could run instead. Picking a target opens a pull request with the code for it.
+        Read-only. infralift inventories what the account runs and what it costs. When the
+        assessment finishes, adopt what it found from its report: a pull request with import
+        blocks, held to a plan that changes nothing.
       </p>
       {error && <div className="mb-3 text-sm text-danger">{error}</div>}
 
@@ -121,7 +127,7 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
         </div>
       ) : valid.length === 0 ? (
         <p className="text-sm text-muted">
-          No connected accounts yet. <a href="/connections">Connect one</a> first.
+          No connected cloud accounts yet. <a href="/connections/new">Connect one</a> first.
         </p>
       ) : (
         valid.map((c) => (
@@ -131,7 +137,7 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
           >
             <Dot tone="ok" />
             <div className="min-w-0">
-              <div className="text-[14px] font-medium">{PROVIDER_LABELS[c.provider]}</div>
+              <div className="text-[14px] font-medium">{connectionName(c.provider)}</div>
               <div className="text-[12px] text-muted">{c.label}</div>
             </div>
             <div className="ml-auto">
@@ -179,8 +185,8 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
                 &middot; {savingsNote(a)}
               </div>
               <div className="mt-2 flex gap-3 text-[13px] font-semibold">
-                <a href={`/assessments/${a.id}/options`} className="text-text underline">
-                  Choose a target
+                <a href={`/assessments/${a.id}#adopt`} className="text-text underline">
+                  Adopt resources
                 </a>
                 <a href={`/assessments/${a.id}`} className="text-muted">
                   Full report

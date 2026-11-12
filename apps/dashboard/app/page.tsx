@@ -334,7 +334,7 @@ export default function Dashboard() {
             We&apos;ll inventory every project, service, database, and function,
             then show you the monthly cost and where to cut it.
           </p>
-          <PrimaryButton href="/projects?start=existing">Run your assessment</PrimaryButton>
+          <PrimaryButton href="/projects/new?start=adopt">Run your assessment</PrimaryButton>
         </div>
       </>
     );
@@ -363,7 +363,7 @@ export default function Dashboard() {
           return (
             <a
               key={key}
-              href={`/connections?provider=${key}`}
+              href={`/connections/new?type=${key}`}
               className="group block rounded-xl border border-border bg-surface p-5 hover:border-control"
             >
               <div className="mb-3 flex items-center justify-between">
@@ -394,7 +394,7 @@ export default function Dashboard() {
             {rest.map(([key, p]) => (
               <a
                 key={key}
-                href={`/connections?provider=${key}`}
+                href={`/connections/new?type=${key}`}
                 className="block rounded-lg bg-bg px-3 py-2 text-sm text-muted hover:text-text"
               >
                 {p.label}

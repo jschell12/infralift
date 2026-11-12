@@ -6,11 +6,12 @@ const API_BACKEND = process.env.API_BACKEND_URL || "http://localhost:4000";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // Assessments and migrations live under Projects now. The report and
-  // options pages (/assessments/:id...) stay where they are; only the two
-  // list pages moved.
+  // Assessments and migrations live under Projects now: running an
+  // assessment is the "Adopt from an account" start on /projects/new. The
+  // report and options pages (/assessments/:id...) stay where they are; only
+  // the two list pages moved.
   redirects: async () => [
-    { source: "/assessments", destination: "/projects?start=existing", permanent: false },
+    { source: "/assessments", destination: "/projects/new?start=adopt", permanent: false },
     { source: "/migrations", destination: "/projects#migrations", permanent: false },
   ],
   rewrites: async () => [
