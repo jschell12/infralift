@@ -1,0 +1,177 @@
+{
+  "_source": "Captured 2026-11-11 from apps/api's real connections router (GET /connections/:id/unmanaged, POST /connections/:id/adopt) over connectors/__fixtures__/cloudflare-api.json, using the harness in apps/api/src/services/unmanaged.test.ts (Prisma, jobs and network stubbed). cloudflare-api.json is Cloudflare's documented response examples, not a live account. refusedRows is subtractManaged() output for a worker with no account id and a load balancer.",
+  "full": {
+    "status": 200,
+    "body": {
+      "connectionId": "cf-conn",
+      "provider": "cloudflare",
+      "fetchedAt": "2026-11-12T01:49:07.627Z",
+      "total": 5,
+      "adoptable": 5,
+      "resources": [
+        {
+          "type": "cloudflare:dns_record",
+          "providerId": "023e105f4ecef8ad9ca31a8372d0c353",
+          "name": "example.com",
+          "region": null,
+          "adoptable": true,
+          "reason": null,
+          "terraformType": "cloudflare_dns_record"
+        },
+        {
+          "type": "cloudflare:dns_record",
+          "providerId": "9a7806061c88ada191ed06f989cc3dac",
+          "name": "example.org",
+          "region": null,
+          "adoptable": true,
+          "reason": null,
+          "terraformType": "cloudflare_dns_record"
+        },
+        {
+          "type": "cloudflare:r2_bucket",
+          "providerId": "example-bucket",
+          "name": "example-bucket",
+          "region": null,
+          "adoptable": true,
+          "reason": null,
+          "terraformType": "cloudflare_r2_bucket"
+        },
+        {
+          "type": "cloudflare:zone",
+          "providerId": "023e105f4ecef8ad9ca31a8372d0c353",
+          "name": "example.com",
+          "region": null,
+          "adoptable": true,
+          "reason": null,
+          "terraformType": "cloudflare_zone"
+        },
+        {
+          "type": "cloudflare:zone",
+          "providerId": "353c0d2783a8ac9da8fece4f501e320c",
+          "name": "example.org",
+          "region": null,
+          "adoptable": true,
+          "reason": null,
+          "terraformType": "cloudflare_zone"
+        }
+      ]
+    }
+  },
+  "page1": {
+    "status": 200,
+    "nextCursor": "WyJjbG91ZGZsYXJlOmRuc19yZWNvcmQiLCI5YTc4MDYwNjFjODhhZGExOTFlZDA2Zjk4OWNjM2RhYyJd",
+    "body": {
+      "connectionId": "cf-conn",
+      "provider": "cloudflare",
+      "fetchedAt": "2026-11-12T01:49:07.627Z",
+      "total": 5,
+      "adoptable": 5,
+      "resources": [
+        {
+          "type": "cloudflare:dns_record",
+          "providerId": "023e105f4ecef8ad9ca31a8372d0c353",
+          "name": "example.com",
+          "region": null,
+          "adoptable": true,
+          "reason": null,
+          "terraformType": "cloudflare_dns_record"
+        },
+        {
+          "type": "cloudflare:dns_record",
+          "providerId": "9a7806061c88ada191ed06f989cc3dac",
+          "name": "example.org",
+          "region": null,
+          "adoptable": true,
+          "reason": null,
+          "terraformType": "cloudflare_dns_record"
+        }
+      ]
+    }
+  },
+  "page2": {
+    "status": 200,
+    "nextCursor": "WyJjbG91ZGZsYXJlOnpvbmUiLCIwMjNlMTA1ZjRlY2VmOGFkOWNhMzFhODM3MmQwYzM1MyJd",
+    "body": {
+      "connectionId": "cf-conn",
+      "provider": "cloudflare",
+      "fetchedAt": "2026-11-12T01:49:07.627Z",
+      "total": 5,
+      "adoptable": 5,
+      "resources": [
+        {
+          "type": "cloudflare:r2_bucket",
+          "providerId": "example-bucket",
+          "name": "example-bucket",
+          "region": null,
+          "adoptable": true,
+          "reason": null,
+          "terraformType": "cloudflare_r2_bucket"
+        },
+        {
+          "type": "cloudflare:zone",
+          "providerId": "023e105f4ecef8ad9ca31a8372d0c353",
+          "name": "example.com",
+          "region": null,
+          "adoptable": true,
+          "reason": null,
+          "terraformType": "cloudflare_zone"
+        }
+      ]
+    }
+  },
+  "accepted": {
+    "status": 202,
+    "body": {
+      "projectId": "p-new",
+      "projectName": "acme-cf",
+      "jobId": "job-new",
+      "jobStatus": "pending",
+      "adopted": 2,
+      "replayed": false
+    }
+  },
+  "missing": {
+    "status": 400,
+    "body": {
+      "error": "some picked resources are not in the account any more; reload the list",
+      "missing": [
+        {
+          "type": "cloudflare:zone",
+          "providerId": "gone"
+        }
+      ]
+    }
+  },
+  "conflict": {
+    "status": 409,
+    "body": {
+      "error": "some picked resources are already managed by a project",
+      "managed": [
+        {
+          "type": "cloudflare:zone",
+          "providerId": "023e105f4ecef8ad9ca31a8372d0c353"
+        }
+      ]
+    }
+  },
+  "refusedRows": [
+    {
+      "type": "cloudflare:load_balancer",
+      "providerId": "lb",
+      "name": "lb",
+      "region": null,
+      "adoptable": false,
+      "reason": "no Terraform import mapping for this kind yet",
+      "terraformType": null
+    },
+    {
+      "type": "cloudflare:worker",
+      "providerId": "w1",
+      "name": "api",
+      "region": null,
+      "adoptable": false,
+      "reason": "assessed before infralift recorded the Cloudflare account id this import needs; run the assessment again",
+      "terraformType": null
+    }
+  ]
+}

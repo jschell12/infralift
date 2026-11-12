@@ -3,18 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AssessmentSummary, ProviderConnectionSummary } from "@infralift/shared";
 import { api, formatCents, savingsNote, errorText } from "../lib/api";
-import { latestCompletedAssessment, primaryAdoptAction } from "../lib/adopt";
+import { findUnmanagedHref, latestCompletedAssessment, primaryFindAccount } from "../lib/adopt";
 import { isCloudAccount } from "../lib/connections";
 import { CONNECTION_GRID, ConnectionTile } from "./connection-tile";
 import { CARD, NUM, SMALL_BTN, SMALL_BTN_SOLID, SMALL_BTN_STRONG, Skeleton } from "./ui";
 
 // "Adopt from an account" on /projects/new: one tile per connected cloud
-// account, each with its latest assessment and its actions. Assess an
-// account, then adopt what it found from the assessment's report (AdoptCard
-// there). ?assess=<connectionId> makes that account's next step the primary
-// action. The codegen "choose a target" path is no longer offered from here
-// (ADR 0010); the report and options pages still have it for existing
-// assessments.
+// account. The primary action on a valid account is "Find unmanaged
+// resources", which goes to that account's own page (/projects/new/adopt,
+// ADR 0011's unmanaged view) to pick resources and adopt them. Assessing an
+// account (cost and savings) and its full report stay as secondary actions;
+// the report still has its own adopt card. ?assess=<connectionId> makes that
+// account's "Find" the primary action. The codegen "choose a target" path is
+// no longer offered from here (ADR 0010).
 
 /** Log lines revealed while an assessment runs. The API reports status only, so
  *  these are staged locally against elapsed progress: the point is to show the
@@ -116,17 +117,15 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
   // connection is not valid are shown too, so it is clear why they cannot be
   // assessed, with a way to fix them.
   const accounts = connections.filter((c) => isCloudAccount(c.provider));
-  const primary = primaryAdoptAction(accounts, assessments, highlight ?? null);
+  const primary = primaryFindAccount(accounts, highlight ?? null);
   const busy = runningId !== null || submitting;
-  const isPrimary = (id: string, action: "assess" | "adopt") =>
-    primary?.connectionId === id && primary.action === action;
 
   return (
     <div>
       <p className="text-sm text-muted mb-4 max-w-[640px]">
-        Read-only. infralift inventories what the account runs and what it costs. When the
-        assessment finishes, adopt what it found from its report: a pull request with import
-        blocks, held to a plan that changes nothing.
+        Pick an account to see what it runs that no infralift project manages yet, then adopt
+        what you choose: a pull request with import blocks, held to a plan that changes nothing.
+        Reading the account changes nothing in it. Assess an account instead for what it costs.
       </p>
       {error && (
         <div role="alert" className="mb-3 text-sm text-danger">
@@ -148,7 +147,7 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
         <div className={CARD}>
           <p className="text-sm text-muted mb-3">
             No connected cloud accounts yet. Connect one, such as AWS or Cloudflare, and it shows up
-            here to assess.
+            here to adopt from.
           </p>
           <a className={SMALL_BTN_STRONG} href="/connections/new">
             Connect a cloud account
@@ -170,27 +169,20 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
                     </a>
                   ) : running ? null : (
                     <div className="flex flex-wrap gap-2">
-                      {latest && (
-                        <a
-                          className={isPrimary(c.id, "adopt") ? SMALL_BTN_SOLID : SMALL_BTN_STRONG}
-                          href={`/assessments/${latest.id}#adopt`}
-                        >
-                          Adopt resources
-                        </a>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => void run(c.id)}
-                        disabled={busy}
-                        className={isPrimary(c.id, "assess") ? SMALL_BTN_SOLID : latest ? SMALL_BTN : SMALL_BTN_STRONG}
+                      <a
+                        className={primary === c.id ? SMALL_BTN_SOLID : SMALL_BTN_STRONG}
+                        href={findUnmanagedHref(c.id)}
                       >
-                        {latest ? "Assess again" : "Assess"}
-                      </button>
+                        Find unmanaged resources
+                      </a>
                       {latest && (
                         <a className={SMALL_BTN} href={`/assessments/${latest.id}`}>
                           Full report
                         </a>
                       )}
+                      <button type="button" onClick={() => void run(c.id)} disabled={busy} className={SMALL_BTN}>
+                        {latest ? "Assess again" : "Assess"}
+                      </button>
                     </div>
                   )
                 }
