@@ -16,6 +16,7 @@ import {
   groupByType,
   groupSelection,
   keepLoadedPicks,
+  NO_ACCOUNT,
   OTHER_ACCOUNT,
   postAdopt,
   resourceKey,
@@ -174,10 +175,19 @@ describe("backend defaults from the inventory", () => {
     expect(defaults).toEqual({ cloudflareAccounts: [{ id: account.id, name: "Demo Account" }], awsRegion: null });
   });
 
-  it("fill an empty R2 account id with the first account found", () => {
+  it("fill an empty R2 account id when the inventory found exactly one account", () => {
     const f = applyBackendDefaults(defaultAdoptForm("cloudflare"), defaults);
     expect(f.accountId).toBe(account.id);
     expect(f.region).toBe("us-east-1");
+  });
+
+  it("leave the R2 account id empty when there are several accounts, rather than pick the first", () => {
+    const two = { cloudflareAccounts: [account, { id: "9f1c3e7a2b4d6f8091a2b3c4d5e6f708", name: "Client: Northwind" }], awsRegion: null };
+    const f = applyBackendDefaults(defaultAdoptForm("cloudflare"), two);
+    expect(f.accountId).toBe("");
+    expect(accountChoice(f.accountId, two.cloudflareAccounts)).toBe(NO_ACCOUNT);
+    // The form refuses to send until one is chosen.
+    expect(adoptFormProblem(filled({ accountId: f.accountId }), 1)).toMatch(/Cloudflare account id/);
   });
 
   it("never replace an account id already in the form", () => {
@@ -195,10 +205,11 @@ describe("backend defaults from the inventory", () => {
     expect(applyBackendDefaults(f, { cloudflareAccounts: [], awsRegion: null })).toEqual(f);
   });
 
-  it("show a known account as itself in the select, and anything else as Another account", () => {
+  it("show a known account as itself, an unlisted id or an Another pick as Another account, and nothing yet as Choose", () => {
     expect(accountChoice(account.id, defaults.cloudflareAccounts)).toBe(account.id);
     expect(accountChoice(` ${account.id} `, defaults.cloudflareAccounts)).toBe(account.id);
-    expect(accountChoice("", defaults.cloudflareAccounts)).toBe(OTHER_ACCOUNT);
+    expect(accountChoice("", defaults.cloudflareAccounts)).toBe(NO_ACCOUNT);
+    expect(accountChoice("", defaults.cloudflareAccounts, true)).toBe(OTHER_ACCOUNT);
     expect(accountChoice("0123456789abcdef0123456789abcdef", defaults.cloudflareAccounts)).toBe(OTHER_ACCOUNT);
   });
 

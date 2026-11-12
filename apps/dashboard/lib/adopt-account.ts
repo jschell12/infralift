@@ -148,28 +148,35 @@ export function defaultAdoptForm(provider: string): AdoptForm {
 }
 
 /** The form with what the account's inventory already says filled in: the
- *  first Cloudflare account it found as the R2 account (when none is typed),
- *  and the AWS region most resources are in. Applied once, when the list first
- *  loads and before the form is on screen, so it never overwrites typing. */
+ *  Cloudflare account as the R2 account when the inventory found exactly one
+ *  (and none is typed), and the AWS region most resources are in. With
+ *  several accounts it stays empty: which one holds the bucket is the user's
+ *  to say, the same guess withKnownAccount in the API refuses to make. Applied
+ *  once, when the list first loads and before the form is on screen, so it
+ *  never overwrites typing. */
 export function applyBackendDefaults(form: AdoptForm, defaults: AdoptBackendDefaults | undefined): AdoptForm {
   if (!defaults) return form;
-  const firstAccount = defaults.cloudflareAccounts[0]?.id;
+  const onlyAccount = defaults.cloudflareAccounts.length === 1 ? defaults.cloudflareAccounts[0]!.id : null;
   return {
     ...form,
-    accountId: form.accountId.trim() || !firstAccount ? form.accountId : firstAccount,
+    accountId: form.accountId.trim() || !onlyAccount ? form.accountId : onlyAccount,
     region: defaults.awsRegion ?? form.region,
   };
 }
 
 /** The select's value for "Another account", where the id is typed. */
 export const OTHER_ACCOUNT = "other";
+/** The select's value before anything is chosen ("Choose an account"). */
+export const NO_ACCOUNT = "";
 
 /** Which entry the R2 account select shows: a known account when the form's
- *  id is one, otherwise "Another account" (an empty id included, which is
- *  what picking "Another account" leaves for the text field to fill). */
-export function accountChoice(accountId: string, accounts: CloudflareAccountRef[]): string {
+ *  id is one; "Another account" when the user picked it or typed an id that is
+ *  not listed; otherwise nothing yet, so an empty id with several accounts is
+ *  an unanswered question rather than a quiet default. */
+export function accountChoice(accountId: string, accounts: CloudflareAccountRef[], otherPicked = false): string {
   const id = accountId.trim();
-  return accounts.some((a) => a.id === id) ? id : OTHER_ACCOUNT;
+  if (accounts.some((a) => a.id === id)) return id;
+  return otherPicked || id ? OTHER_ACCOUNT : NO_ACCOUNT;
 }
 
 /** "Demo Account · 023e105f" for the account select, the id alone without a name. */

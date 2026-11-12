@@ -10,10 +10,13 @@
 //
 // The R2 account is a select of the Cloudflare accounts the connection's
 // inventory found (UnmanagedPage.backendDefaults), with "Another account" for
-// a bucket kept elsewhere. Only when infralift knows of none is it typed.
+// a bucket kept elsewhere. One account comes preselected; with several the
+// select starts on "Choose an account". Only when infralift knows of none is
+// the id typed.
 
 import { PROVIDER_LABELS, type CloudflareAccountRef, type ProviderConnectionSummary } from "@infralift/shared";
-import { accountChoice, cloudflareAccountLabel, OTHER_ACCOUNT, type AdoptForm } from "../lib/adopt-account";
+import { useState } from "react";
+import { accountChoice, cloudflareAccountLabel, NO_ACCOUNT, OTHER_ACCOUNT, type AdoptForm } from "../lib/adopt-account";
 import { INPUT, LABEL, MONO, Note } from "./ui";
 
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text";
@@ -42,8 +45,11 @@ function R2AccountField({
       mono
     />
   );
+  // Picking "Another account" empties the id for the text field, so the pick
+  // itself has to be remembered or the select would fall back to "Choose".
+  const [otherPicked, setOtherPicked] = useState(false);
   if (accounts.length === 0) return typed;
-  const choice = accountChoice(accountId, accounts);
+  const choice = accountChoice(accountId, accounts, otherPicked);
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -55,8 +61,15 @@ function R2AccountField({
           className={INPUT}
           value={choice}
           aria-describedby="adopt-account-hint"
-          onChange={(e) => onChange(e.target.value === OTHER_ACCOUNT ? "" : e.target.value)}
+          onChange={(e) => {
+            const other = e.target.value === OTHER_ACCOUNT;
+            setOtherPicked(other);
+            onChange(other ? "" : e.target.value);
+          }}
         >
+          <option value={NO_ACCOUNT} disabled>
+            Choose an account
+          </option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
               {cloudflareAccountLabel(a)}
