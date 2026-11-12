@@ -38,7 +38,14 @@ describe("planAdoption", () => {
     const cf = planAdoption("cloudflare", [
       { provider: "cloudflare", type: "cloudflare:zone", externalId: "023e105f4ecef8ad9ca31a8372d0c353", name: "acme.dev" },
     ]);
-    expect(cf.imports[0]).toEqual({ to: "cloudflare_zone.acme_dev", id: "023e105f4ecef8ad9ca31a8372d0c353", type: "cloudflare:zone", name: "acme.dev" });
+    expect(cf.imports[0]).toEqual({
+      to: "cloudflare_zone.acme_dev",
+      id: "023e105f4ecef8ad9ca31a8372d0c353",
+      type: "cloudflare:zone",
+      name: "acme.dev",
+      // The connector's id, which the managed-resource ledger is keyed on.
+      externalId: "023e105f4ecef8ad9ca31a8372d0c353",
+    });
   });
 });
 

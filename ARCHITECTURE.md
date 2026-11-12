@@ -84,6 +84,8 @@ Each is a well-known pattern, used under its usual name.
 | **Sliding-window rate limiter** | [`lib/rate-limit.ts`](apps/api/src/lib/rate-limit.ts) `createRateLimiter()`, used by `/intake/lead`, `/intake/estimate` and codegen (`services/codegen.ts`) | One implementation of the window, the sweep and the per-caller bucket |
 | **Bulkhead (worker pool)** | [`lib/stacks/team.ts`](apps/api/src/lib/stacks/team.ts): `acquireRenderSlot()` caps concurrent team-stack trial renders and the queue behind them | A burst of stack checks cannot take every core |
 | **Unique index as the guard** | Migration 0028's partial unique index on `TfJob(projectId) WHERE status IN ('pending','running')`, mapped to 409 in [`lib/jobs/enqueue.ts`](apps/api/src/lib/jobs/enqueue.ts); `User.email` in first-login provisioning (`lib/cf-auth.ts`). P2002/P2025 are named in [`lib/prisma-errors.ts`](apps/api/src/lib/prisma-errors.ts) | A check-then-insert lets two simultaneous requests both through; the database refuses the second one |
+| **Ledger as the guard** | `ManagedResource`'s unique key `(providerConnectionId, provider, resourceType, providerId)` ([ADR 0011](docs/adr/0011-one-owner-per-cloud-resource.md)), written in the same transaction as the adoption's project and job ([`services/imports.ts`](apps/api/src/services/imports.ts) `openAdoption`) | One cloud resource has one owning project, even when two adoptions race |
+| **Cache-aside with request coalescing** | [`services/unmanaged.ts`](apps/api/src/services/unmanaged.ts) `accountInventory()`: one inventory per connection for 5 minutes, keyed on the credential's `updatedAt`; concurrent misses share one provider read | Paging and reloading the unmanaged view do not call the provider again |
 | **Shared contract** | [`lib/import/contract.ts`](apps/api/src/lib/import/contract.ts): the messages the import workflow writes and infralift reads back | Writer and reader cannot drift; a test fails if one changes alone |
 | **Clock theme, one source** | [`apps/web/lib/theme.ts`](apps/web/lib/theme.ts) (copied byte for byte into dashboard and admin): `themeForHour()` picks light 07:00 to 19:00 on the viewer's clock, `THEME_BOOT_SCRIPT` sets `<html data-theme>` in each root layout's `<head>` before paint, `ThemeControl` saves an Auto / Light / Dark override in `localStorage`. Each `globals.css` token is `light-dark(light, dark)`, picked by `color-scheme` from `data-theme`, or from the OS with JavaScript off | One palette table per app, no flash, and `apps/web/lib/theme.test.ts` runs the head script against `themeForHour` and fails if a copy drifts |
 
@@ -117,7 +119,36 @@ If the process dies mid-job, the next one to start marks the job `errored` with 
 
 ### Adopting resources built by hand
 
-From a completed assessment, `POST /tf/imports/from-assessment` opens a PR with import blocks, a provider and a backend in a bucket the customer owns, and no resource code (`lib/import/adopt.ts`). The check generates the code from what is running (`plan -generate-config-out`), commits it, and holds it to the same zero-change gate. Before committing it scans `generated.tf` for literal secrets (`lib/import/guard.ts`). The same PR adds an apply workflow (`lib/import/apply.ts`): on the push that merges it, one job in the `production` environment plans and applies exactly that plan, so the plan file never leaves the runner, which is what records the resources in state. Until then the drift job reports the project as `unapplied`. Workflows already in a repository change only when re-rendered; see [ADR 0008](docs/adr/0008-adoption-applies-a-saved-plan.md).
+There are two ways in, and both go through `openAdoption()` in `services/imports.ts`: from a completed assessment (`POST /tf/imports/from-assessment`, the whole inventory), or from resources picked in the unmanaged view (`POST /connections/:id/adopt`, below). Either one opens a PR with import blocks, a provider and a backend in a bucket the customer owns, and no resource code (`lib/import/adopt.ts`). The check generates the code from what is running (`plan -generate-config-out`), commits it, and holds it to the same zero-change gate. Before committing it scans `generated.tf` for literal secrets (`lib/import/guard.ts`). The same PR adds an apply workflow (`lib/import/apply.ts`): on the push that merges it, one job in the `production` environment plans and applies exactly that plan, so the plan file never leaves the runner, which is what records the resources in state. Until then the drift job reports the project as `unapplied`. Workflows already in a repository change only when re-rendered; see [ADR 0008](docs/adr/0008-adoption-applies-a-saved-plan.md).
+
+### Adopting from an account, and the managed-resource ledger
+
+A project manages one cloud account ([ADR 0010](docs/adr/0010-a-project-is-one-accounts-infrastructure.md)), named by `TfProject.providerConnectionId`, which must be a connection of the project's own org (`ownedConnection` in `services/managed-resources.ts`). The ledger, `ManagedResource`, records which project manages which resource, keyed by the connector's inventory type and the provider's id ([ADR 0011](docs/adr/0011-one-owner-per-cloud-resource.md)).
+
+```
+GET /connections/:id/unmanaged          (services/unmanaged.ts listUnmanaged)
+  connection, org-scoped (404 otherwise; git hosts and TFC are 400)
+  inventory: cache (5 min, per connection) or connector.assess(), the same
+             read-only call an assessment makes; provider reads limited to
+             10 per 10 minutes per org (429); ?refresh=1 skips the cache
+  minus ledger rows for the connection (pending and managed)
+  each row: type, provider id, name, region, adoptable + reason (lib/import/adopt.ts adoptionTarget)
+  one page, sorted by (type, id); next page's cursor in X-Next-Cursor
+
+POST /connections/:id/adopt             (services/unmanaged.ts adoptSelected)
+  same request again: the project it made, 200 replayed
+  picked keys looked up in the inventory: missing 400, managed 409, not adoptable 400
+  openAdoption (services/imports.ts): render import blocks, refuse existing files,
+    then one transaction: project (with providerConnectionId), ledger rows
+    as pending (unique violation 409), import job; then start the job
+  the job opens the adoption PR (lib/tf/pipeline.ts runImportJob)
+
+GET /tf/imports/:id/check               (services/imports.ts readImportCheck)
+  check passed: the project's pending rows become managed
+  PR closed unmerged: the project's rows are deleted
+```
+
+Only adoption writes ledger rows. A repository import and a stack cannot say which provider ids they manage (one reads HCL, the other's ids appear at the customer's apply), so their resources show as unmanaged. Adding resources to an existing project is refused (409) until the import check can generate code for imports added after its first run. The inventory cache and the limiter are in-process, like every limiter here: a second API replica means a second cache.
 
 ### Terraform Cloud
 
@@ -151,7 +182,7 @@ What happens when something infralift depends on is slow, down or restarts.
 - **Stuck jobs.** The job worker's sweep (every 15s) fails any claimed job still unfinished 30 minutes after its claim (`failOverdueJobs`, "timed out ... start it again"). If the job was only slow and later finishes, the runner's own write replaces that message.
 - **Stuck assessments.** A token assessment runs inside its HTTP request. The same sweep fails assessments still `running` 30 minutes after they started (`failStuckAssessments` in `services/assessments.ts`, "timed out ... run it again"), which covers a request that died with its process.
 - **Shutdown.** On SIGTERM or SIGINT, `server.ts` stops accepting connections, stops claiming jobs (`drainJobs`), and waits up to `SHUTDOWN_DRAIN_MS` (default 25s) for in-flight requests and jobs before exiting. The orchestrator's kill timeout must be longer than that, or the process is killed mid-wait. A job cut off is marked "interrupted" by the next process at boot; an assessment cut off is failed by the sweep above.
-- **Large lists.** `GET /assessments` returns the newest 50 (`?limit` up to 50; the next page's cursor is in the `X-Next-Cursor` header, used as `?cursor=`), built from a fixed number of queries whatever the page holds (`listAssessmentSummaries`). Other lists are capped rather than paged, far above today's sizes: projects 200 (newest 20 renderings each, metadata only), renderings 50 without bodies, connections 200, migrations 100, workspaces 500, team stacks 200. Leads take `?days` and `?limit` as whole numbers in range, or 400.
+- **Large lists.** `GET /assessments` returns the newest 50 (`?limit` up to 50; the next page's cursor is in the `X-Next-Cursor` header, used as `?cursor=`), built from a fixed number of queries whatever the page holds (`listAssessmentSummaries`). `GET /connections/:id/unmanaged` pages the same way (100 per page, at most 200), over an inventory held in memory. Other lists are capped rather than paged, far above today's sizes: projects 200 (newest 20 renderings each, metadata only), renderings 50 without bodies, connections 200, migrations 100, workspaces 500, team stacks 200. Leads take `?days` and `?limit` as whole numbers in range, or 400.
 - **Template file names.** A template project renders into one file, `<project>.tf`, rewritten by each job. Before 0028 each job wrote `<project>-job-<id>.tf`, so a rerun declared every resource twice. A project that already has a rendering keeps writing its newest file name; older job files already in a repository have to be deleted there.
 - **Not retried automatically:** jobs (they write to customers' repositories, so a person decides), assessments (the customer runs them again), timed-out HTTP calls inside jobs and assessments. The drift sweep and the analytics rollup simply try again on their next tick.
 
@@ -190,7 +221,8 @@ A merge to `main` runs CI on GitHub-hosted runners. The marketing site (`apps/we
 - **Module:** what manages one important resource, such as a database, plus what exists only to serve it.
 - **Delivery:** the CI system that deploys a stack (GitHub Actions, GitLab CI).
 - **Import:** bringing existing Terraform under infralift, behind the zero-change check.
-- **Adopt:** bringing resources built by hand under Terraform, with generated code. (A TFC workspace "adopted" in `routes/workspaces.ts` is the older meaning.)
+- **Adopt:** bringing resources built by hand under Terraform, with generated code.
+- **Managed resource:** a ledger row saying which project manages one cloud resource; **unmanaged** is what an account holds with no such row. (A TFC workspace "adopted" in `routes/workspaces.ts` is the older meaning.)
 - **Assessment:** a read-only inventory and cost report of a cloud account.
 
 ## How this layout came about

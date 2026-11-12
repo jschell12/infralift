@@ -11,6 +11,15 @@ import {
   verifyConnection,
 } from "../services/connections.js";
 import { awsSetup } from "../services/aws-access.js";
+import { isSafePath } from "../lib/import/check.js";
+import { intQuery } from "../lib/query.js";
+import {
+  ADOPT_MAX_RESOURCES,
+  UNMANAGED_PAGE_MAX,
+  UNMANAGED_PAGE_SIZE,
+  adoptSelected,
+  listUnmanaged,
+} from "../services/unmanaged.js";
 
 export const connectionsRouter = Router();
 
@@ -26,6 +35,36 @@ const rotateSchema = z.object({
   token: z.string().min(1),
   organization: z.string().optional(),
   hostname: z.string().optional(),
+});
+
+// Adopting from an account (services/unmanaged.ts). Field rules match
+// POST /tf/imports/from-assessment, the other way into the same pipeline.
+const adoptSchema = z.object({
+  resources: z
+    .array(z.object({ type: z.string().min(1).max(200), providerId: z.string().min(1).max(2048) }))
+    .min(1)
+    .max(ADOPT_MAX_RESOURCES),
+  target: z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("new"),
+      name: z
+        .string()
+        .regex(/^[a-z][a-z0-9-]{2,31}$/, "3-32 characters: lowercase letters, digits and dashes, starting with a letter"),
+      repo: z.string().regex(/^[\w.-]+\/[\w.-]+$/, "a GitHub repository is owner/name"),
+      ref: z.string().min(1).optional(),
+      gitConnectionId: z.string().min(1).optional(),
+      path: z.string().max(200).refine(isSafePath, "letters, digits, dot, dash, underscore and slash"),
+      backend: z.object({
+        kind: z.enum(["s3", "r2"]),
+        bucket: z.string(),
+        key: z.string(),
+        region: z.string().optional(),
+        accountId: z.string().optional(),
+      }),
+    }),
+    z.object({ kind: z.literal("existing"), projectId: z.string().min(1) }),
+  ]),
+  refresh: z.boolean().optional(),
 });
 
 // List connections for the authenticated user's org.
@@ -82,4 +121,25 @@ connectionsRouter.patch("/:id", handle(async (req, res) => {
 connectionsRouter.delete("/:id", handle(async (req, res) => {
   await deleteConnection(req.user!.orgId, String(req.params.id));
   res.status(204).end();
+}));
+
+// What is in this connection's account that no project manages, one page at a
+// time, newest inventory read at most INVENTORY_TTL_MS ago unless ?refresh=1.
+// The next page's cursor is in X-Next-Cursor, absent on the last page.
+connectionsRouter.get("/:id/unmanaged", handle(async (req, res) => {
+  const limit = intQuery(req.query.limit, { name: "limit", fallback: UNMANAGED_PAGE_SIZE, min: 1, max: UNMANAGED_PAGE_MAX });
+  const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : undefined;
+  const refresh = req.query.refresh === "1" || req.query.refresh === "true";
+  const { nextCursor, ...page } = await listUnmanaged(req.user!.orgId, String(req.params.id), { limit, cursor, refresh });
+  if (nextCursor) res.setHeader("X-Next-Cursor", nextCursor);
+  res.json(page);
+}));
+
+// Adopt the picked resources into a new project: an import-block pull request
+// that applies by saved plan on merge (ADR 0008). 202 when accepted; 200 with
+// replayed: true when this exact request was already accepted.
+connectionsRouter.post("/:id/adopt", handle(async (req, res) => {
+  const input = parseBody(adoptSchema, req.body);
+  const result = await adoptSelected(req.user!.orgId, String(req.params.id), input);
+  res.status(result.replayed ? 200 : 202).json(result);
 }));

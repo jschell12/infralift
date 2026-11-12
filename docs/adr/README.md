@@ -14,3 +14,4 @@ One page per decision that shaped infralift: what was decided, why, and what it 
 | [0008](0008-adoption-applies-a-saved-plan.md) | An adoption is applied by a saved plan in the customer's CI | 2026-11-10 |
 | [0009](0009-stacks-modules-and-team-stacks.md) | Stacks are made of modules, and teams bring their own from git | 2026-11-10 |
 | [0010](0010-a-project-is-one-accounts-infrastructure.md) | A project is one cloud account's infrastructure, not an app | 2026-11-11 |
+| [0011](0011-one-owner-per-cloud-resource.md) | Each cloud resource has one owning project, recorded in a ledger | 2026-11-11 |

@@ -192,13 +192,18 @@ export async function rotateConnection(orgId: string, id: string, input: RotateI
 
 /** Removes a connection and its stored credential. Refused while an
  *  assessment or a project still points at it (assessments by foreign key,
- *  projects by id), naming what to change first. */
+ *  projects by id, or as the account they manage), naming what to change
+ *  first. A project that manages the account also holds its ledger rows,
+ *  which the foreign key would refuse to orphan. */
 export async function deleteConnection(orgId: string, id: string): Promise<void> {
   const connection = await findOwned(orgId, id);
   const [assessments, projects, stacks] = await Promise.all([
     prisma.assessment.count({ where: { connectionId: connection.id } }),
     prisma.tfProject.findMany({
-      where: { orgId, OR: [{ gitConnectionId: connection.id }, { tfcConnectionId: connection.id }] },
+      where: {
+        orgId,
+        OR: [{ gitConnectionId: connection.id }, { tfcConnectionId: connection.id }, { providerConnectionId: connection.id }],
+      },
       select: { name: true },
       take: 5,
     }),
