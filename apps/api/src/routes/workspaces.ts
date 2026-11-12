@@ -80,9 +80,25 @@ function tfcFailure(err: unknown): never {
 
 workspacesRouter.get("/", handle(async (req, res) => {
   const { orgId } = req.user!;
+  // Only the listed columns (not the inputs and outputs snapshots), and at
+  // most 500: an adopted TFC org can be large, but this is a ceiling, not a
+  // page size.
   const workspaces = await prisma.workspace.findMany({
     where: { orgId },
     orderBy: { name: "asc" },
+    take: 500,
+    select: {
+      id: true,
+      name: true,
+      kind: true,
+      projectId: true,
+      tfcWorkspaceUrl: true,
+      driftDetected: true,
+      lastRunStatus: true,
+      lastRunAt: true,
+      vcsRepo: true,
+      connectionId: true,
+    },
   });
   res.json(
     workspaces.map((w) => ({

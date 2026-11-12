@@ -59,10 +59,19 @@ export function renderTemplate(
   return rendered.replace(/\n{3,}/g, "\n\n");
 }
 
-// Rendered file naming convention: one file per job, prefixed by project so
-// a shared destination directory stays collision-free.
-export function renderedFileName(projectName: string, jobId: string): string {
-  return `${projectName}-job-${jobId}.tf`;
+// Rendered file naming convention: one file per project, named for it so
+// projects sharing a destination directory do not overwrite each other. Each
+// job rewrites that file.
+//
+// It used to be one file per job (`<project>-job-<jobId>.tf`). Every rerun
+// then added a second copy of the same resource blocks to the directory, and
+// Terraform refuses a directory that declares a resource twice. A project that
+// already has a rendering keeps writing its newest file name instead
+// (lib/tf/pipeline.ts), so a repository rendered under the old name converges
+// on that one file rather than gaining another; the older job files a
+// repository may already hold have to be deleted there by hand.
+export function renderedFileName(projectName: string): string {
+  return `${projectName}.tf`;
 }
 
 export interface ProviderConfig {

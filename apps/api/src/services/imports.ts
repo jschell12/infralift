@@ -6,7 +6,7 @@ import { decryptToken } from "../lib/crypto.js";
 import { Conflict, InvalidInput, NotFound, Upstream } from "../lib/errors.js";
 import { gitHostClient, type GitHostClient } from "../lib/git/hosts.js";
 import { GitCommitError } from "../lib/git/errors.js";
-import { startJob } from "../lib/jobs/start.js";
+import { enqueueJob } from "../lib/jobs/enqueue.js";
 import { readRepoForScan } from "../lib/import/read.js";
 import { scanRepo } from "../lib/import/scan.js";
 import { CHECK_JOB_NAME, GENERATED_COMMIT_SUBJECT } from "../lib/import/contract.js";
@@ -56,10 +56,8 @@ async function createProject(data: Prisma.TfProjectUncheckedCreateInput) {
   }
 }
 
-async function queueImportJob(projectId: string, argumentsJson: Prisma.InputJsonValue) {
-  const job = await prisma.tfJob.create({ data: { projectId, kind: "import", argumentsJson } });
-  startJob(job.id);
-  return job;
+function queueImportJob(projectId: string, argumentsJson: Prisma.InputJsonValue) {
+  return enqueueJob({ projectId, kind: "import", argumentsJson });
 }
 
 // -- scan -----------------------------------------------------------------------

@@ -212,8 +212,15 @@ export type StackListing =
   | { origin: "infralift"; id: string; stack: ReturnType<typeof summary> }
   | (ReturnType<typeof sourceView> & { stack: ReturnType<typeof summary>; version: ReturnType<typeof versionView> | null });
 
+/** Most team stacks one list returns: a ceiling, not a page size. */
+const TEAM_STACK_LIST_CAP = 200;
+
 /** The catalog, the org's own stacks (newest version), and community stacks
- *  (the reviewed version). One shape, `origin` says which. */
+ *  (the reviewed version). One shape, `origin` says which.
+ *
+ *  Two queries, each reading one version per stack: the sources with their
+ *  newest version, and the reviewed versions by id. Loading every version of
+ *  every public stack to pick one grew with each version anyone added. */
 export async function listVisibleStacks(orgId: string): Promise<StackListing[]> {
   const catalog: StackListing[] = listStacks().map((m) => ({
     origin: "infralift" as const,
@@ -222,14 +229,25 @@ export async function listVisibleStacks(orgId: string): Promise<StackListing[]> 
   }));
   const sources = await prisma.stackSource.findMany({
     where: visibleWhere(orgId),
-    include: { versions: { select: versionSelect, orderBy: { createdAt: "desc" } } },
+    include: { versions: { select: versionSelect, orderBy: { createdAt: "desc" }, take: 1 } },
     orderBy: { createdAt: "asc" },
+    take: TEAM_STACK_LIST_CAP,
   });
+  const community = sources.filter((s) => originFor(orgId, s) === "community");
+  const reviewed = community.length
+    ? await prisma.stackVersion.findMany({
+        where: { id: { in: community.map((s) => s.publishedVersionId!) } },
+        select: { ...versionSelect, stackSourceId: true },
+      })
+    : [];
+  // Keyed by source as well as id, so a version is only ever shown under the
+  // stack it belongs to, as the per-source lookup this replaced guaranteed.
+  const reviewedById = new Map(reviewed.map((v) => [`${v.stackSourceId}:${v.id}`, v]));
   const team: StackListing[] = [];
   for (const s of sources) {
     const origin = originFor(orgId, s);
     if (!origin) continue;
-    const v = origin === "org" ? s.versions[0] : s.versions.find((x) => x.id === s.publishedVersionId);
+    const v = origin === "org" ? s.versions[0] : reviewedById.get(`${s.id}:${s.publishedVersionId}`);
     const version = v ? versionView(v) : null;
     team.push({ ...sourceView(s, origin), stack: version?.stack ?? null, version });
   }

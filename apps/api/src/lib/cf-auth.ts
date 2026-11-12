@@ -15,6 +15,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { prisma } from "./db.js";
+import { isUniqueViolation } from "./prisma-errors.js";
 
 const CF_TEAM_DOMAIN = process.env.CF_ACCESS_TEAM_DOMAIN; // e.g. "<team>.cloudflareaccess.com"
 const CF_AUD = process.env.CF_ACCESS_AUD; // Application Audience (AUD) tag from Access app
@@ -175,38 +176,51 @@ export function parseCookies(header: string | undefined, name: string): string[]
   return values;
 }
 
+/** How an email is stored and looked up: trimmed and lowercased. Identity
+ *  providers do not agree on case, and "Ann@x.com" and "ann@x.com" are one
+ *  person who must land in one org. */
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 /**
- * Find or create a user (and their org) by email.
- * Called on every authenticated request; uses Prisma's upsert for atomicity.
+ * Find or create a user (and their org) by email. Called on every
+ * authenticated request.
+ *
+ * A first sign-in usually arrives as several requests at once (the dashboard
+ * loads its panels in parallel), and each one finds no user. The org and the
+ * user are created in one transaction, so a request that loses the race on
+ * User.email rolls back its org too, then reads the winner's row. Without
+ * that, each racing request left an empty org behind.
  */
-async function getOrCreateUser(
-  email: string,
-  name: string | null
-): Promise<AuthUser> {
-  let user = await prisma.user.findUnique({
-    where: { email },
-  });
-
+export async function getOrCreateUser(rawEmail: string, name: string | null): Promise<AuthUser> {
+  const email = normalizeEmail(rawEmail);
+  let user = await findUserByEmail(email);
   if (!user) {
-    const orgName = email.split("@")[0] ?? "My org";
-    const org = await prisma.org.create({
-      data: { name: `${orgName}'s workspace` },
-    });
-    user = await prisma.user.create({
-      data: { email, name, orgId: org.id },
-    });
-    console.log(`Provisioned new user: ${email} (org: ${org.id})`);
+    try {
+      user = await prisma.$transaction(async (tx) => {
+        const org = await tx.org.create({ data: { name: `${email.split("@")[0] || "My org"}'s workspace` } });
+        return tx.user.create({ data: { email, name, orgId: org.id } });
+      });
+      console.log(`Provisioned new user: ${email} (org: ${user.orgId})`);
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    }
   } else if (name && !user.name) {
-    user = await prisma.user.update({
-      where: { id: user.id },
-      data: { name },
-    });
+    user = await prisma.user.update({ where: { id: user.id }, data: { name } });
   }
+  return { userId: user.id, orgId: user.orgId, email: user.email, name: user.name };
+}
 
-  return {
-    userId: user.id,
-    orgId: user.orgId,
-    email: user.email,
-    name: user.name,
-  };
+/** The user for a normalized email. Users provisioned before emails were
+ *  normalized may be stored in mixed case; the case-insensitive fallback finds
+ *  them, so their next sign-in does not provision a second org. */
+async function findUserByEmail(email: string) {
+  const exact = await prisma.user.findUnique({ where: { email } });
+  if (exact) return exact;
+  return prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+    orderBy: { createdAt: "asc" },
+  });
 }

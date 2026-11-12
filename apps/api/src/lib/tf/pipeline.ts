@@ -58,6 +58,8 @@ const JOB_INCLUDE = {
     include: {
       templateVersion: { include: { template: true } },
       assessment: { include: { inventory: true } },
+      // The file the project last rendered, which a template job rewrites.
+      renderings: { select: { fileName: true }, orderBy: { createdAt: "desc" }, take: 1 },
     },
   },
 } satisfies Prisma.TfJobInclude;
@@ -93,7 +95,7 @@ export async function runJob(jobId: string): Promise<void> {
     await run.start("render");
     validateArguments(version.inputSchema as object, args);
     const body = renderTemplate(version.templateBody, args);
-    const fileName = renderedFileName(project.name, jobId);
+    const fileName = project.renderings[0]?.fileName ?? renderedFileName(project.name);
     const rendering = await prisma.tfRendering.upsert({
       where: { projectId_fileName: { projectId: project.id, fileName } },
       create: {

@@ -12,9 +12,13 @@ import { isGitHost, type DriftStatus, type GitHost, type ImportCheckResult, type
 
 export const PROJECT_ROW_INCLUDE = {
   templateVersion: { select: { releaseTag: true, template: { select: { slug: true } } } },
+  // Metadata only, never renderedBody, and the newest 20: a project writes one
+  // file per name (lib/tf/render.ts), so more than a few means rows left from
+  // before 0028, when every job added a file.
   renderings: {
     select: { id: true, fileName: true, commitSha: true, createdAt: true },
     orderBy: { createdAt: "desc" },
+    take: 20,
   },
 } satisfies Prisma.TfProjectInclude;
 

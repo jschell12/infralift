@@ -131,6 +131,7 @@ const project = {
   providerConfig: { name: "hcloud", region: "fsn1" },
   templateVersion: { id: "tv1", inputSchema: {}, templateBody: "", releaseTag: "v1", template: { slug: "web" } },
   assessment: { id: "a1", status: "completed", provider: "aws", inventory: [] },
+  renderings: [] as { fileName: string }[],
 };
 const templateJob = () => (h.state.job = { id: "job1", kind: "template", argumentsJson: {}, project });
 const codegenJob = () => (h.state.job = { id: "job2", kind: "codegen", argumentsJson: {}, project });
@@ -190,6 +191,29 @@ describe.each([
     await runJob(h.state.job.id);
     expect(h.state.rows).toHaveLength(1);
     expect(h.state.rows[0].kind).toBe("adopted");
+  });
+});
+
+// One .tf file per project, rewritten by each job. A file per job put the same
+// resource blocks in the directory twice on the second run, which Terraform
+// refuses.
+describe("template job file name", () => {
+  it("renders a new project into the project's file", async () => {
+    tfc();
+    templateJob();
+    await runJob("job1");
+    expect(h.prisma.tfRendering.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { projectId_fileName: { projectId: "p1", fileName: "main.tf" } } })
+    );
+  });
+
+  it("keeps writing the file a project already has, so an old per-job name is overwritten, not joined", async () => {
+    tfc();
+    h.state.job = { id: "job9", kind: "template", argumentsJson: {}, project: { ...project, renderings: [{ fileName: "shop-job-job1.tf" }] } };
+    await runJob("job9");
+    expect(h.prisma.tfRendering.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { projectId_fileName: { projectId: "p1", fileName: "shop-job-job1.tf" } } })
+    );
   });
 });
 

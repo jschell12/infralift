@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/db.js";
 import { InvalidInput, NotFound } from "../lib/errors.js";
-import { startJob } from "../lib/jobs/start.js";
+import { enqueueJob } from "../lib/jobs/enqueue.js";
 import type { TfArguments } from "../lib/tf/render.js";
 
 // Jobs a person starts by hand, and reading jobs back. Every query is scoped
@@ -9,20 +9,16 @@ import type { TfArguments } from "../lib/tf/render.js";
 
 /** Queues a job for a project. A stack project re-renders from its stored
  *  settings; ad-hoc arguments would let a job disagree with what the project
- *  says it is. */
+ *  says it is. Conflict while the project already has a job going. */
 export async function queueProjectJob(orgId: string, projectId: string, args: TfArguments) {
   const project = await prisma.tfProject.findFirst({ where: { id: projectId, orgId } });
   if (!project) throw new NotFound("project not found");
   const isStack = project.source === "stack";
-  const job = await prisma.tfJob.create({
-    data: {
-      projectId: project.id,
-      kind: isStack ? "stack" : "template",
-      argumentsJson: isStack ? (project.providerConfig as Prisma.InputJsonObject) : args,
-    },
+  return enqueueJob({
+    projectId: project.id,
+    kind: isStack ? "stack" : "template",
+    argumentsJson: isStack ? (project.providerConfig as Prisma.InputJsonObject) : args,
   });
-  startJob(job.id);
-  return job;
 }
 
 export async function listJobs(orgId: string, projectId: string) {

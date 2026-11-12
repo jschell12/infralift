@@ -142,6 +142,14 @@ describe("POST /tf/imports", () => {
     expect(h.runJob).toHaveBeenCalledWith("job1");
   });
 
+  it("409s when the project already has a job going, and starts nothing", async () => {
+    h.jobCreate.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("dup", { code: "P2002", clientVersion: "6" }));
+    const out = await call("/", { repo: "acme/infra", path: "envs/prod", name: "acme-prod" });
+    expect(out.status).toBe(409);
+    expect(out.body.error).toBe("a job is already running for this project");
+    expect(h.runJob).not.toHaveBeenCalled();
+  });
+
   it("refuses a module that is not ready, without creating anything", async () => {
     const out = await call("/", { repo: "acme/infra", path: "laptop", name: "laptop" });
     expect(out.status).toBe(409);

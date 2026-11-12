@@ -71,10 +71,12 @@ function toSummary(m: {
 
 migrationsRouter.get("/", handle(async (req, res) => {
   const { orgId } = req.user!;
+  // Newest 100: a ceiling against an unbounded read, not a page size.
   const migrations = await prisma.migration.findMany({
     where: { orgId },
     include: { phases: true },
     orderBy: { createdAt: "desc" },
+    take: 100,
   });
   res.json(migrations.map(toSummary));
 }));
