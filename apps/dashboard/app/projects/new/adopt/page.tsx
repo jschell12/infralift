@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { ProviderConnectionSummary, UnmanagedPage, UnmanagedResource } from "@infralift/shared";
 import { api, errorText } from "../../../../lib/api";
 import { connectionName, isCloudAccount } from "../../../../lib/connections";
+import { ProviderIcon } from "../../../../components/provider-icon";
 import {
   ADOPT_MAX_RESOURCES,
   AdoptRequestError,
@@ -131,8 +132,13 @@ function AdoptFromAccount() {
   return (
     <>
       <BackLink />
-      <h1 className="mb-2 text-3xl font-bold tracking-tight text-balance break-words">
-        Adopt from {account ? `${connectionName(account.provider)} · ${account.label}` : "an account"}
+      <h1 className="mb-2 flex items-start gap-3 text-3xl font-bold tracking-tight">
+        {/* 28px mark in a 36px line: mt-1 centers it on the first line. */}
+        {account && <ProviderIcon provider={account.provider} size={28} className="mt-1" />}
+        <span className="min-w-0 text-balance break-words">
+          {/* No-break space: with the mark beside it, a wrap must not start a line with the dot. */}
+          Adopt from {account ? `${connectionName(account.provider)}\u00a0· ${account.label}` : "an account"}
+        </span>
       </h1>
       <p className="mb-8 max-w-[640px] text-muted">
         Pick what this account runs that no infralift project manages yet. infralift adopts it into a new project as a

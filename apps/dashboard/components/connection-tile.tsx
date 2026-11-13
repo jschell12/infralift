@@ -8,6 +8,7 @@
 import type { ReactNode } from "react";
 import type { ProviderConnectionSummary } from "@infralift/shared";
 import { connectionName, connectionStatus } from "../lib/connections";
+import { ProviderIcon } from "./provider-icon";
 import { CARD, Chip } from "./ui";
 
 /** The responsive grid the tiles sit in: 1, 2 or 3 columns. */
@@ -25,7 +26,11 @@ function TileBody({ c, children }: { c: ProviderConnectionSummary; children?: Re
   return (
     <>
       <div className="mb-1 flex items-start gap-2">
-        <h2 className="min-w-0 flex-1 text-base font-semibold break-words">{connectionName(c.provider)}</h2>
+        <h2 className="flex min-w-0 flex-1 items-start gap-2 text-base font-semibold">
+          {/* 20px mark in a 24px line: mt-0.5 centers it on the first line. */}
+          <ProviderIcon provider={c.provider} className="mt-0.5" />
+          <span className="min-w-0 break-words">{connectionName(c.provider)}</span>
+        </h2>
         <Chip tone={status.tone}>{status.text}</Chip>
       </div>
       <div className="mb-1 text-sm text-muted break-words">{c.label}</div>
