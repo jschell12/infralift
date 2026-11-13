@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { listProviders } from "../lib/providers";
 import { THEME_BOOT_SCRIPT } from "../lib/theme";
+import { ThemeClock } from "./theme-clock";
 import "./globals.css";
 
 const TITLE = "infralift | bring click-ops infrastructure under Terraform";
@@ -59,6 +60,8 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body>
+        {/* Keeps Auto on the clock on every page, control or not. */}
+        <ThemeClock />
         {children}
         <script dangerouslySetInnerHTML={{ __html: BEACON }} />
       </body>

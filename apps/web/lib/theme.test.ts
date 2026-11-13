@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
@@ -7,8 +7,11 @@ import {
   DAYTIME_HOURS,
   THEME_BOOT_SCRIPT,
   THEME_STORAGE_KEY,
+  chooseOverride,
   msUntilNextBoundary,
   parseOverride,
+  startAutoThemeClock,
+  subscribeToOverride,
   themeForHour,
   type Theme,
   type ThemeOverride,
@@ -175,11 +178,162 @@ describe("copies across apps", () => {
     },
   );
 
+  it.each(["dashboard", "admin"])(
+    "%s/components/theme-clock.tsx is the same as web's",
+    (app) => {
+      expect(read(`${app}/components/theme-clock.tsx`)).toBe(read("web/app/theme-clock.tsx"));
+    },
+  );
+
+  // One control per page: the marketing footer, and /settings in the
+  // dashboard and admin. The sidebars no longer carry one.
   it.each([
     ["web", "app/site-chrome.tsx"],
-    ["dashboard", "components/sidebar-nav.tsx"],
-    ["admin", "components/nav.tsx"],
+    ["dashboard", "app/settings/page.tsx"],
+    ["admin", "app/settings/page.tsx"],
   ])("%s renders the control in %s", (app, file) => {
     expect(read(`${app}/${file}`)).toMatch(/<ThemeControl\b/);
+  });
+
+  it.each([
+    ["dashboard", "components/sidebar-nav.tsx"],
+    ["admin", "components/nav.tsx"],
+  ])("%s does not render the control in %s", (app, file) => {
+    expect(read(`${app}/${file}`)).not.toMatch(/ThemeControl/);
+  });
+
+  // The clock has to run on pages with no control, so it lives in the layout.
+  it.each(["web", "dashboard", "admin"])("%s mounts ThemeClock in its root layout", (app) => {
+    const body = /<body>([\s\S]*?)<\/body>/.exec(read(`${app}/app/layout.tsx`))?.[1] ?? "";
+    expect(body, app).toMatch(/<ThemeClock \/>/);
+  });
+});
+
+describe("startAutoThemeClock (no ThemeControl involved)", () => {
+  // A stand-in document: just what applyTheme and the clock touch. The clock
+  // is started on its own here, the way ThemeClock starts it on a page that
+  // has no control.
+  function fakeDocument() {
+    const target = new EventTarget();
+    return Object.assign(target, {
+      documentElement: { dataset: {} as Record<string, string> },
+      visibilityState: "visible" as DocumentVisibilityState,
+    });
+  }
+  const at = (d: number, h: number, m = 0) => new Date(2026, 2, d, h, m, 0, 0);
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("switches to dark just after 19:00 and back to light just after 07:00", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(at(3, 18, 59));
+    const doc = fakeDocument();
+    doc.documentElement.dataset.theme = "light";
+    vi.stubGlobal("document", doc);
+
+    const stop = startAutoThemeClock();
+    vi.advanceTimersByTime(59_000);
+    expect(doc.documentElement.dataset.theme, "18:59:59 is still day").toBe("light");
+    vi.advanceTimersByTime(2_000);
+    expect(doc.documentElement.dataset.theme, "19:00:01").toBe("dark");
+
+    // It rescheduled itself: the next boundary is tomorrow's 07:00.
+    vi.advanceTimersByTime(12 * 3_600_000 - 2_000);
+    expect(doc.documentElement.dataset.theme, "06:59:59 next day").toBe("dark");
+    vi.advanceTimersByTime(2_000);
+    expect(doc.documentElement.dataset.theme, "07:00:01 next day").toBe("light");
+    stop();
+  });
+
+  it("stops switching once cleaned up", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(at(3, 18, 59));
+    const doc = fakeDocument();
+    doc.documentElement.dataset.theme = "light";
+    vi.stubGlobal("document", doc);
+
+    const stop = startAutoThemeClock();
+    stop();
+    vi.advanceTimersByTime(24 * 3_600_000);
+    expect(doc.documentElement.dataset.theme).toBe("light");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("catches up when a tab left open becomes visible, even if no timer fired", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(at(3, 23));
+    const doc = fakeDocument();
+    doc.documentElement.dataset.theme = "dark";
+    vi.stubGlobal("document", doc);
+
+    const stop = startAutoThemeClock();
+    // A laptop opened at 08:00: the clock moved, the timer did not run.
+    vi.setSystemTime(at(4, 8));
+    doc.visibilityState = "hidden";
+    doc.dispatchEvent(new Event("visibilitychange"));
+    expect(doc.documentElement.dataset.theme, "hidden tabs are left alone").toBe("dark");
+    doc.visibilityState = "visible";
+    doc.dispatchEvent(new Event("visibilitychange"));
+    expect(doc.documentElement.dataset.theme).toBe("light");
+    stop();
+  });
+});
+
+describe("chooseOverride and subscribeToOverride", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function fakeWindow(storage: Map<string, string> | "throws") {
+    const target = new EventTarget();
+    const localStorage = {
+      getItem: (k: string) => (storage === "throws" ? fail() : (storage.get(k) ?? null)),
+      setItem: (k: string, v: string) => (storage === "throws" ? fail() : storage.set(k, v)),
+      removeItem: (k: string) => (storage === "throws" ? fail() : storage.delete(k)),
+    };
+    function fail(): never {
+      throw new Error("SecurityError");
+    }
+    return Object.assign(target, { localStorage });
+  }
+
+  it("delivers a choice made in this tab and saves it", () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("window", fakeWindow(storage));
+    const seen: ThemeOverride[] = [];
+    const unsubscribe = subscribeToOverride((o) => seen.push(o));
+
+    chooseOverride("dark");
+    chooseOverride("auto");
+    expect(seen).toEqual(["dark", "auto"]);
+    expect(storage.has(THEME_STORAGE_KEY), "Auto removes the key").toBe(false);
+
+    unsubscribe();
+    chooseOverride("light");
+    expect(seen).toEqual(["dark", "auto"]);
+    expect(storage.get(THEME_STORAGE_KEY)).toBe("light");
+  });
+
+  it("still delivers the choice when storage is blocked", () => {
+    vi.stubGlobal("window", fakeWindow("throws"));
+    const seen: ThemeOverride[] = [];
+    subscribeToOverride((o) => seen.push(o));
+    chooseOverride("dark");
+    expect(seen).toEqual(["dark"]);
+  });
+
+  it("hears another tab through the storage event, and only for its own key", () => {
+    const win = fakeWindow(new Map());
+    vi.stubGlobal("window", win);
+    const seen: ThemeOverride[] = [];
+    subscribeToOverride((o) => seen.push(o));
+    const storageEvent = (key: string, newValue: string | null) =>
+      Object.assign(new Event("storage"), { key, newValue });
+
+    win.dispatchEvent(storageEvent("something-else", "dark"));
+    win.dispatchEvent(storageEvent(THEME_STORAGE_KEY, "dark"));
+    win.dispatchEvent(storageEvent(THEME_STORAGE_KEY, null));
+    expect(seen).toEqual(["dark", "auto"]);
   });
 });

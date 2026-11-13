@@ -9,9 +9,14 @@
 //   - THEME_BOOT_SCRIPT runs inline in each root layout's <head>, before the
 //     first paint, and sets <html data-theme>. It is built from the constants
 //     below, and the test runs it against themeForHour for every hour.
-//   - ThemeControl (the Auto / Light / Dark buttons) persists the override and,
-//     in Auto, re-applies the theme at the next boundary and when a tab that
-//     was left open becomes visible again.
+//   - ThemeClock is mounted once in each root layout, on every page. It
+//     applies the override and, in Auto, re-applies the theme at the next
+//     boundary and when a tab that was left open becomes visible again. It
+//     lives in the layout rather than in the control because the dashboard and
+//     admin only show the control on /settings, and Auto has to keep switching
+//     on the other pages too.
+//   - ThemeControl (the Auto / Light / Dark buttons) shows and saves the
+//     override. It applies nothing itself; ThemeClock hears the change.
 //   - globals.css keys the palette on :root[data-theme], falling back to the
 //     OS setting when the script never ran (JavaScript off).
 
@@ -32,11 +37,10 @@ export const THEME_STORAGE_KEY = "infralift-theme";
 export const THEME_OVERRIDES: readonly ThemeOverride[] = ["auto", "light", "dark"];
 
 /**
- * Window event carrying a new override to every ThemeControl in this tab.
- * The dashboard and admin mount two (the phone menu, and the sidebar, which
- * is only hidden by CSS on phones), and the browser's own `storage` event
- * reaches other tabs, never the one that wrote. Without this the hidden copy
- * stays in Auto and its timer flips the page back.
+ * Window event carrying a new override from ThemeControl to ThemeClock (and
+ * any other listener) in this tab. The browser's own `storage` event reaches
+ * other tabs, never the one that wrote, and does not fire at all when storage
+ * is blocked. Without this the clock stays in Auto and flips the page back.
  */
 export const THEME_CHANGE_EVENT = "infralift-theme-change";
 
@@ -102,4 +106,57 @@ export function applyTheme(override: ThemeOverride, now: Date = new Date()): The
   const theme = themeForHour(now.getHours(), override);
   document.documentElement.dataset.theme = theme;
   return theme;
+}
+
+/** Saves a new override and tells every listener in this tab (see subscribeToOverride). */
+export function chooseOverride(next: ThemeOverride): void {
+  writeStoredOverride(next);
+  window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: next }));
+}
+
+/**
+ * Calls `onChange` whenever the override changes, from this tab
+ * (chooseOverride) or another one (the storage event). Returns the
+ * unsubscribe. Observer pattern: ThemeControl and ThemeClock both listen, and
+ * neither needs to know the other is mounted.
+ */
+export function subscribeToOverride(onChange: (override: ThemeOverride) => void): () => void {
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === THEME_STORAGE_KEY) onChange(parseOverride(e.newValue));
+  };
+  const onLocal = (e: Event) => {
+    onChange(parseOverride((e as CustomEvent<string>).detail));
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(THEME_CHANGE_EVENT, onLocal);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(THEME_CHANGE_EVENT, onLocal);
+  };
+}
+
+/**
+ * Keeps <html data-theme> on the clock while the override is Auto: re-applies
+ * a second after the next 07:00 or 19:00, then schedules the one after. Timers
+ * are paused or throttled in background tabs and across sleep, so the
+ * visibility check is what actually catches a laptop opened at 08:00. Returns
+ * the cleanup, which ThemeClock calls when the override leaves Auto.
+ */
+export function startAutoThemeClock(): () => void {
+  let timer: ReturnType<typeof setTimeout>;
+  const schedule = () => {
+    timer = setTimeout(() => {
+      applyTheme("auto");
+      schedule();
+    }, msUntilNextBoundary(new Date()) + 1000);
+  };
+  const onVisible = () => {
+    if (document.visibilityState === "visible") applyTheme("auto");
+  };
+  schedule();
+  document.addEventListener("visibilitychange", onVisible);
+  return () => {
+    clearTimeout(timer);
+    document.removeEventListener("visibilitychange", onVisible);
+  };
 }
