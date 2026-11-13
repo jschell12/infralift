@@ -70,7 +70,13 @@ export interface ProviderConnectionSummary {
   provider: Provider;
   label: string;
   createdAt: string;
+  /** Last successful verify. */
   lastVerifiedAt: string | null;
+  /** Last verify of any outcome, by a person or the daily check. Null: never
+   *  checked. */
+  lastCheckedAt: string | null;
+  /** True while a check of this connection is running. */
+  checking: boolean;
   status: "unverified" | "valid" | "invalid";
   /** Why the connection is invalid; null when it is not. */
   lastError: string | null;

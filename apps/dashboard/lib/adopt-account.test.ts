@@ -38,6 +38,8 @@ const fx = JSON.parse(readFileSync(new URL("./__fixtures__/unmanaged-api.json", 
   missing: { status: number; body: unknown };
   conflict: { status: number; body: unknown };
   refusedRows: UnmanagedResource[];
+  credentialRefused: { status: number; body: unknown };
+  credentialMalformed: { status: number; body: unknown };
 };
 
 const all = fx.full.body.resources;
@@ -225,6 +227,43 @@ describe("connectionProblemText", () => {
     expect(connectionProblemText(invalid)).toMatch(/refused/);
     expect(connectionProblemText(invalid)).not.toContain("Invalid API Token");
     expect(connectionProblemText({ status: "unverified" })).toMatch(/until its connection has been checked/);
+  });
+
+  it("does not call an account refused when nothing has checked it (production's \"connected\")", () => {
+    const connected = { status: "connected" as unknown as "unverified" };
+    expect(connectionProblemText(connected)).toMatch(/until its connection has been checked/);
+    expect(connectionProblemText(connected)).not.toMatch(/refused/);
+  });
+});
+
+describe("adoptProblemFor, an account its credential cannot read", () => {
+  it("shows the API's sentence for a key of the wrong kind, with a link to replace that connection", () => {
+    const { status, body } = fx.credentialMalformed;
+    expect(adoptProblemFor(status, body)).toEqual({
+      message: "infralift couldn't read this account: the saved credential isn't a service account key. Replace it on Connections.",
+      resources: [],
+      fix: { href: "/connections?replace=fb-conn", label: "Replace credential" },
+    });
+  });
+
+  it("does the same for a credential the provider refused", () => {
+    const { status, body } = fx.credentialRefused;
+    const problem = adoptProblemFor(status, body);
+    expect(problem.message).toMatch(/^infralift couldn't read this account: Cloudflare refused/);
+    expect(problem.fix).toEqual({ href: "/connections?replace=cf-conn", label: "Replace credential" });
+  });
+
+  it("uses our own sentence when the body has the code but no message", () => {
+    const problem = adoptProblemFor(409, { code: "connection_credential", connectionId: "c1" });
+    expect(problem.message).toBe("infralift couldn't read this account with its saved credential. Replace it on Connections.");
+    expect(problem.fix?.href).toBe("/connections?replace=c1");
+  });
+
+  it("offers no link for a 409 without the code, or a 502", () => {
+    expect(adoptProblemFor(fx.conflict.status, fx.conflict.body).fix).toBeUndefined();
+    const upstream = adoptProblemFor(502, { error: "Could not read the account's resources", requestId: "r1" });
+    expect(upstream.fix).toBeUndefined();
+    expect(upstream.message).not.toContain("Could not read");
   });
 });
 

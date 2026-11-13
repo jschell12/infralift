@@ -29,24 +29,48 @@ interface ConnectionRow {
   status: string;
   createdAt: Date;
   lastVerifiedAt: Date | null;
+  lastCheckedAt: Date | null;
+  verifyingSince: Date | null;
   lastError: string | null;
   expiresAt: Date | null;
 }
 
-export function toSummary(c: ConnectionRow): ProviderConnectionSummary {
+/** How long a check's claim on a connection holds. Longer than any check
+ *  takes, queue wait included (CHECK_CONCURRENCY slots, VERIFY_TIMEOUT_MS
+ *  each), so it only lapses when the process holding it is gone. */
+export const CHECK_CLAIM_MS = 10 * 60 * 1000;
+
+const STATUSES: readonly ProviderConnectionSummary["status"][] = ["unverified", "valid", "invalid"];
+
+/** The status as the API reports it: one of the three words. A row saying
+ *  anything else (production had "connected", written outside the API) was
+ *  never checked, so it is unverified. Migration 0030 rewrote those rows and
+ *  constrains the column; this keeps a stray word from reaching a client. */
+export function normalizeStatus(status: string): ProviderConnectionSummary["status"] {
+  return (STATUSES as readonly string[]).includes(status) ? (status as ProviderConnectionSummary["status"]) : "unverified";
+}
+
+/** True while a live claim says a check is running. */
+export function isChecking(c: Pick<ConnectionRow, "verifyingSince">, now = Date.now()): boolean {
+  return c.verifyingSince !== null && now - c.verifyingSince.getTime() < CHECK_CLAIM_MS;
+}
+
+export function toSummary(c: ConnectionRow, now = Date.now()): ProviderConnectionSummary {
   return {
     id: c.id,
     provider: c.provider as Provider,
     label: c.label,
     createdAt: c.createdAt.toISOString(),
     lastVerifiedAt: c.lastVerifiedAt?.toISOString() ?? null,
-    status: c.status as ProviderConnectionSummary["status"],
+    lastCheckedAt: c.lastCheckedAt?.toISOString() ?? null,
+    checking: isChecking(c, now),
+    status: normalizeStatus(c.status),
     lastError: c.lastError,
     expiresAt: c.expiresAt?.toISOString() ?? null,
   };
 }
 
-function providerLabel(provider: string): string {
+export function providerLabel(provider: string): string {
   if (provider === TFC_PROVIDER) return "Terraform Cloud";
   return PROVIDER_LABELS[provider as Provider] ?? provider;
 }
@@ -123,6 +147,7 @@ export async function createConnection(
       encryptedToken: encryptToken(secret),
       status: outcome.valid ? "valid" : outcome.timedOut ? "unverified" : "invalid",
       lastVerifiedAt: outcome.valid ? new Date() : null,
+      lastCheckedAt: new Date(),
       lastError: outcome.reason,
       expiresAt: outcome.expiresAt,
     },
@@ -130,20 +155,129 @@ export async function createConnection(
   return toSummary(connection);
 }
 
-/** Re-runs the provider's verify call and records what it said. */
+// -- checking a connection again ----------------------------------------------
+//
+// One check = claim, ask the provider, record, release. A person's "Verify
+// now" (verifyConnection) and the automatic checks (services/connection-
+// checks.ts) both go through runCheck, so they cannot verify one connection
+// twice at once:
+//
+//   claim     a conditional UPDATE setting verifyingSince where it is null or
+//             older than CHECK_CLAIM_MS, as the job queue claims a job; the row
+//             count is the verdict, so two processes cannot both hold it
+//   share     in this process, a second caller for the same connection gets
+//             the first caller's promise rather than a second claim attempt
+//   record    the outcome and lastCheckedAt, clearing the claim in the same
+//             write. A provider that does not answer within the deadline
+//             counts as a timeout: the reason is recorded, the status kept.
+
+/** Deadline for one provider's verify call. httpFetch has its own per-call
+ *  deadlines (lib/http.ts); this bounds the whole check, which for AWS is
+ *  two STS calls and for Google a token exchange. */
+export const VERIFY_TIMEOUT_MS: Record<string, number> = { default: 20_000, aws: 30_000 };
+
+export function verifyTimeoutFor(provider: string): number {
+  return VERIFY_TIMEOUT_MS[provider] ?? VERIFY_TIMEOUT_MS.default;
+}
+
+/** The fields a check's outcome writes. Pure, so the mapping is tested
+ *  without a database. Always releases the claim. */
+export function outcomeData(outcome: VerifyResult, now: Date) {
+  const checked = { lastCheckedAt: now, verifyingSince: null };
+  if (outcome.valid) {
+    return { ...checked, status: "valid", lastVerifiedAt: now, lastError: null, expiresAt: outcome.expiresAt };
+  }
+  // A timeout says nothing about the credential: keep the status.
+  if (outcome.timedOut) return { ...checked, lastError: outcome.reason };
+  return { ...checked, status: "invalid", lastError: outcome.reason };
+}
+
+/** Takes the check claim on a connection. False when a live claim exists. */
+export async function claimCheck(id: string, now = new Date()): Promise<boolean> {
+  const { count } = await prisma.providerConnection.updateMany({
+    where: { id, OR: [{ verifyingSince: null }, { verifyingSince: { lt: new Date(now.getTime() - CHECK_CLAIM_MS) } }] },
+    data: { verifyingSince: now },
+  });
+  return count === 1;
+}
+
+/** checkCredential, bounded by the provider's deadline. */
+async function checkWithDeadline(provider: string, secret: string, timeoutMs: number): Promise<VerifyResult> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<VerifyResult>((resolve) => {
+    timer = setTimeout(
+      () => resolve({ valid: false, reason: `${providerLabel(provider)} did not answer in time; try again`, expiresAt: null, timedOut: true }),
+      timeoutMs
+    );
+  });
+  try {
+    return await Promise.race([checkCredential(provider, secret), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+type FullConnection = NonNullable<Awaited<ReturnType<typeof prisma.providerConnection.findFirst>>>;
+
+/** Runs a check on a connection this caller claimed at `claimedAt` (the
+ *  time claimCheck wrote), then releases the claim. Returns the row as
+ *  written, or null when the row is gone or the claim is no longer this
+ *  caller's.
+ *
+ *  A check can wait for a slot after its claim (checkStaleForOrg claims
+ *  before queueing). If the claim could lapse before the provider answers,
+ *  it does not call the provider at all; and every write is conditional on
+ *  verifyingSince still being `claimedAt`, so a check whose claim was taken
+ *  over never overwrites the newer one. When the check cannot run (AWS off on
+ *  this server, 422), it records only that it was checked, so the daily check
+ *  does not retry it every sweep, and rethrows. */
+export async function runClaimedCheck(
+  connection: FullConnection,
+  claimedAt: Date,
+  opts: { timeoutMs?: number } = {}
+): Promise<FullConnection | null> {
+  const timeoutMs = opts.timeoutMs ?? verifyTimeoutFor(connection.provider);
+  if (Date.now() - claimedAt.getTime() > CHECK_CLAIM_MS - timeoutMs) return null;
+  const mine = { id: connection.id, verifyingSince: claimedAt };
+  const now = new Date();
+  let outcome: VerifyResult;
+  try {
+    const secret = await connectionSecret(connection.orgId, connection.provider, decryptToken(connection.encryptedToken));
+    outcome = await checkWithDeadline(connection.provider, secret, timeoutMs);
+  } catch (err) {
+    await prisma.providerConnection.updateMany({ where: mine, data: { lastCheckedAt: now, verifyingSince: null } });
+    throw err;
+  }
+  const { count } = await prisma.providerConnection.updateMany({ where: mine, data: outcomeData(outcome, now) });
+  if (count !== 1) return null;
+  return prisma.providerConnection.findFirst({ where: { id: connection.id } });
+}
+
+/** Checks in progress in this process, by connection id. */
+const checksInFlight = new Map<string, Promise<FullConnection | null>>();
+
+/** Claims and checks a connection. Resolves to the row as written, or null
+ *  when another process holds the claim or the row is gone. A second call
+ *  while the first runs shares it. */
+export function runCheck(connection: FullConnection, opts: { now?: Date; timeoutMs?: number } = {}): Promise<FullConnection | null> {
+  const running = checksInFlight.get(connection.id);
+  if (running) return running;
+  const work = (async () => {
+    const claimedAt = opts.now ?? new Date();
+    if (!(await claimCheck(connection.id, claimedAt))) return null;
+    return runClaimedCheck(connection, claimedAt, { timeoutMs: opts.timeoutMs });
+  })().finally(() => checksInFlight.delete(connection.id));
+  checksInFlight.set(connection.id, work);
+  return work;
+}
+
+/** "Verify now": re-runs the provider's verify call and records what it
+ *  said. When a check is already running elsewhere, returns the connection
+ *  as it stands, with checking: true, rather than starting a second. */
 export async function verifyConnection(orgId: string, id: string): Promise<ProviderConnectionSummary> {
   const connection = await findOwned(orgId, id);
-  const secret = await connectionSecret(orgId, connection.provider, decryptToken(connection.encryptedToken));
-  const outcome = await checkCredential(connection.provider, secret);
-  const updated = await prisma.providerConnection.update({
-    where: { id: connection.id },
-    data: outcome.valid
-      ? { status: "valid", lastVerifiedAt: new Date(), lastError: null, expiresAt: outcome.expiresAt }
-      : outcome.timedOut
-        ? { lastError: outcome.reason }
-        : { status: "invalid", lastError: outcome.reason },
-  });
-  return toSummary(updated);
+  const checked = await runCheck(connection);
+  return toSummary(checked ?? (await findOwned(orgId, id)));
 }
 
 export interface RotateInput {
@@ -183,6 +317,7 @@ export async function rotateConnection(orgId: string, id: string, input: RotateI
       encryptedToken: encryptToken(secret),
       status: "valid",
       lastVerifiedAt: new Date(),
+      lastCheckedAt: new Date(),
       lastError: null,
       expiresAt: outcome.expiresAt,
     },

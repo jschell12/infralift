@@ -23,6 +23,21 @@ export class ProviderHttpError extends Error {
   }
 }
 
+/** The stored credential is not the kind this provider takes (a Firebase
+ *  connection whose secret is not a service account JSON key). Thrown before
+ *  any call to the provider, so it can never work as it is: replacing it is
+ *  the only fix. `expected` is what it should be, in words a customer reads
+ *  ("a service account key"); the message is for the log. Neither quotes the
+ *  credential. */
+export class CredentialFormatError extends Error {
+  constructor(
+    message: string,
+    readonly expected: string
+  ) {
+    super(message);
+  }
+}
+
 /** What a verify call learned beyond yes or no. */
 export interface VerifyResult {
   valid: boolean;

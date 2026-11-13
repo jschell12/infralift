@@ -12,11 +12,12 @@ import type {
 import { prisma } from "../lib/db.js";
 import { decryptToken } from "../lib/crypto.js";
 import { getConnector } from "../connectors/index.js";
-import { Conflict, InvalidInput, NotFound, TooManyRequests, Upstream } from "../lib/errors.js";
+import { AppError, Conflict, InvalidInput, NotFound, TooManyRequests, Upstream } from "../lib/errors.js";
+import { CredentialFormatError } from "../connectors/types.js";
 import { createRateLimiter } from "../lib/rate-limit.js";
 import { adoptionTarget, isUsageLine, type AdoptBackend } from "../lib/import/adopt.js";
 import { connectionSecret } from "./aws-access.js";
-import { markInvalidOnAuthFailure } from "./connections.js";
+import { authFailureStatus, markInvalid, markInvalidOnAuthFailure, providerLabel } from "./connections.js";
 import { openAdoption } from "./imports.js";
 import { ledgerKey, managedKeys, projectConnection, type LedgerKey } from "./managed-resources.js";
 
@@ -90,10 +91,43 @@ function remember(key: string, entry: CachedInventory, now: number): void {
   while (cache.size > INVENTORY_CACHE_ENTRIES) cache.delete(cache.keys().next().value!);
 }
 
+/** The `code` on a 409 that says the account cannot be read with the stored
+ *  credential, and replacing it is the fix. The dashboard links to the
+ *  connection's Replace drawer when it sees it (lib/adopt-account.ts). */
+export const CONNECTION_CREDENTIAL = "connection_credential";
+
+/** A failed inventory read, as the response the caller gets. The message is
+ *  ours, built from the provider's name and the kind of credential expected;
+ *  the provider's own text goes to the log only, since it can quote a request
+ *  (and so a key). Pure, so the mapping is tested without a connector.
+ *
+ *    the credential is not the kind the provider takes     409, marked invalid
+ *    the provider refused it (401/403)                     409, marked invalid
+ *    anything else (an outage, a timeout, a bug)           502 with a request id
+ */
+export function inventoryFailure(connection: Pick<ProviderConnection, "id" | "provider">, err: unknown, requestId: string): AppError {
+  const fix = { code: CONNECTION_CREDENTIAL, connectionId: connection.id };
+  if (err instanceof CredentialFormatError) {
+    return new Conflict(
+      `infralift couldn't read this account: the saved credential isn't ${err.expected}. Replace it on Connections.`,
+      fix
+    );
+  }
+  const status = authFailureStatus(err, "connector");
+  if (status) {
+    return new Conflict(
+      `infralift couldn't read this account: ${providerLabel(connection.provider)} refused the saved credential. Replace it on Connections.`,
+      fix
+    );
+  }
+  return new Upstream("Could not read the account's resources", { requestId });
+}
+
 /** Calls the connector, read-only, with the same deadlines and failure
- *  handling as an assessment run (routes/assessments.ts): a 401/403 marks the
- *  connection invalid, and the provider's own message goes to the log, never
- *  the response. */
+ *  handling as an assessment run (routes/assessments.ts): a credential the
+ *  provider refused (401/403), or one that is not the kind it takes, marks
+ *  the connection invalid, and the provider's own message goes to the log,
+ *  never the response. */
 async function readInventory(connection: ProviderConnection): Promise<ResourceInventoryItem[]> {
   // AWS: the org's external id; 422 when AWS is off on this server.
   const secret = await connectionSecret(connection.orgId, connection.provider, decryptToken(connection.encryptedToken));
@@ -102,11 +136,17 @@ async function readInventory(connection: ProviderConnection): Promise<ResourceIn
     const { inventory } = await getConnector(connection.provider as Provider).assess(secret, { costs: false });
     return inventory;
   } catch (err) {
-    await markInvalidOnAuthFailure(connection, err, "connector", "an inventory of the account");
+    if (err instanceof CredentialFormatError) {
+      await markInvalid(connection.id, `the saved credential isn't ${err.expected}; replace it`).catch((markErr) =>
+        console.error(`could not mark connection ${connection.id} invalid:`, markErr)
+      );
+    } else {
+      await markInvalidOnAuthFailure(connection, err, "connector", "an inventory of the account");
+    }
     const requestId = randomUUID();
     const message = err instanceof Error ? err.message : String(err);
     console.error(`inventory of connection ${connection.id} failed (${connection.provider}) [request ${requestId}]: ${message}`);
-    throw new Upstream("Could not read the account's resources", { requestId });
+    throw inventoryFailure(connection, err, requestId);
   }
 }
 

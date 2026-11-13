@@ -1,6 +1,6 @@
 import { createSign } from "node:crypto";
 import type { ResourceInventoryItem } from "@infralift/shared";
-import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
+import { CredentialFormatError, ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 import { httpFetch } from "../lib/http.js";
 
 // GCP assessment via a read-only service account (Viewer role). Uses the same
@@ -98,7 +98,7 @@ export const gcpConnector: Connector = {
   async assess(token): Promise<ConnectorAssessment> {
     const key = parseKey(token);
     if (!key) {
-      throw new Error("GCP connection must be a service account JSON key");
+      throw new CredentialFormatError("GCP connection must be a service account JSON key", "a service account key");
     }
     const accessToken = await mintAccessToken(key);
     const project = key.project_id;

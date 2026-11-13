@@ -377,13 +377,26 @@ export function SkeletonCards({
 export function ErrorState({
   message,
   onRetry,
+  action,
 }: {
   message: string;
   onRetry?: () => void;
+  /** A link that fixes the problem, shown before Try again. */
+  action?: { href: string; label: string };
 }) {
   return (
     <div role="alert" className={`${CARD} flex flex-wrap items-center gap-3`}>
-      <p className="min-w-0 flex-1 text-sm text-text">{message}</p>
+      {/* A basis, so the buttons wrap under a long message on a phone
+          instead of squeezing it to one word per line. */}
+      <p className="min-w-0 flex-1 basis-[16rem] text-sm text-text">{message}</p>
+      {action ? (
+        <a
+          href={action.href}
+          className="inline-flex min-h-11 items-center rounded-lg border border-control bg-transparent px-4 text-sm font-semibold text-text hover:bg-bg active:bg-border"
+        >
+          {action.label}
+        </a>
+      ) : null}
       {onRetry ? (
         <button
           type="button"

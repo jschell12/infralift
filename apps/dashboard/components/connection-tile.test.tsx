@@ -11,6 +11,8 @@ const base: ProviderConnectionSummary = {
   label: "production",
   createdAt: "2026-10-01T00:00:00.000Z",
   lastVerifiedAt: "2026-11-10T00:00:00.000Z",
+  lastCheckedAt: "2026-11-10T00:00:00.000Z",
+  checking: false,
   status: "valid",
   lastError: null,
   expiresAt: null,
@@ -39,6 +41,27 @@ describe("ConnectionTile", () => {
     expect(html).toContain("unverified");
     expect(html).toContain("Not verified yet");
     expect(html).not.toMatch(/text-danger|text-warn/);
+  });
+
+  it("says Checking... instead of the verified date while a check runs, with no spinner", () => {
+    const html = render(<ConnectionTile c={{ ...base, checking: true }} />);
+    expect(html).toContain("Checking...");
+    expect(html).not.toContain("Last verified");
+    expect(html).not.toMatch(/animate-spin/);
+  });
+
+  it("shows production's \"connected\" row as unverified, without color", () => {
+    const connected = { ...base, status: "connected" as unknown as "unverified", lastVerifiedAt: null };
+    const html = render(<ConnectionTile c={connected} />);
+    expect(html).toContain("unverified");
+    expect(html).not.toContain("connected");
+    expect(html).not.toMatch(/text-danger|text-warn/);
+  });
+
+  it("puts a menu in the header beside the status chip", () => {
+    const html = render(<ConnectionTile c={base} menu={<button type="button">menu-here</button>} />);
+    expect(html.indexOf("menu-here")).toBeGreaterThan(html.indexOf("valid"));
+    expect(html.indexOf("menu-here")).toBeLessThan(html.indexOf("production"));
   });
 
   it("names Terraform Cloud", () => {

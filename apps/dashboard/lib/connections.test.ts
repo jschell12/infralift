@@ -4,9 +4,12 @@ import {
   CONNECTION_TYPES,
   connectionName,
   connectionRequest,
+  CHECK_STALE_MS,
   connectionStatus,
   createConnection,
   isCloudAccount,
+  isStale,
+  replaceHref,
 } from "./connections";
 
 // Request bodies are checked against the API's own schemas: createSchema in
@@ -138,5 +141,34 @@ describe("connectionStatus colors only problems", () => {
   ];
   it.each(cases)("%s", (_name, c, tone, text) => {
     expect(connectionStatus(c, now)).toEqual({ tone, text });
+  });
+});
+
+describe("a status the API should never send", () => {
+  it("reads production's \"connected\" as unverified, not as a word to show or a failure", () => {
+    const c = { status: "connected" as unknown as "unverified", expiresAt: null };
+    expect(connectionStatus(c)).toEqual({ tone: "muted", text: "unverified" });
+  });
+});
+
+describe("isStale", () => {
+  const now = Date.parse("2026-11-13T12:00:00Z");
+  const ago = (ms: number) => new Date(now - ms).toISOString();
+  it("is stale when never checked or checked over a day ago", () => {
+    expect(isStale({ lastCheckedAt: null, checking: false }, now)).toBe(true);
+    expect(isStale({ lastCheckedAt: ago(CHECK_STALE_MS + 1000), checking: false }, now)).toBe(true);
+  });
+  it("is fresh when checked within the day, at the boundary included", () => {
+    expect(isStale({ lastCheckedAt: ago(60_000), checking: false }, now)).toBe(false);
+    expect(isStale({ lastCheckedAt: ago(CHECK_STALE_MS), checking: false }, now)).toBe(false);
+  });
+  it("is never stale while a check is running", () => {
+    expect(isStale({ lastCheckedAt: null, checking: true }, now)).toBe(false);
+  });
+});
+
+describe("replaceHref", () => {
+  it("points at the Connections page's Replace drawer for that connection", () => {
+    expect(replaceHref("fb conn/1")).toBe("/connections?replace=fb%20conn%2F1");
   });
 });

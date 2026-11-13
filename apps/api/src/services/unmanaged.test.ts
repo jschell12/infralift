@@ -136,6 +136,11 @@ const CONNECTION = {
   updatedAt: new Date("2026-11-10T00:00:00Z"),
 };
 const GCP_CONNECTION = { ...CONNECTION, id: "gcp-conn", provider: "gcp", label: "gcp", encryptedToken: GCP_KEY };
+// Production 2026-11-13: a Firebase connection whose stored secret is not a
+// service account JSON key logged "inventory of connection ... failed
+// (firebase): Firebase connection must be a service account JSON key" and the
+// adopt page said "Something went wrong on our side".
+const FIREBASE_BAD_KEY = { ...CONNECTION, id: "fb-conn", provider: "firebase", label: "testenv", encryptedToken: "ya29.an-access-token-not-a-key" };
 const AWS_CONNECTION = {
   ...CONNECTION,
   id: "aws-conn",
@@ -151,6 +156,7 @@ function connections(where: { id?: string; orgId: string; provider?: string }) {
   if (where.provider === "github") return { id: "gh-conn", orgId: "org-a", provider: "github", encryptedToken: "enc" };
   if (where.id === "cf-conn") return CONNECTION;
   if (where.id === "gcp-conn") return GCP_CONNECTION;
+  if (where.id === "fb-conn") return FIREBASE_BAD_KEY;
   if (where.id === "aws-conn") return AWS_CONNECTION;
   if (where.id === "gh-conn") return { ...CONNECTION, id: "gh-conn", provider: "github" };
   return null;
@@ -473,15 +479,41 @@ describe("GET /connections/:id/unmanaged", () => {
     expect(h.costExplorerCalls).toHaveLength(0);
   });
 
-  it("answers 502 without the provider's text, and marks the connection invalid on a 401", async () => {
+  it("answers 409 with our sentence and the replace code on a 401, never the provider's text, and marks the connection invalid", async () => {
     cloudflareStatus = 401;
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const out = await list();
     err.mockRestore();
-    expect(out.status).toBe(502);
-    expect(out.body.error).toBe("Could not read the account's resources");
-    expect(out.body.requestId).toEqual(expect.any(String));
+    expect(out.status).toBe(409);
+    expect(out.body).toEqual({
+      error: "infralift couldn't read this account: Cloudflare refused the saved credential. Replace it on Connections.",
+      code: "connection_credential",
+      connectionId: "cf-conn",
+    });
     expect(h.connUpdateMany.mock.calls[0][0]).toMatchObject({ where: { id: "cf-conn" }, data: { status: "invalid" } });
+  });
+
+  it("answers 409 naming the kind of key expected when the stored credential is not one, without calling Google", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const out = await list({}, { id: "fb-conn" });
+    const logged = err.mock.calls.map((c) => c.join(" ")).join("\n");
+    err.mockRestore();
+    expect(out.status).toBe(409);
+    expect(out.body).toEqual({
+      error: "infralift couldn't read this account: the saved credential isn't a service account key. Replace it on Connections.",
+      code: "connection_credential",
+      connectionId: "fb-conn",
+    });
+    // Neither the response nor the log carries the stored secret.
+    expect(JSON.stringify(out.body)).not.toContain("ya29");
+    expect(logged).not.toContain("ya29");
+    expect(logged).toContain("Firebase connection must be a service account JSON key");
+    expect(h.connUpdateMany.mock.calls[0][0]).toEqual({
+      where: { id: "fb-conn" },
+      data: { status: "invalid", lastError: "the saved credential isn't a service account key; replace it" },
+    });
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("googleapis.com"))).toBe(false);
   });
 
   it("does not mark the connection on a 5xx, and caches no failure", async () => {

@@ -3,7 +3,7 @@ import { GetResourcesCommand, ResourceGroupsTaggingAPIClient } from "@aws-sdk/cl
 import { CostExplorerClient, GetCostAndUsageCommand } from "@aws-sdk/client-cost-explorer";
 import type { ResourceInventoryItem } from "@infralift/shared";
 import { AWS_HTTP } from "../lib/http.js";
-import { ProviderHttpError, type Connector, type ConnectorAssessment, type VerifyResult } from "./types.js";
+import { CredentialFormatError, ProviderHttpError, type Connector, type ConnectorAssessment, type VerifyResult } from "./types.js";
 
 // AWS access is a cross-account IAM role in the customer's account, trusted
 // to infralift's AWS account (INFRALIFT_AWS_ACCOUNT_ID) on condition of the
@@ -172,7 +172,7 @@ export function createAwsConnector(clients: AwsClients = sdkClients, now: () => 
 
     async assess(token, opts = {}): Promise<ConnectorAssessment> {
       const payload = parseAwsPayload(token);
-      if (!payload) throw new Error("AWS connection must be an IAM role ARN or JSON {roleArn, regions?}");
+      if (!payload) throw new CredentialFormatError("AWS connection must be an IAM role ARN or JSON {roleArn, regions?}", "an IAM role ARN");
       const session = await openSession(clients, payload);
       // A refused role is the credential failing: 403 marks the connection invalid.
       if (!session.ok) throw new ProviderHttpError(`AWS AssumeRole: ${session.reason}`, 403);

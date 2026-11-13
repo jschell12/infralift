@@ -61,6 +61,11 @@ async function resolveOrgId(args: Record<string, string | boolean>) {
   throw new Error("pass --org <orgId> or --email <userEmail>");
 }
 
+/** The demo token is the word "demo", not a credential, so the automatic
+ *  checks (services/connection-checks.ts) would mark every demo connection
+ *  invalid. A last check in the far future keeps them out of every sweep. */
+const NEVER_CHECK = new Date("9999-01-01T00:00:00Z");
+
 async function seedProvider(orgId: string, provider: string) {
   const fixture = BUILDERS[provider]();
 
@@ -75,8 +80,9 @@ async function seedProvider(orgId: string, provider: string) {
       encryptedToken: encryptToken("demo"),
       status: "valid",
       lastVerifiedAt: new Date(),
+      lastCheckedAt: NEVER_CHECK,
     },
-    update: { status: "valid", lastVerifiedAt: new Date() },
+    update: { status: "valid", lastVerifiedAt: new Date(), lastCheckedAt: NEVER_CHECK },
   });
 
   // Replace, don't accumulate.
