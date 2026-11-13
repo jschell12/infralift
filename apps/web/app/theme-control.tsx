@@ -4,21 +4,17 @@
 // (components/theme-control.tsx); apps/web/lib/theme.test.ts fails if the
 // copies drift. The logic lives in ../lib/theme.ts.
 //
-// The inline head script has already set <html data-theme> before this
-// renders. This component only takes over afterwards: it saves a choice, and
-// in Auto it keeps an open tab in step with the clock.
+// This only shows and saves the choice. ThemeClock, mounted in the root
+// layout, hears the change and applies it, and keeps Auto on the clock on
+// pages that have no control.
 
 import { useEffect, useId, useState } from "react";
 
 import {
-  THEME_CHANGE_EVENT,
   THEME_OVERRIDES,
-  THEME_STORAGE_KEY,
-  applyTheme,
-  msUntilNextBoundary,
-  parseOverride,
+  chooseOverride,
   readStoredOverride,
-  writeStoredOverride,
+  subscribeToOverride,
   type ThemeOverride,
 } from "../lib/theme";
 
@@ -28,71 +24,39 @@ const LABELS: Record<ThemeOverride, string> = {
   dark: "Dark",
 };
 
-export function ThemeControl({ className = "" }: { className?: string }) {
+/**
+ * `labelledBy` names an element that already labels the buttons, such as a
+ * "Theme" heading on a settings page; the control then drops its own
+ * visible "Theme" label rather than repeat it.
+ */
+export function ThemeControl({
+  className = "",
+  labelledBy,
+}: {
+  className?: string;
+  labelledBy?: string;
+}) {
   // null until mounted, so the server render and the first client render
   // match (neither can see localStorage). The page is already in the right
-  // theme by then; only the pressed button catches up. Nothing is applied
-  // while it is null, or a stored Dark would flash to the clock's Light.
+  // theme by then; only the pressed button catches up.
   const [override, setOverride] = useState<ThemeOverride | null>(null);
-  const labelId = useId();
+  const ownLabelId = useId();
 
   useEffect(() => {
     setOverride(readStoredOverride());
-    // Another tab changed the choice.
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === THEME_STORAGE_KEY) setOverride(parseOverride(e.newValue));
-    };
-    // Another ThemeControl in this tab changed it (works with storage blocked).
-    const onChange = (e: Event) => {
-      setOverride(parseOverride((e as CustomEvent<string>).detail));
-    };
-    window.addEventListener("storage", onStorage);
-    window.addEventListener(THEME_CHANGE_EVENT, onChange);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener(THEME_CHANGE_EVENT, onChange);
-    };
+    return subscribeToOverride(setOverride);
   }, []);
-
-  useEffect(() => {
-    if (override === null) return;
-    applyTheme(override);
-    if (override !== "auto") return;
-
-    // In Auto, switch at the next 07:00 or 19:00, then schedule the one after.
-    // Timers are paused or throttled in background tabs and across sleep, so
-    // the visibility check is what actually catches a laptop opened at 08:00.
-    let timer: ReturnType<typeof setTimeout>;
-    const schedule = () => {
-      timer = setTimeout(() => {
-        applyTheme("auto");
-        schedule();
-      }, msUntilNextBoundary(new Date()) + 1000);
-    };
-    const onVisible = () => {
-      if (document.visibilityState === "visible") applyTheme("auto");
-    };
-    schedule();
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [override]);
-
-  const choose = (next: ThemeOverride) => {
-    writeStoredOverride(next);
-    window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: next }));
-  };
 
   return (
     <div className={`flex items-center gap-2 text-sm ${className}`}>
-      <span id={labelId} className="text-muted">
-        Theme
-      </span>
+      {labelledBy ? null : (
+        <span id={ownLabelId} className="text-muted">
+          Theme
+        </span>
+      )}
       <div
         role="group"
-        aria-labelledby={labelId}
+        aria-labelledby={labelledBy ?? ownLabelId}
         className="inline-flex rounded-lg border border-border p-0.5"
       >
         {THEME_OVERRIDES.map((value) => {
@@ -103,7 +67,7 @@ export function ThemeControl({ className = "" }: { className?: string }) {
               type="button"
               aria-pressed={pressed}
               title={value === "auto" ? "Light 07:00 to 19:00 your time, dark otherwise" : undefined}
-              onClick={() => choose(value)}
+              onClick={() => chooseOverride(value)}
               className={`min-h-11 min-w-11 cursor-pointer rounded-md border px-2.5 text-sm ${pressed ? "border-control bg-bg text-text" : "border-transparent bg-transparent text-muted hover:text-text active:bg-bg"}`}
             >
               {LABELS[value]}

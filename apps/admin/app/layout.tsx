@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AdminNav } from "../components/nav";
+import { ThemeClock } from "../components/theme-clock";
 import { THEME_BOOT_SCRIPT } from "../lib/theme";
 
 export const metadata: Metadata = {
@@ -26,6 +27,8 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body>
+        {/* Keeps Auto on the clock on every page, control or not. */}
+        <ThemeClock />
         {/* Column on phones (top bar over content), row on desktop (sidebar
             beside content). AdminNav renders whichever half is visible. */}
         <div className="flex min-h-screen flex-col md:flex-row">
