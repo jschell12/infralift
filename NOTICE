@@ -1,0 +1,11 @@
+infralift
+
+Provider marks in apps/dashboard/lib/provider-icons.ts come from Simple Icons
+(https://simpleicons.org, CC0-1.0), version and slug per icon in that file's
+header. The names and marks of Vercel, Cloudflare, Google (Firebase, Google
+Cloud), GitHub, GitLab, Netlify, Render, Railway, Fly.io, DigitalOcean,
+HashiCorp (Terraform), Amazon Web Services, Microsoft (Azure) and Heroku are
+trademarks of their respective owners. infralift uses them only to identify the
+service a connection is for, and is not affiliated with or endorsed by them.
+The AWS, Azure and Heroku marks are plain initials drawn for infralift, not
+those companies' logos.

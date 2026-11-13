@@ -12,6 +12,7 @@ import {
   TFC,
   type ConnectionTypeInfo,
 } from "../../../lib/connections";
+import { ProviderIcon } from "../../../components/provider-icon";
 import { CARD, H1, INPUT, LABEL, Note, PrimaryButton, Skeleton, SMALL_BTN, TEXT_BTN } from "../../../components/ui";
 
 // /connections/new: pick a type, then fill in only that type's fields
@@ -71,9 +72,10 @@ function TypePicker() {
               <li key={t.type}>
                 <Link
                   href={`/connections/new?type=${t.type}`}
-                  className={`flex min-h-12 items-center rounded-lg border border-border bg-surface px-3 py-2.5 text-[15px] font-semibold text-text hover:border-control active:bg-bg ${FOCUS}`}
+                  className={`flex min-h-12 items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2.5 text-[15px] font-semibold text-text hover:border-control active:bg-bg ${FOCUS}`}
                 >
-                  {t.name}
+                  <ProviderIcon provider={t.type} />
+                  <span className="min-w-0 break-words">{t.name}</span>
                 </Link>
               </li>
             ))}

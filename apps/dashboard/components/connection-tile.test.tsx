@@ -47,6 +47,11 @@ describe("ConnectionTile", () => {
     );
   });
 
+  it("puts the provider's mark beside its name, hidden from screen readers", () => {
+    const html = render(<ConnectionTile c={base} />);
+    expect(html).toMatch(/<h2[^>]*><svg [^>]*aria-hidden="true"[^>]*data-provider-icon="aws"[^>]*>.*<\/svg><span[^>]*>AWS<\/span><\/h2>/);
+  });
+
   it("is one link when given href, with no buttons inside it", () => {
     const html = render(<ConnectionTile c={base} href="/connections" />);
     expect(html).toMatch(/^<li[^>]*><a [^>]*href="\/connections"/);
