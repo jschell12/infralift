@@ -236,6 +236,8 @@ export async function runClaimedCheck(
   claimedAt: Date,
   opts: { timeoutMs?: number } = {}
 ): Promise<FullConnection | null> {
+  // dueForCheck never picks a demo row; this covers any other way in.
+  if (connection.demo) return null;
   const timeoutMs = opts.timeoutMs ?? verifyTimeoutFor(connection.provider);
   if (Date.now() - claimedAt.getTime() > CHECK_CLAIM_MS - timeoutMs) return null;
   const mine = { id: connection.id, verifyingSince: claimedAt };
@@ -260,6 +262,9 @@ const checksInFlight = new Map<string, Promise<FullConnection | null>>();
  *  when another process holds the claim or the row is gone. A second call
  *  while the first runs shares it. */
 export function runCheck(connection: FullConnection, opts: { now?: Date; timeoutMs?: number } = {}): Promise<FullConnection | null> {
+  // A demo connection's token is the word "demo" (scripts/seed-demo.ts):
+  // checking it could only mark it invalid. Not claimed, not called.
+  if (connection.demo) return Promise.resolve(null);
   const running = checksInFlight.get(connection.id);
   if (running) return running;
   const work = (async () => {
@@ -273,7 +278,8 @@ export function runCheck(connection: FullConnection, opts: { now?: Date; timeout
 
 /** "Verify now": re-runs the provider's verify call and records what it
  *  said. When a check is already running elsewhere, returns the connection
- *  as it stands, with checking: true, rather than starting a second. */
+ *  as it stands, with checking: true, rather than starting a second. A demo
+ *  connection is returned as it stands, unchecked. */
 export async function verifyConnection(orgId: string, id: string): Promise<ProviderConnectionSummary> {
   const connection = await findOwned(orgId, id);
   const checked = await runCheck(connection);
@@ -320,6 +326,8 @@ export async function rotateConnection(orgId: string, id: string, input: RotateI
       lastCheckedAt: new Date(),
       lastError: null,
       expiresAt: outcome.expiresAt,
+      // A credential that verified is a real one, whatever the row was.
+      demo: false,
     },
   });
   return toSummary(updated);

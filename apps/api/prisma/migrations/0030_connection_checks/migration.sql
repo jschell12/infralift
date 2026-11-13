@@ -26,5 +26,16 @@ ALTER TABLE "ProviderConnection" ADD COLUMN "verifyingSince" TIMESTAMP(3);
 -- did keeps null, so the first sweep checks it.
 UPDATE "ProviderConnection" SET "lastCheckedAt" = "lastVerifiedAt";
 
+-- 3. Demo connections are never checked. scripts/seed-demo.ts stores the word
+--    "demo" as their token, so a check would mark every one invalid, and the
+--    rows already in production verified on the day they were seeded, so the
+--    copy above would make them due on the first sweep. The seed has always
+--    identified its rows by this label (DEMO_LABEL; its --remove deletes by
+--    it), and the token is encrypted with a random IV, so the label is the
+--    only way to find the existing ones. New demo rows set the flag
+--    themselves.
+ALTER TABLE "ProviderConnection" ADD COLUMN "demo" BOOLEAN NOT NULL DEFAULT false;
+UPDATE "ProviderConnection" SET "demo" = true WHERE "label" = 'demo large-tier';
+
 -- The sweep picks the oldest checks first.
 CREATE INDEX "ProviderConnection_lastCheckedAt_idx" ON "ProviderConnection"("lastCheckedAt");

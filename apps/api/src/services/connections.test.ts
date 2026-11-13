@@ -49,6 +49,7 @@ const ROW = {
   lastVerifiedAt: new Date("2026-11-01T00:00:00Z"),
   lastCheckedAt: new Date("2026-11-01T00:00:00Z") as Date | null,
   verifyingSince: null as Date | null,
+  demo: false,
   lastError: null as string | null,
   expiresAt: null as Date | null,
 };
@@ -344,6 +345,19 @@ describe("one check of a connection at a time", () => {
     expect(await svc.runClaimedCheck(read() as never, mineAt)).toBeNull();
     expect(read().verifyingSince).toEqual(theirs);
     expect(read().lastCheckedAt).toBeNull();
+  });
+
+  it("never verifies a demo connection: no claim, no provider call, still valid", async () => {
+    const demo = { ...github, label: "demo large-tier", encryptedToken: encryptToken("demo"), demo: true };
+    const read = statefulRow(demo);
+    const out = await svc.verifyConnection("org_mine", "conn_1");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ status: "valid", checking: false });
+    expect(await svc.runCheck(read() as never)).toBeNull();
+    expect(await svc.runClaimedCheck(read() as never, new Date())).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(read().status).toBe("valid");
   });
 
   it("records a timeout when the provider runs past the check's deadline", async () => {

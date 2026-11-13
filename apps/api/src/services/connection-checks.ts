@@ -69,12 +69,14 @@ const slots = createSlots(CHECK_CONCURRENCY);
 
 // -- selection ------------------------------------------------------------------
 
-/** Connections due a check: never checked or checked more than STALE_AFTER_MS
- *  ago, and not held by a live claim. Never-checked first, then oldest. */
+/** Connections due a check: not a demo row (its token is the word "demo"),
+ *  never checked or checked more than STALE_AFTER_MS ago, and not held by a
+ *  live claim. Never-checked first, then oldest. */
 export async function dueForCheck(now = new Date(), limit = SWEEP_BATCH, orgId?: string) {
   return prisma.providerConnection.findMany({
     where: {
       ...(orgId ? { orgId } : {}),
+      demo: false,
       AND: [
         { OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lt: new Date(now.getTime() - STALE_AFTER_MS) } }] },
         { OR: [{ verifyingSince: null }, { verifyingSince: { lt: new Date(now.getTime() - CHECK_CLAIM_MS) } }] },
@@ -98,7 +100,9 @@ export async function sweepConnectionChecks(now = new Date()): Promise<number> {
   const due = await dueForCheck(now);
   const results = await Promise.all(
     due.map((connection) =>
-      slots.run(() => runCheck(connection, { now })).then(
+      // No `now`: each check claims at the time it gets its slot, so a check
+      // that waited is not born with an old claim.
+      slots.run(() => runCheck(connection)).then(
         (row) => (row ? 1 : 0),
         (err) => {
           logFailure(connection.id, err);

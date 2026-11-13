@@ -38,6 +38,7 @@ describe("dueForCheck", () => {
     await checks.dueForCheck(NOW);
     expect(h.findMany).toHaveBeenCalledWith({
       where: {
+        demo: false,
         AND: [
           { OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lt: new Date("2026-11-12T12:00:00Z") } }] },
           { OR: [{ verifyingSince: null }, { verifyingSince: { lt: new Date("2026-11-13T11:50:00Z") } }] },
@@ -52,6 +53,45 @@ describe("dueForCheck", () => {
     h.findMany.mockResolvedValue([]);
     await checks.dueForCheck(NOW, 5, "org-a");
     expect(h.findMany.mock.calls[0][0]).toMatchObject({ where: { orgId: "org-a" }, take: 5 });
+  });
+});
+
+/** Applies dueForCheck's where clause to rows, as Postgres would: the demo
+ *  flag, the staleness cutoff and the claim cutoff. */
+function applyWhere(rows: Record<string, unknown>[], args: { where: Record<string, unknown> }) {
+  const where = args.where as {
+    demo?: boolean;
+    AND: [{ OR: [unknown, { lastCheckedAt: { lt: Date } }] }, { OR: [unknown, { verifyingSince: { lt: Date } }] }];
+  };
+  const staleBefore = where.AND[0].OR[1].lastCheckedAt.lt;
+  const claimBefore = where.AND[1].OR[1].verifyingSince.lt;
+  return rows.filter((r) => {
+    if (where.demo !== undefined && r.demo !== where.demo) return false;
+    const checked = r.lastCheckedAt as Date | null;
+    const claim = r.verifyingSince as Date | null;
+    return (checked === null || checked < staleBefore) && (claim === null || claim < claimBefore);
+  });
+}
+
+describe("demo connections", () => {
+  // Production's demo rows: seeded 2026-08-31 by scripts/seed-demo.ts, token
+  // "demo", verified that day, so migration 0030 copied that date into
+  // lastCheckedAt and marked them demo by their label.
+  const rows = [
+    { id: "demo-heroku", label: "demo large-tier", demo: true, status: "valid", lastCheckedAt: new Date("2026-08-31T00:00:00Z"), verifyingSince: null },
+    { id: "demo-vercel", label: "demo large-tier", demo: true, status: "valid", lastCheckedAt: null, verifyingSince: null },
+    { id: "real-stale", label: "production", demo: false, status: "valid", lastCheckedAt: new Date("2026-11-01T00:00:00Z"), verifyingSince: null },
+  ];
+
+  it("are never picked by the sweep or by a page's request, so never marked invalid", async () => {
+    h.findMany.mockImplementation(async (args: { where: Record<string, unknown> }) => applyWhere(rows, args));
+    h.runCheck.mockImplementation(async (c: unknown) => c);
+    h.claimCheck.mockResolvedValue(true);
+    h.runClaimedCheck.mockResolvedValue(null);
+    expect(await checks.sweepConnectionChecks(NOW)).toBe(1);
+    expect(h.runCheck.mock.calls.map((c) => c[0].id)).toEqual(["real-stale"]);
+    expect(await checks.checkStaleForOrg("org-a", NOW)).toEqual(["real-stale"]);
+    expect(h.claimCheck.mock.calls.map((c) => c[0])).toEqual(["real-stale"]);
   });
 });
 
@@ -95,6 +135,8 @@ describe("sweepConnectionChecks", () => {
     });
     expect(await checks.sweepConnectionChecks(NOW)).toBe(6);
     expect(h.runCheck).toHaveBeenCalledTimes(7);
+    // Each check claims when it gets its slot, not at the sweep's start.
+    expect(h.runCheck.mock.calls.every((c) => c.length === 1)).toBe(true);
     expect(peak).toBe(checks.CHECK_CONCURRENCY);
   });
 
