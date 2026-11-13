@@ -162,6 +162,7 @@ workspacesRouter.post("/connections", handle(async (req, res) => {
         encryptedToken: encryptToken(JSON.stringify(cred)),
         status: valid ? "valid" : "invalid",
         lastVerifiedAt: valid ? new Date() : null,
+        lastCheckedAt: new Date(),
       },
     });
   } catch (err) {

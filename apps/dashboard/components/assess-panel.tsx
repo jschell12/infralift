@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AssessmentSummary, ProviderConnectionSummary } from "@infralift/shared";
 import { api, formatCents, savingsNote, errorText } from "../lib/api";
 import { findUnmanagedHref, latestCompletedAssessment, primaryFindAccount } from "../lib/adopt";
-import { isCloudAccount } from "../lib/connections";
+import { isCloudAccount, replaceHref } from "../lib/connections";
+import { checkingText, useConnectionChecks } from "../lib/connection-checks";
 import { CONNECTION_GRID, ConnectionTile } from "./connection-tile";
 import { CARD, NUM, SMALL_BTN, SMALL_BTN_SOLID, SMALL_BTN_STRONG, Skeleton } from "./ui";
 
@@ -69,6 +70,10 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
     void load();
   }, [load]);
 
+  // Unverified or day-old accounts are checked when this list shows them, so
+  // an account nothing is known to be wrong with is not sent to be fixed.
+  const checking = useConnectionChecks(loaded ? connections : null, load);
+
   // Poll while one is running; creep the bar so the log advances.
   useEffect(() => {
     if (!runningId) return;
@@ -127,6 +132,9 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
         what you choose: a pull request with import blocks, held to a plan that changes nothing.
         Reading the account changes nothing in it. Assess an account instead for what it costs.
       </p>
+      <p role="status" className="mb-2 min-h-5 text-sm text-faint">
+        {checkingText(checking)}
+      </p>
       {error && (
         <div role="alert" className="mb-3 text-sm text-danger">
           {error}
@@ -163,10 +171,18 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
                 key={c.id}
                 c={c}
                 actions={
-                  c.status !== "valid" ? (
-                    <a className={SMALL_BTN} href="/connections">
+                  c.status === "invalid" ? (
+                    <a className={SMALL_BTN} href={replaceHref(c.id)}>
                       Fix on Connections
                     </a>
+                  ) : c.status !== "valid" ? (
+                    // Unverified: checked when this page loads (above); the
+                    // tile's own line says "Checking..." meanwhile.
+                    c.checking ? null : (
+                      <a className={SMALL_BTN} href="/connections">
+                        Verify on Connections
+                      </a>
+                    )
                   ) : running ? null : (
                     <div className="flex flex-wrap gap-2">
                       <a

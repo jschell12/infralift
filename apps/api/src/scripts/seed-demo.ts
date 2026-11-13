@@ -75,8 +75,10 @@ async function seedProvider(orgId: string, provider: string) {
       encryptedToken: encryptToken("demo"),
       status: "valid",
       lastVerifiedAt: new Date(),
+      // The token is the word "demo": never verified (services/connections.ts).
+      demo: true,
     },
-    update: { status: "valid", lastVerifiedAt: new Date() },
+    update: { status: "valid", lastVerifiedAt: new Date(), demo: true },
   });
 
   // Replace, don't accumulate.

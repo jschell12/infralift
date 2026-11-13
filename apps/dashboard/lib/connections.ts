@@ -218,5 +218,28 @@ export function connectionStatus(
   }
   if (c.status === "valid") return { tone: "ok", text: "valid" };
   if (c.status === "invalid") return { tone: "danger", text: "invalid" };
-  return { tone: "muted", text: c.status };
+  // Unverified, and any word the API should not send (production once had
+  // "connected"): nothing is known to be wrong, so no color.
+  return { tone: "muted", text: "unverified" };
+}
+
+/** A connection whose last check is older than this, or that was never
+ *  checked, is checked again when a page shows it (STALE_AFTER_MS in
+ *  apps/api/src/services/connection-checks.ts, which decides for itself). */
+export const CHECK_STALE_MS = 24 * 60 * 60 * 1000;
+
+/** True when the connection is due a check and none is running. */
+export function isStale(
+  c: Pick<ProviderConnectionSummary, "lastCheckedAt" | "checking">,
+  now: number = Date.now()
+): boolean {
+  if (c.checking) return false;
+  if (!c.lastCheckedAt) return true;
+  return now - new Date(c.lastCheckedAt).getTime() > CHECK_STALE_MS;
+}
+
+/** Where to replace a connection's credential: /connections opens its
+ *  Replace drawer from ?replace=<id>. */
+export function replaceHref(connectionId: string): string {
+  return `/connections?replace=${encodeURIComponent(connectionId)}`;
 }

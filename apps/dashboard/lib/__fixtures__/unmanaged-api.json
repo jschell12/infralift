@@ -1,5 +1,5 @@
 {
-  "_source": "Captured 2026-11-11 from apps/api's real connections router (GET /connections/:id/unmanaged, POST /connections/:id/adopt) over connectors/__fixtures__/cloudflare-api.json, using the harness in apps/api/src/services/unmanaged.test.ts (Prisma, jobs and network stubbed). cloudflare-api.json is Cloudflare's documented response examples, not a live account. refusedRows is subtractManaged() output for a worker with no account id and a load balancer. backendDefaults recaptured 2026-11-11 through the same harness after it was added; resources and cursors came back identical.",
+  "_source": "Captured 2026-11-11 from apps/api's real connections router (GET /connections/:id/unmanaged, POST /connections/:id/adopt) over connectors/__fixtures__/cloudflare-api.json, using the harness in apps/api/src/services/unmanaged.test.ts (Prisma, jobs and network stubbed). cloudflare-api.json is Cloudflare's documented response examples, not a live account. refusedRows is subtractManaged() output for a worker with no account id and a load balancer. backendDefaults recaptured 2026-11-11 through the same harness after it was added; resources and cursors came back identical. credentialRefused and credentialMalformed captured 2026-11-13 through the same harness: a Cloudflare 401, and a Firebase connection whose stored secret is not a service account JSON key (the production case that answered 502 that day).",
   "full": {
     "status": 200,
     "body": {
@@ -200,5 +200,21 @@
       "reason": "assessed before infralift recorded the Cloudflare account id this import needs; run the assessment again",
       "terraformType": null
     }
-  ]
+  ],
+  "credentialRefused": {
+    "status": 409,
+    "body": {
+      "error": "infralift couldn't read this account: Cloudflare refused the saved credential. Replace it on Connections.",
+      "code": "connection_credential",
+      "connectionId": "cf-conn"
+    }
+  },
+  "credentialMalformed": {
+    "status": 409,
+    "body": {
+      "error": "infralift couldn't read this account: the saved credential isn't a service account key. Replace it on Connections.",
+      "code": "connection_credential",
+      "connectionId": "fb-conn"
+    }
+  }
 }

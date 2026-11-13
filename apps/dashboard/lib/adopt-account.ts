@@ -21,6 +21,7 @@ import type {
   UnmanagedResource,
 } from "@infralift/shared";
 import { API_URL, errorMessageFor } from "./api";
+import { replaceHref } from "./connections";
 
 /** Most picks one request may carry (ADOPT_MAX_RESOURCES in
  *  apps/api/src/services/unmanaged.ts). */
@@ -188,9 +189,12 @@ export function cloudflareAccountLabel(a: CloudflareAccountRef): string {
  *  words. The connection's lastError can carry the provider's own text, which
  *  stays on the Connections page and in the API's logs, not here. */
 export function connectionProblemText(account: Pick<ProviderConnectionSummary, "status">): string {
-  return account.status === "unverified"
-    ? "infralift can't read this account until its connection has been checked."
-    : "infralift can't read this account: its credential was refused the last time infralift checked it.";
+  // Only "invalid" means a check failed. Anything else that is not valid has
+  // not been checked (unverified, or a stray word like production's
+  // "connected"), and is not the customer's to fix yet.
+  return account.status === "invalid"
+    ? "infralift can't read this account: its credential was refused the last time infralift checked it."
+    : "infralift can't read this account until its connection has been checked.";
 }
 
 // The API's own field rules (adoptSchema in apps/api/src/routes/connections.ts
@@ -257,6 +261,9 @@ export function buildAdoptRequest(
  *  resources it is about when the API named them. */
 export interface AdoptProblem {
   message: string;
+  /** A link that fixes it, when there is one: Replace credential for an
+   *  account the stored credential cannot read. */
+  fix?: { href: string; label: string };
   /** `key` is resourceKey() of the resource, unique where labels are not
    *  (two DNS records can share a name). */
   resources: { key: string; label: string; detail: string | null }[];
@@ -285,6 +292,22 @@ function listOf(body: unknown, field: "managed" | "missing" | "refused"): KeyLis
   return Array.isArray(value) ? (value.filter((v) => v && typeof v === "object") as KeyList) : [];
 }
 
+/** CONNECTION_CREDENTIAL in apps/api/src/services/unmanaged.ts. */
+const CONNECTION_CREDENTIAL = "connection_credential";
+
+/** A 409 saying the stored credential cannot read the account. The sentence
+ *  is the API's own, written from the provider's name and the kind of key
+ *  expected, never the provider's text; a body without one gets ours. */
+function credentialProblem(body: unknown): AdoptProblem | null {
+  const b = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+  if (!b || b.code !== CONNECTION_CREDENTIAL || typeof b.connectionId !== "string" || !b.connectionId) return null;
+  const message =
+    typeof b.error === "string" && b.error.trim()
+      ? b.error
+      : "infralift couldn't read this account with its saved credential. Replace it on Connections.";
+  return { message, resources: [], fix: { href: replaceHref(b.connectionId), label: "Replace credential" } };
+}
+
 /**
  * What to tell someone whose adopt request failed.
  *
@@ -292,6 +315,10 @@ function listOf(body: unknown, field: "managed" | "missing" | "refused"): KeyLis
  *   409 otherwise       the API's own sentence (a project name already taken).
  *   400 with `missing`  gone from the account since the list was read.
  *   400 with `refused`  cannot be adopted yet, with each reason.
+ *   409 with code connection_credential
+ *                       the stored credential cannot read the account (not
+ *                       the kind of key the provider takes, or refused):
+ *                       the API's own sentence and a link to replace it.
  *   429                 too many account reads; wait a few minutes.
  *   anything else       errorMessageFor in lib/api.ts, which never shows a
  *                       5xx body or a raw status.
@@ -301,6 +328,9 @@ export function adoptProblemFor(status: number | null, body: unknown, loaded: Un
     return { message: "We couldn't reach infralift. Check your connection and try again.", resources: [] };
   }
   if (status === 429) return { message: RATE_LIMITED, resources: [] };
+
+  const credential = status === 409 ? credentialProblem(body) : null;
+  if (credential) return credential;
 
   const managed = status === 409 ? listOf(body, "managed") : [];
   if (managed.length) {

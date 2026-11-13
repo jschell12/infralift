@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderConnectionSummary } from "@infralift/shared";
 import { api, errorText } from "../../lib/api";
 import { connectionName, connectionTypeInfo, isCloudAccount, TFC } from "../../lib/connections";
 import { CONNECTION_GRID, ConnectionTile } from "../../components/connection-tile";
+import { ActionMenu } from "../../components/action-menu";
+import { checkingText, useConnectionChecks } from "../../lib/connection-checks";
 import {
   CARD,
   Drawer,
@@ -109,13 +111,29 @@ function ReplaceDrawer({
   );
 }
 
-/** One connection's tile with the three ways to act on it. Remove asks once,
- *  inline, before it deletes. */
-function ManagedConnectionTile({ c, onChanged }: { c: ProviderConnectionSummary; onChanged: () => void }) {
+/** One connection's tile, its actions behind a "..." menu: Verify now,
+ *  Replace credential, Remove. Remove asks once, inline in the tile, before
+ *  it deletes; cancelling returns focus to the menu button. */
+function ManagedConnectionTile({
+  c,
+  onChanged,
+  replaceOnOpen = false,
+}: {
+  c: ProviderConnectionSummary;
+  onChanged: () => void;
+  replaceOnOpen?: boolean;
+}) {
   const [busy, setBusy] = useState<null | "verify" | "remove">(null);
   const [error, setError] = useState<string | null>(null);
-  const [replacing, setReplacing] = useState(false);
+  const [replacing, setReplacing] = useState(replaceOnOpen);
   const [confirming, setConfirming] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const name = connectionName(c.provider);
+
+  useEffect(() => {
+    if (confirming) cancelButton.current?.focus();
+  }, [confirming]);
 
   async function act(kind: "verify" | "remove", path: string, method: string) {
     setBusy(kind);
@@ -131,61 +149,98 @@ function ManagedConnectionTile({ c, onChanged }: { c: ProviderConnectionSummary;
     }
   }
 
-  const actions = (
+  function cancelRemove() {
+    setConfirming(false);
+    menuButton.current?.focus();
+  }
+
+  const menu = (
+    <ActionMenu
+      label={`Actions for ${name} ${c.label}`}
+      buttonRef={menuButton}
+      items={[
+        {
+          label: "Verify now",
+          disabled: busy !== null || c.checking,
+          onSelect: () => void act("verify", `/connections/${c.id}/verify`, "POST"),
+        },
+        { label: "Replace credential", disabled: busy !== null, onSelect: () => setReplacing(true) },
+        { label: "Remove", disabled: busy !== null, onSelect: () => setConfirming(true) },
+      ]}
+    />
+  );
+
+  const actions =
+    confirming || error ? (
+      <>
+        {confirming && (
+          <div
+            className="flex flex-wrap items-center gap-2"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") cancelRemove();
+            }}
+          >
+            <span className="w-full text-xs text-muted">Remove &quot;{c.label}&quot; and its stored credential?</span>
+            <button
+              type="button"
+              className={SMALL_BTN_DANGER}
+              disabled={busy !== null}
+              onClick={() => void act("remove", `/connections/${c.id}`, "DELETE")}
+            >
+              {busy === "remove" ? "Removing..." : "Remove"}
+            </button>
+            <button ref={cancelButton} type="button" className={SMALL_BTN} disabled={busy !== null} onClick={cancelRemove}>
+              Cancel
+            </button>
+          </div>
+        )}
+        {error && <div role="alert" className="mt-2 text-xs text-danger">{error}</div>}
+      </>
+    ) : null;
+
+  return (
     <>
-      {confirming ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-full text-xs text-muted">Remove &quot;{c.label}&quot; and its stored credential?</span>
-          <button
-            type="button"
-            className={SMALL_BTN_DANGER}
-            disabled={busy !== null}
-            onClick={() => void act("remove", `/connections/${c.id}`, "DELETE")}
-          >
-            {busy === "remove" ? "Removing..." : "Remove"}
-          </button>
-          <button type="button" className={SMALL_BTN} disabled={busy !== null} onClick={() => setConfirming(false)}>
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={SMALL_BTN}
-            disabled={busy !== null}
-            onClick={() => void act("verify", `/connections/${c.id}/verify`, "POST")}
-          >
-            {busy === "verify" ? "Verifying..." : "Verify"}
-          </button>
-          <button type="button" className={SMALL_BTN} disabled={busy !== null} onClick={() => setReplacing(true)}>
-            Replace
-          </button>
-          <button type="button" className={SMALL_BTN} disabled={busy !== null} onClick={() => setConfirming(true)}>
-            Remove
-          </button>
-        </div>
-      )}
-      {error && <div role="alert" className="mt-2 text-xs text-danger">{error}</div>}
+      <ConnectionTile c={busy === "verify" ? { ...c, checking: true } : c} menu={menu} actions={actions} />
       {replacing && (
         <ReplaceDrawer
           c={c}
-          onClose={() => setReplacing(false)}
+          onClose={() => {
+            setReplacing(false);
+            clearReplaceRequest();
+          }}
           onDone={() => {
             setReplacing(false);
+            clearReplaceRequest();
             onChanged();
           }}
         />
       )}
     </>
   );
+}
 
-  return <ConnectionTile c={c} actions={actions} />;
+/** ?replace=<id>, set by links elsewhere ("Replace it on Connections"). Read
+ *  once from the address rather than through useSearchParams, which would
+ *  need a Suspense boundary around the whole page. */
+function replaceRequested(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("replace");
+}
+
+/** Drops ?replace from the address once its drawer closes, so a reload does
+ *  not open it again. Not on read: development runs effects twice, and the
+ *  second read would find nothing. */
+function clearReplaceRequest(): void {
+  if (typeof window !== "undefined" && replaceRequested()) {
+    window.history.replaceState(null, "", window.location.pathname);
+  }
 }
 
 export default function ConnectionsPage() {
   const [connections, setConnections] = useState<ProviderConnectionSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [replaceId, setReplaceId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -197,8 +252,11 @@ export default function ConnectionsPage() {
   }, []);
 
   useEffect(() => {
+    setReplaceId(replaceRequested());
     void load();
   }, [load]);
+
+  const checking = useConnectionChecks(connections, load);
 
   const hasCloudAccount = (connections ?? []).some((c) => c.status === "valid" && isCloudAccount(c.provider));
 
@@ -209,7 +267,11 @@ export default function ConnectionsPage() {
           <h1 className={H1}>Connections</h1>
           <p className="max-w-[620px] text-muted">
             Credentials infralift uses to read your cloud accounts and to write to your repositories and Terraform
-            Cloud. Encrypted at rest and never shown again.
+            Cloud. Encrypted at rest and never shown again. Each is checked again every day.
+          </p>
+          {/* One quiet line for every check in progress, rather than a spinner per tile. */}
+          <p role="status" className="mt-1 min-h-5 text-sm text-faint">
+            {checkingText(checking)}
           </p>
         </div>
         <PrimaryButton href="/connections/new">Add connection</PrimaryButton>
@@ -252,7 +314,12 @@ export default function ConnectionsPage() {
         <>
           <ul className={CONNECTION_GRID} aria-label="Connections">
             {connections.map((c) => (
-              <ManagedConnectionTile key={c.id} c={c} onChanged={() => void load()} />
+              <ManagedConnectionTile
+                key={c.id}
+                c={c}
+                onChanged={() => void load()}
+                replaceOnOpen={c.id === replaceId}
+              />
             ))}
           </ul>
           {hasCloudAccount && (

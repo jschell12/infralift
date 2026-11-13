@@ -11,6 +11,7 @@ import {
   verifyConnection,
 } from "../services/connections.js";
 import { awsSetup } from "../services/aws-access.js";
+import { checkStaleForOrg } from "../services/connection-checks.js";
 import { isSafePath } from "../lib/import/check.js";
 import { intQuery } from "../lib/query.js";
 import {
@@ -83,6 +84,8 @@ connectionsRouter.get("/", handle(async (req, res) => {
       status: true,
       createdAt: true,
       lastVerifiedAt: true,
+      lastCheckedAt: true,
+      verifyingSince: true,
       lastError: true,
       expiresAt: true,
     },
@@ -103,6 +106,15 @@ connectionsRouter.post("/", handle(async (req, res) => {
     throw new InvalidInput("Invalid request", { detail: parsed.error.message });
   }
   res.status(201).json(await createConnection(req.user!.orgId, parsed.data));
+}));
+
+// Check again, in the background, every connection of the caller's org not
+// checked in the last day (services/connection-checks.ts). The dashboard calls
+// it when a page shows a stale connection. 202 with the ids it claimed; their
+// rows say checking: true until the check is recorded. 429 past the org's
+// limit, which the dashboard ignores: the daily sweep still runs.
+connectionsRouter.post("/check-stale", handle(async (req, res) => {
+  res.status(202).json({ checking: await checkStaleForOrg(req.user!.orgId) });
 }));
 
 // Re-verify an existing connection, Terraform Cloud included.

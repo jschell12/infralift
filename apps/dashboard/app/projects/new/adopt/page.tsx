@@ -4,7 +4,8 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ProviderConnectionSummary, UnmanagedPage, UnmanagedResource } from "@infralift/shared";
 import { api, errorText } from "../../../../lib/api";
-import { connectionName, isCloudAccount } from "../../../../lib/connections";
+import { connectionName, isCloudAccount, replaceHref } from "../../../../lib/connections";
+import { useConnectionChecks } from "../../../../lib/connection-checks";
 import { ProviderIcon } from "../../../../components/provider-icon";
 import {
   ADOPT_MAX_RESOURCES,
@@ -96,6 +97,9 @@ function AdoptFromAccount() {
       .catch((e) => setError(errorText(e)));
   }, []);
   useEffect(load, [load]);
+  // An unverified or day-old account is checked as the page opens; the card
+  // below says so until the check is recorded.
+  useConnectionChecks(connections, load);
 
   const account = connections?.find((c) => c.id === connectionId && isCloudAccount(c.provider));
   const gitConnections = (connections ?? []).filter((c) => c.provider === "github" && c.status === "valid");
@@ -116,12 +120,19 @@ function AdoptFromAccount() {
         </a>
       </div>
     );
+  } else if (account.status !== "valid" && account.checking) {
+    body = (
+      <div role="status" className={CARD}>
+        <p className="text-sm text-muted">Checking the connection to this account...</p>
+      </div>
+    );
   } else if (account.status !== "valid") {
+    const invalid = account.status === "invalid";
     body = (
       <div className={CARD}>
         <p className="mb-3 text-sm text-text">{connectionProblemText(account)}</p>
-        <a className={`${SMALL_BTN_STRONG} ${FOCUS}`} href="/connections">
-          Fix on Connections
+        <a className={`${SMALL_BTN_STRONG} ${FOCUS}`} href={invalid ? replaceHref(account.id) : "/connections"}>
+          {invalid ? "Replace credential" : "Verify on Connections"}
         </a>
       </div>
     );
@@ -278,7 +289,9 @@ function AdoptWorkspace({
 
   if (list.status === "loading") return <ListSkeleton />;
   if (list.status === "error") {
-    return <ErrorState message={list.problem.message} onRetry={() => void loadFirst(false)} />;
+    return (
+      <ErrorState message={list.problem.message} action={list.problem.fix} onRetry={() => void loadFirst(false)} />
+    );
   }
 
   const { page } = list;

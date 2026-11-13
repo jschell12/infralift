@@ -1,5 +1,5 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
-import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
+import { CredentialFormatError, ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 import { httpFetch } from "../lib/http.js";
 
 // Azure assessment via a service principal (client credentials flow). The
@@ -85,8 +85,9 @@ export const azureConnector: Connector = {
   async assess(token): Promise<ConnectorAssessment> {
     const creds = parseCredentials(token);
     if (!creds) {
-      throw new Error(
-        "Azure connection must be JSON: { tenantId, clientId, clientSecret, subscriptionId }"
+      throw new CredentialFormatError(
+        "Azure connection must be JSON: { tenantId, clientId, clientSecret, subscriptionId }",
+        "a service principal JSON key"
       );
     }
     const accessToken = await mintAccessToken(creds);

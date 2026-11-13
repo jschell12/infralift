@@ -47,6 +47,9 @@ const ROW = {
   status: "valid",
   createdAt: new Date("2026-11-01T00:00:00Z"),
   lastVerifiedAt: new Date("2026-11-01T00:00:00Z"),
+  lastCheckedAt: new Date("2026-11-01T00:00:00Z") as Date | null,
+  verifyingSince: null as Date | null,
+  demo: false,
   lastError: null as string | null,
   expiresAt: null as Date | null,
 };
@@ -91,6 +94,26 @@ describe("rotateConnection", () => {
   });
 });
 
+/** One connection row that updateMany writes to and findFirst reads back,
+ *  honoring the check claim's condition (verifyingSince null or older than
+ *  the cutoff), as Postgres would. Returns a reader for the row. */
+function statefulRow(initial: typeof ROW) {
+  let row = { ...initial };
+  findFirst.mockImplementation(async () => ({ ...row }));
+  updateMany.mockImplementation((async (args: {
+    where: { OR?: { verifyingSince: null | { lt: Date } }[]; verifyingSince?: Date };
+    data: Record<string, unknown>;
+  }) => {
+    const cutoff = (args.where.OR?.[1]?.verifyingSince as { lt: Date } | undefined)?.lt;
+    if (cutoff && row.verifyingSince !== null && row.verifyingSince >= cutoff) return { count: 0 };
+    // A write held to one claim: only while verifyingSince is still that time.
+    if (args.where.verifyingSince && row.verifyingSince?.getTime() !== args.where.verifyingSince.getTime()) return { count: 0 };
+    row = { ...row, ...args.data } as typeof row;
+    return { count: 1 };
+  }) as never);
+  return () => row;
+}
+
 describe("Terraform Cloud connections re-verify through the org read", () => {
   const tfc = {
     ...ROW,
@@ -99,7 +122,7 @@ describe("Terraform Cloud connections re-verify through the org read", () => {
   };
 
   it("valid when the organization reads", async () => {
-    findFirst.mockResolvedValue(tfc);
+    statefulRow(tfc);
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data: { id: "acme" } }), { status: 200 }));
     const out = await svc.verifyConnection("org_mine", "conn_1");
     expect(String(fetchMock.mock.calls[0][0])).toBe("https://app.terraform.io/api/v2/organizations/acme");
@@ -107,7 +130,7 @@ describe("Terraform Cloud connections re-verify through the org read", () => {
   });
 
   it("invalid with a reason when it answers 401", async () => {
-    findFirst.mockResolvedValue(tfc);
+    statefulRow(tfc);
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ errors: [{ status: "401", title: "unauthorized" }] }), { status: 401 }));
     const out = await svc.verifyConnection("org_mine", "conn_1");
     expect(out).toMatchObject({ status: "invalid", lastError: "this token cannot read the organization acme" });
@@ -216,9 +239,131 @@ describe("a provider that does not answer in time", () => {
   it("re-verify records the timeout but keeps the connection's status", async () => {
     findFirst.mockResolvedValue({ ...ROW, provider: "cloudflare", encryptedToken: encryptToken("tok") });
     await svc.verifyConnection("org_mine", "conn_1");
-    expect(update).toHaveBeenCalledWith({
-      where: { id: "conn_1" },
-      data: { lastError: "Cloudflare did not answer in time; try again" },
+    const record = updateMany.mock.calls.at(-1) as unknown as [{ where: unknown; data: Record<string, unknown> }];
+    expect(record[0].where).toEqual({ id: "conn_1", verifyingSince: expect.any(Date) });
+    expect(record[0].data).toEqual({
+      lastCheckedAt: expect.any(Date),
+      verifyingSince: null,
+      lastError: "Cloudflare did not answer in time; try again",
     });
+  });
+});
+
+describe("a connection's status", () => {
+  it("reports any word but the three as unverified, as production's \"connected\" rows", () => {
+    expect(svc.normalizeStatus("connected")).toBe("unverified");
+    expect(svc.normalizeStatus("")).toBe("unverified");
+    expect(svc.normalizeStatus("valid")).toBe("valid");
+    expect(svc.normalizeStatus("invalid")).toBe("invalid");
+    expect(svc.normalizeStatus("unverified")).toBe("unverified");
+    const summary = svc.toSummary({ ...ROW, status: "connected", lastVerifiedAt: null, lastCheckedAt: null });
+    expect(summary).toMatchObject({ status: "unverified", lastVerifiedAt: null, lastCheckedAt: null, checking: false });
+  });
+
+  it("reads checking only while the claim is live", () => {
+    const now = Date.parse("2026-11-13T12:00:00Z");
+    expect(svc.isChecking({ verifyingSince: null }, now)).toBe(false);
+    expect(svc.isChecking({ verifyingSince: new Date(now - 1000) }, now)).toBe(true);
+    expect(svc.isChecking({ verifyingSince: new Date(now - svc.CHECK_CLAIM_MS) }, now)).toBe(false);
+  });
+});
+
+describe("outcomeData", () => {
+  const now = new Date("2026-11-13T12:00:00Z");
+  it("records a valid check, clears the error and releases the claim", () => {
+    expect(svc.outcomeData({ valid: true, reason: null, expiresAt: null }, now)).toEqual({
+      lastCheckedAt: now,
+      verifyingSince: null,
+      status: "valid",
+      lastVerifiedAt: now,
+      lastError: null,
+      expiresAt: null,
+    });
+  });
+  it("marks a refused credential invalid with its reason", () => {
+    expect(svc.outcomeData({ valid: false, reason: "GitHub answered 401", expiresAt: null }, now)).toEqual({
+      lastCheckedAt: now,
+      verifyingSince: null,
+      status: "invalid",
+      lastError: "GitHub answered 401",
+    });
+  });
+  it("keeps the status on a timeout and does not touch lastVerifiedAt", () => {
+    const data = svc.outcomeData({ valid: false, reason: "slow", expiresAt: null, timedOut: true }, now);
+    expect(data).toEqual({ lastCheckedAt: now, verifyingSince: null, lastError: "slow" });
+  });
+});
+
+describe("one check of a connection at a time", () => {
+  const github = { ...ROW, provider: "github", encryptedToken: encryptToken("ghp_x"), lastCheckedAt: null };
+  const ok = () => new Response(JSON.stringify({ login: "bot" }), { status: 200 });
+
+  it("two Verify now calls at once make one provider call, and both get the result", async () => {
+    const read = statefulRow(github);
+    let answer!: (r: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+    const a = svc.verifyConnection("org_mine", "conn_1");
+    const b = svc.verifyConnection("org_mine", "conn_1");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    answer(ok());
+    const [ra, rb] = await Promise.all([a, b]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(ra).toMatchObject({ status: "valid", checking: false });
+    expect(rb).toMatchObject({ status: "valid", checking: false });
+    expect(read().verifyingSince).toBeNull();
+    expect(read().lastCheckedAt).toBeInstanceOf(Date);
+  });
+
+  it("leaves a connection another process is checking alone and says it is checking", async () => {
+    const read = statefulRow({ ...github, verifyingSince: new Date(Date.now() - 5_000) });
+    const out = await svc.verifyConnection("org_mine", "conn_1");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ checking: true });
+    expect(read().verifyingSince).not.toBeNull();
+  });
+
+  it("takes over a claim older than CHECK_CLAIM_MS, whose process is gone", async () => {
+    statefulRow({ ...github, verifyingSince: new Date(Date.now() - svc.CHECK_CLAIM_MS - 1_000) });
+    fetchMock.mockResolvedValueOnce(ok());
+    const out = await svc.verifyConnection("org_mine", "conn_1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(out).toMatchObject({ status: "valid", checking: false });
+  });
+
+  it("drops a queued check whose claim could lapse before the provider answers, without calling it", async () => {
+    const claimedAt = new Date(Date.now() - svc.CHECK_CLAIM_MS + 5_000);
+    const read = statefulRow({ ...github, verifyingSince: claimedAt });
+    expect(await svc.runClaimedCheck(read() as never, claimedAt, { timeoutMs: 20_000 })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite a claim another check took over meanwhile", async () => {
+    const mineAt = new Date(Date.now() - 1_000);
+    const theirs = new Date();
+    const read = statefulRow({ ...github, verifyingSince: theirs });
+    fetchMock.mockResolvedValueOnce(ok());
+    expect(await svc.runClaimedCheck(read() as never, mineAt)).toBeNull();
+    expect(read().verifyingSince).toEqual(theirs);
+    expect(read().lastCheckedAt).toBeNull();
+  });
+
+  it("never verifies a demo connection: no claim, no provider call, still valid", async () => {
+    const demo = { ...github, label: "demo large-tier", encryptedToken: encryptToken("demo"), demo: true };
+    const read = statefulRow(demo);
+    const out = await svc.verifyConnection("org_mine", "conn_1");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ status: "valid", checking: false });
+    expect(await svc.runCheck(read() as never)).toBeNull();
+    expect(await svc.runClaimedCheck(read() as never, new Date())).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(read().status).toBe("valid");
+  });
+
+  it("records a timeout when the provider runs past the check's deadline", async () => {
+    const read = statefulRow(github);
+    fetchMock.mockImplementationOnce(() => new Promise<Response>(() => {}));
+    const out = await svc.runCheck(read() as never, { timeoutMs: 10 });
+    expect(out).toMatchObject({ status: "valid", lastError: "GitHub did not answer in time; try again", verifyingSince: null });
   });
 });

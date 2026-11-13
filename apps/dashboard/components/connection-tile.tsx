@@ -1,7 +1,7 @@
 // One connection as a tile: what it is, its status, when it last verified, and
 // why it is invalid if it is. Used wherever connections are shown, so each
 // connection is its own tile in a grid rather than a row inside one card:
-// /connections (with verify, replace and remove), the dashboard home (the
+// /connections (with a "..." menu: verify, replace, remove), the dashboard home (the
 // whole tile links to /connections) and the adopt step of /projects/new (with
 // that account's assessment and its actions).
 
@@ -16,12 +16,15 @@ export const CONNECTION_GRID = "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-co
 
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text";
 
-function formatVerified(iso: string | null): string {
+function formatVerified(c: Pick<ProviderConnectionSummary, "lastVerifiedAt" | "checking">): string {
+  // Text, not a spinner: the page carries the one status line for checks.
+  if (c.checking) return "Checking...";
+  const iso = c.lastVerifiedAt;
   if (!iso) return "Not verified yet";
   return `Last verified ${new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`;
 }
 
-function TileBody({ c, children }: { c: ProviderConnectionSummary; children?: ReactNode }) {
+function TileBody({ c, menu, children }: { c: ProviderConnectionSummary; menu?: ReactNode; children?: ReactNode }) {
   const status = connectionStatus(c);
   return (
     <>
@@ -32,9 +35,10 @@ function TileBody({ c, children }: { c: ProviderConnectionSummary; children?: Re
           <span className="min-w-0 break-words">{connectionName(c.provider)}</span>
         </h2>
         <Chip tone={status.tone}>{status.text}</Chip>
+        {menu}
       </div>
       <div className="mb-1 text-sm text-muted break-words">{c.label}</div>
-      <div className="text-xs text-faint">{formatVerified(c.lastVerifiedAt)}</div>
+      <div className="text-xs text-faint">{formatVerified(c)}</div>
       {c.status === "invalid" && c.lastError && <div className="mt-2 text-xs text-danger break-words">{c.lastError}</div>}
       {children}
     </>
@@ -47,12 +51,13 @@ function TileBody({ c, children }: { c: ProviderConnectionSummary; children?: Re
  *
  * Pass `href` to make the whole tile a link (no actions then, since a button
  * cannot sit inside a link), or `actions` for a row of buttons pinned to the
- * bottom of the tile. `children` go under the status lines.
+ * bottom of the tile, and `menu` for a control in the top right corner (an
+ * ActionMenu). `children` go under the status lines.
  */
 export function ConnectionTile(
   props: { c: ProviderConnectionSummary; children?: ReactNode } & (
-    | { href: string; actions?: never }
-    | { href?: never; actions?: ReactNode }
+    | { href: string; actions?: never; menu?: never }
+    | { href?: never; actions?: ReactNode; menu?: ReactNode }
   )
 ) {
   const { c, children } = props;
@@ -70,7 +75,9 @@ export function ConnectionTile(
   }
   return (
     <li className={`${CARD} flex min-w-0 flex-col p-5`}>
-      <TileBody c={c}>{children}</TileBody>
+      <TileBody c={c} menu={props.menu}>
+        {children}
+      </TileBody>
       {props.actions ? <div className="mt-auto pt-4">{props.actions}</div> : null}
     </li>
   );

@@ -49,8 +49,20 @@ model ProviderConnection {
   provider       String // vercel | cloudflare | heroku | aws
   label          String
   encryptedToken String
-  status         String    @default("unverified") // unverified | valid | invalid
+  // unverified | valid | invalid, and nothing else: a CHECK constraint holds
+  // it to those three since migration 0030.
+  status         String    @default("unverified")
+  // Last successful verify.
   lastVerifiedAt DateTime?
+  // Last verify of any outcome, by a person or the daily check
+  // (services/connection-checks.ts), which picks connections by this.
+  lastCheckedAt  DateTime?
+  // Set while one check holds the connection, so two cannot run at once;
+  // a claim older than CHECK_CLAIM_MS is treated as abandoned.
+  verifyingSince DateTime?
+  // A demo connection made by scripts/seed-demo.ts. Its token is the word
+  // "demo", not a credential, so nothing ever verifies it (migration 0030).
+  demo           Boolean   @default(false)
   // Why it is invalid, in words a customer can act on. Never a provider
   // response body. Cleared by a verify that succeeds. See migration 0020.
   lastError      String?
@@ -69,6 +81,8 @@ model ProviderConnection {
   stackSources StackSource[]
   projects    TfProject[]
   managedResources ManagedResource[]
+
+  @@index([lastCheckedAt])
 
   @@unique([orgId, provider, label])
 }

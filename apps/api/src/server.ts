@@ -1,6 +1,7 @@
 import { app } from "./app.js";
 import { startAnalyticsRollup } from "./analytics/rollup.js";
 import { drainJobs, startJobWorker } from "./lib/jobs/queue.js";
+import { startConnectionCheckSweep } from "./services/connection-checks.js";
 import { startDriftSweep } from "./services/drift.js";
 
 const port = Number(process.env.PORT ?? 4000);
@@ -15,6 +16,7 @@ const server = app.listen(port, () => {
   startAnalyticsRollup();
   void startJobWorker().catch((err) => console.error("job worker failed to start:", err));
   startDriftSweep();
+  startConnectionCheckSweep();
 });
 
 let shuttingDown = false;
@@ -23,7 +25,7 @@ let shuttingDown = false;
  *  in-flight requests and jobs up to SHUTDOWN_DRAIN_MS, then exit. A job cut
  *  off here is marked interrupted by the next process at boot; an assessment
  *  cut off is failed by the stuck-assessment sweep (ARCHITECTURE.md, Failure
- *  modes). The drift and analytics timers are unref'd and need no stopping. */
+ *  modes). The drift, connection-check and analytics timers are unref'd and need no stopping. */
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
