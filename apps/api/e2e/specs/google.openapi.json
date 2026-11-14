@@ -3,7 +3,7 @@
  "info": {
   "title": "Google APIs (discovery documents)",
   "version": "discovery",
-  "x-infralift-subset": "operations infralift calls, from googleapis/google-api-go-client@2a50de2f986c6287e7c29d3bdfbf0e6defe9923c (7 files)",
+  "x-infralift-subset": "operations infralift calls, from googleapis/google-api-go-client@2a50de2f986c6287e7c29d3bdfbf0e6defe9923c (8 files)",
   "license": {
    "name": "BSD-3-Clause",
    "url": "https://github.com/googleapis/google-api-go-client/blob/2a50de2f986c6287e7c29d3bdfbf0e6defe9923c/LICENSE"
@@ -17,6 +17,7 @@
   "repo": "googleapis/google-api-go-client",
   "commit": "2a50de2f986c6287e7c29d3bdfbf0e6defe9923c",
   "paths": [
+   "run/v1/run-api.json",
    "run/v2/run-api.json",
    "compute/v1/compute-api.json",
    "sqladmin/v1/sqladmin-api.json",
@@ -27,6 +28,84 @@
   ]
  },
  "paths": {
+  "/v1/projects/{project}/locations": {
+   "get": {
+    "operationId": "run.projects.locations.list",
+    "description": "Lists information about the supported locations for this service. This method lists locations based on the resource scope provided in the ListLocationsRequest.name field: * **Global locations**: If `name` is empty, the method lists the public locations available to all projects. * **Project-specific locations**: If `name` follows the format `projects/{project}`, the method lists locations visible to that specific project. This includes public, private, or other project-specific locations enabled for the project. For gRPC and client library implementations, the resource name is passed as the `name` field. For direct service calls, the resource name is incorporated into the request path based on the specific service implementation and version.",
+    "parameters": [
+     {
+      "name": "project",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "extraLocationTypes",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     },
+     {
+      "name": "filter",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "pageSize",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "format": "int32"
+      }
+     },
+     {
+      "name": "pageToken",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/run_ListLocationsResponse"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/google.ts)",
+          "value": {
+           "locations": [
+            {
+             "name": "projects/infralift-e2e/locations/us-central1",
+             "locationId": "us-central1",
+             "displayName": "Iowa"
+            }
+           ]
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/v2/projects/{project}/locations/{location}/services": {
    "get": {
     "operationId": "run.projects.locations.services.list",
@@ -4681,6 +4760,55 @@
        "IDENTITY_TYPE_SERVICE_ACCOUNT",
        "IDENTITY_TYPE_AGENT_IDENTITY"
       ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "run_ListLocationsResponse": {
+    "description": "The response message for Locations.ListLocations.",
+    "properties": {
+     "locations": {
+      "description": "A list of locations that matches the specified filter in the request.",
+      "items": {
+       "$ref": "#/components/schemas/run_Location"
+      },
+      "type": "array"
+     },
+     "nextPageToken": {
+      "description": "The standard List next-page token.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "run_Location": {
+    "description": "A resource that represents a Google Cloud location.",
+    "properties": {
+     "displayName": {
+      "description": "The friendly name for this location, typically a nearby city name. For example, \"Tokyo\".",
+      "type": "string"
+     },
+     "labels": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "Cross-service attributes for the location. For example {\"cloud.googleapis.com/region\": \"us-east1\"}",
+      "type": "object"
+     },
+     "locationId": {
+      "description": "The canonical id for this location. For example: `\"us-east1\"`.",
+      "type": "string"
+     },
+     "metadata": {
+      "additionalProperties": {
+       "description": "Properties of the object. Contains field @type with type URL."
+      },
+      "description": "Service-specific metadata. For example the available capacity at the given location.",
+      "type": "object"
+     },
+     "name": {
+      "description": "Resource name for the location, which may vary between implementations. For example: `\"projects/example-project/locations/us-east1\"`",
       "type": "string"
      }
     },

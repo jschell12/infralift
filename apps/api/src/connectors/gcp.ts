@@ -3,6 +3,14 @@ import type { ResourceInventoryItem } from "@infralift/shared";
 import { CredentialFormatError, ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 import { httpFetch } from "../lib/http.js";
 import { DEFAULT_ENDPOINTS, type Endpoints } from "../lib/endpoints.js";
+import { settleBounded } from "../lib/bounded.js";
+
+/** Cloud Run regions listed at once. services.list takes one location, so a
+ *  project is one call per region Cloud Run offers it (about 40); each call
+ *  keeps httpFetch's deadline (lib/http.ts). */
+export const CLOUD_RUN_CONCURRENCY = 6;
+/** Pages of the locations list read before stopping with an error. */
+const MAX_LOCATION_PAGES = 10;
 
 // GCP assessment via a read-only service account (Viewer role). Uses the same
 // JWT bearer flow as the Firebase connector but inventories Cloud Run, GCE,
@@ -86,6 +94,57 @@ async function gFetch(accessToken: string, url: string): Promise<any> {
   return res.json();
 }
 
+/** The Cloud Run locations this project can see, by id ("us-central1"),
+ *  from the Cloud Run v1 locations API, following nextPageToken. */
+async function cloudRunLocations(runApi: string, accessToken: string, project: string): Promise<string[]> {
+  const ids: string[] = [];
+  let pageToken: string | null = null;
+  for (let page = 0; page < MAX_LOCATION_PAGES; page++) {
+    const query = pageToken ? `?pageToken=${encodeURIComponent(pageToken)}` : "";
+    const body = await gFetch(accessToken, `${runApi}/v1/projects/${project}/locations${query}`);
+    for (const loc of body.locations ?? []) {
+      const id = loc.locationId ?? String(loc.name ?? "").split("/locations/")[1];
+      if (id) ids.push(id);
+    }
+    pageToken = body.nextPageToken || null;
+    if (!pageToken) return ids;
+  }
+  throw new Error(`GCP API /v1/projects/${project}/locations still had more pages after ${MAX_LOCATION_PAGES}`);
+}
+
+/** Every Cloud Run service in the project. services.list refuses the
+ *  "locations/-" wildcard ("cannot be the \"-\" wildcard", run v2 discovery
+ *  document), which the connector used to send (#153 finding 6), so this asks
+ *  each location in turn, CLOUD_RUN_CONCURRENCY at a time. `failedLocations`
+ *  counts the ones that did not answer, so a partial list is said. */
+async function cloudRunServices(runApi: string, accessToken: string, project: string): Promise<{ services: any[]; failedLocations: number; locations: number }> {
+  const locations = await cloudRunLocations(runApi, accessToken, project);
+  const reads = await settleBounded(locations, CLOUD_RUN_CONCURRENCY, (location) =>
+    gFetch(accessToken, `${runApi}/v2/projects/${project}/locations/${location}/services`)
+  );
+  const services: any[] = [];
+  const seen = new Set<string>();
+  let failedLocations = 0;
+  for (const read of reads) {
+    if (!read.ok) {
+      failedLocations++;
+      continue;
+    }
+    for (const s of read.value.services ?? []) {
+      if (seen.has(s.name)) continue;
+      seen.add(s.name);
+      services.push(s);
+    }
+  }
+  // Every location refused: the API is off or the key cannot read it. Treated
+  // as before, as Cloud Run not being readable.
+  if (locations.length > 0 && failedLocations === locations.length) {
+    const first = reads.find((r) => !r.ok) as { ok: false; error: unknown };
+    throw first.error;
+  }
+  return { services, failedLocations, locations: locations.length };
+}
+
 /** The GCP connector, calling endpoints.googleOauthToken, gcpRun, gcpCompute, gcpSqlAdmin, gcpStorage and gcpCloudFunctions (lib/endpoints.ts). */
 export function createGcpConnector(endpoints: Pick<Endpoints, "googleOauthToken" | "gcpRun" | "gcpCompute" | "gcpSqlAdmin" | "gcpStorage" | "gcpCloudFunctions"> = DEFAULT_ENDPOINTS): Connector {
   const connector: Connector = {
@@ -120,13 +179,18 @@ export function createGcpConnector(endpoints: Pick<Endpoints, "googleOauthToken"
         name: project,
       });
 
-      // Cloud Run services
+      // Cloud Run services, one location at a time
       try {
-        const services = await gFetch(
-          accessToken,
-          `${endpoints.gcpRun}/v2/projects/${project}/locations/-/services`
-        );
-        for (const s of services.services ?? []) {
+        const services = await cloudRunServices(endpoints.gcpRun, accessToken, project);
+        if (services.failedLocations > 0) {
+          findings.push({
+            category: "inventory",
+            severity: "low",
+            title: `Cloud Run not read in ${services.failedLocations} region(s)`,
+            detail: `Cloud Run did not answer for ${services.failedLocations} of ${services.locations} region(s), so services there are missing from this inventory.`,
+          });
+        }
+        for (const s of services.services) {
           const region = s.name?.split("/locations/")[1]?.split("/")[0];
           inventory.push({
             provider: "gcp",
@@ -147,7 +211,7 @@ export function createGcpConnector(endpoints: Pick<Endpoints, "googleOauthToken"
             },
           });
         }
-        const runCount = (services.services ?? []).length;
+        const runCount = services.services.length;
         if (runCount > 0) {
           findings.push({
             category: "recommendation",
@@ -257,7 +321,8 @@ export function createGcpConnector(endpoints: Pick<Endpoints, "googleOauthToken"
         // Storage API not enabled; skip.
       }
 
-      // Cloud Functions (gen2)
+      // Cloud Functions (gen2). Unlike Cloud Run, functions.list accepts the
+      // "locations/-" wildcard (cloudfunctions v2 discovery document).
       try {
         const fns = await gFetch(
           accessToken,

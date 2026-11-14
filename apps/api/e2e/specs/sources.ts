@@ -375,6 +375,9 @@ export const SOURCES: SpecSource[] = [
     repo: "googleapis/google-api-go-client",
     commit: "2a50de2f986c6287e7c29d3bdfbf0e6defe9923c",
     documents: [
+      // Cloud Run v2 services.list takes one location ("cannot be the '-'
+      // wildcard"), so the connector lists locations with v1 first.
+      { path: "run/v1/run-api.json", operations: [{ id: "run.projects.locations.list", path: "/v1/projects/{project}/locations" }] },
       { path: "run/v2/run-api.json", operations: [{ id: "run.projects.locations.services.list", path: "/v2/projects/{project}/locations/{location}/services" }] },
       { path: "compute/v1/compute-api.json", operations: [{ id: "compute.instances.aggregatedList", path: "/compute/v1/projects/{project}/aggregated/instances" }] },
       { path: "sqladmin/v1/sqladmin-api.json", operations: [{ id: "sql.instances.list", path: "/v1/projects/{project}/instances" }] },
