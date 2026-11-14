@@ -232,7 +232,10 @@ export function hyperSchemaToOpenApi(doc: Record<string, any>, operations: Hyper
       summary: `${op.resource} ${op.link}`,
       description: link.description,
       parameters: pathParams,
-      responses: { "200": { description: "Successful response", content: { "application/json": { schema: hyperSchema(target) } } } },
+      // Heroku's own media type: clients send Accept: application/vnd.heroku+json;
+      // version=3 (devcenter.heroku.com/articles/platform-api-reference), and
+      // the schema itself does not name one.
+      responses: { "200": { description: "Successful response", content: { "application/vnd.heroku+json": { schema: hyperSchema(target) } } } },
     };
   }
   const schemas: Record<string, Schema> = {};

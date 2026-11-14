@@ -185,7 +185,7 @@ async function extract(source: SpecSource): Promise<string> {
     case "hyper-schema": {
       const { text, sha256 } = await download(source.pin);
       const base = hyperSchemaToOpenApi(JSON.parse(text), source.operations);
-      base.info = { ...base.info, "x-infralift-subset": `operations infralift calls, from ${pinLabel(source.pin)}` };
+      base.info = { ...(base.info as object), "x-infralift-subset": `operations infralift calls, from ${pinLabel(source.pin)}` };
       base["x-infralift-source"] = { ...source.pin, sha256 };
       return json(seeded(source, base));
     }

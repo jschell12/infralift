@@ -15,7 +15,7 @@
      "200": {
       "description": "Successful response",
       "content": {
-       "application/json": {
+       "application/vnd.heroku+json": {
         "schema": {
          "$ref": "#/components/schemas/account"
         },
@@ -43,7 +43,7 @@
      "200": {
       "description": "Successful response",
       "content": {
-       "application/json": {
+       "application/vnd.heroku+json": {
         "schema": {
          "items": {
           "$ref": "#/components/schemas/app"
@@ -96,7 +96,7 @@
      "200": {
       "description": "Successful response",
       "content": {
-       "application/json": {
+       "application/vnd.heroku+json": {
         "schema": {
          "items": {
           "$ref": "#/components/schemas/formation"
@@ -141,7 +141,7 @@
      "200": {
       "description": "Successful response",
       "content": {
-       "application/json": {
+       "application/vnd.heroku+json": {
         "schema": {
          "items": {
           "$ref": "#/components/schemas/add-on"

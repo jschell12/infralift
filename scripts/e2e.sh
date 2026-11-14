@@ -9,7 +9,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-compose=(docker compose -f docker-compose.e2e.yml --profile tools)
+compose=(docker compose -f docker-compose.e2e.yml --profile tools --profile mocks)
+# E2E_GITLAB=1 adds GitLab CE (several GB of RAM, minutes to boot) and its test.
+if [ "${E2E_GITLAB:-}" = "1" ]; then compose+=(--profile gitlab); fi
 
 stop() {
   if [ "${E2E_KEEP:-}" = "1" ]; then
@@ -26,6 +28,8 @@ trap stop EXIT
 # A fresh stack every run: leftovers from an aborted run would collide.
 "${compose[@]}" down --remove-orphans >/dev/null 2>&1 || true
 "${compose[@]}" build tofu
-docker compose -f docker-compose.e2e.yml up -d --wait
+up=(docker compose -f docker-compose.e2e.yml --profile mocks)
+if [ "${E2E_GITLAB:-}" = "1" ]; then up+=(--profile gitlab); fi
+"${up[@]}" up -d --wait
 
 pnpm --filter @infralift/api exec vitest run --config vitest.e2e.config.ts "$@"
