@@ -70,7 +70,7 @@ export class SpecValidator {
 
   constructor(private readonly doc: OpenApiDocument) {
     // Registered once, so "#/components/..." inside any schema resolves.
-    this.ajv.addSchema({ components: doc.components ?? {} }, "spec");
+    this.ajv.addSchema({ components: nullableToJsonSchema(doc.components ?? {}) }, "spec");
   }
 
   /** null when `value` matches `schema`, else the first few errors as text. */
@@ -94,7 +94,22 @@ export class SpecValidator {
 
 /** A schema whose local refs point into the registered "spec" document. */
 function rebase(schema: Schema): Schema {
-  return JSON.parse(JSON.stringify(schema).replace(/"\$ref":"#\//g, '"$ref":"spec#/'));
+  return nullableToJsonSchema(JSON.parse(JSON.stringify(schema).replace(/"\$ref":"#\//g, '"$ref":"spec#/')));
+}
+
+/** OpenAPI 3.0's `nullable: true` on a schema with no `type` (a $ref, an
+ *  allOf) as JSON Schema: anyOf the schema or null. Ajv handles nullable
+ *  only beside a type. */
+function nullableToJsonSchema<T>(node: T): T {
+  if (Array.isArray(node)) return node.map(nullableToJsonSchema) as T;
+  if (!node || typeof node !== "object") return node;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(node)) out[k] = nullableToJsonSchema(v);
+  if (out.nullable === true && out.type === undefined) {
+    const { nullable, ...rest } = out;
+    return { anyOf: [rest, { type: "null" }] } as T;
+  }
+  return out as T;
 }
 
 // -- filling a partial response ------------------------------------------------
