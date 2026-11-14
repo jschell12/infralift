@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeExports, OFFSETS, stackLayout } from "./ports.js";
+import { composeExports, OFFSETS, presetConflicts, stackLayout } from "./ports.js";
 
 // Two checkouts must get different stacks, the same checkout the same one,
 // and every port must stay below the ephemeral range and inside its block.
@@ -36,5 +36,24 @@ describe("per-checkout e2e stack layout", () => {
     expect(lines).toContain("export COMPOSE_PROJECT_NAME=mine");
     expect(lines).toContain("export E2E_PORT_POSTGRES=41001");
     expect(lines).toContain("export E2E_PORT_GOOGLE=41018");
+  });
+});
+
+describe("a preset COMPOSE_PROJECT_NAME or port that disagrees stops the run (scripts/e2e.sh)", () => {
+  const layout = stackLayout("/a", { E2E_PORT_BASE: "41000", E2E_PROJECT: "mine" });
+
+  it("passes when nothing is preset, or what is preset matches", () => {
+    expect(presetConflicts(layout, {})).toEqual([]);
+    expect(presetConflicts(layout, { COMPOSE_PROJECT_NAME: "mine", E2E_PORT_POSTGRES: "41001", E2E_PORT_BASE: "41000" })).toEqual([]);
+    expect(presetConflicts(layout, { COMPOSE_PROJECT_NAME: "" })).toEqual([]);
+  });
+
+  it("names a preset project, and a preset port, that are not this layout's", () => {
+    const problems = presetConflicts(layout, { COMPOSE_PROJECT_NAME: "kept-stack", E2E_PORT_GOOGLE: "5018" });
+    expect(problems).toEqual([
+      "COMPOSE_PROJECT_NAME is set to kept-stack, but this checkout's e2e stack uses mine.",
+      "E2E_PORT_GOOGLE is set to 5018, but this checkout's e2e stack uses 41018.",
+      "Unset them, or choose the stack with E2E_PROJECT and E2E_PORT_BASE instead, so the project and its ports agree.",
+    ]);
   });
 });

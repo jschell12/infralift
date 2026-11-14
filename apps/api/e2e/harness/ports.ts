@@ -9,7 +9,9 @@
 //   project    infralift-e2e-<hash>, so `docker compose down` in one checkout
 //              never removes another's containers.
 //
-// E2E_PORT_BASE and E2E_PROJECT override them (CI does not need to).
+// E2E_PORT_BASE and E2E_PROJECT override them (CI does not need to). A
+// COMPOSE_PROJECT_NAME or E2E_PORT_* already set to something else stops the
+// run (presetConflicts) rather than being silently replaced.
 //
 // This file is the one place the numbers come from. scripts/e2e.sh runs it
 // (`tsx e2e/harness/ports.ts`) and evals the `export` lines it prints, which
@@ -89,8 +91,34 @@ export function composeExports(layout: StackLayout): string[] {
   return Object.entries(vars).map(([k, v]) => `export ${k}=${v}`);
 }
 
+/** Variables already in the environment that disagree with `layout`, one
+ *  sentence each. A COMPOSE_PROJECT_NAME set by hand (to reuse a kept stack,
+ *  say) would otherwise be overwritten by this checkout's name, and compose
+ *  would start a second stack while the harness talked to the first one's
+ *  ports. To pick a project and ports, set E2E_PROJECT and E2E_PORT_BASE,
+ *  which this file honours. */
+export function presetConflicts(layout: StackLayout, env: Record<string, string | undefined>): string[] {
+  const problems: string[] = [];
+  for (const line of composeExports(layout)) {
+    const [name, value] = line.replace(/^export /, "").split("=") as [string, string];
+    const preset = env[name];
+    if (preset === undefined || preset === "" || preset === value) continue;
+    problems.push(`${name} is set to ${preset}, but this checkout's e2e stack uses ${value}.`);
+  }
+  if (problems.length) {
+    problems.push("Unset them, or choose the stack with E2E_PROJECT and E2E_PORT_BASE instead, so the project and its ports agree.");
+  }
+  return problems;
+}
+
 export const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  console.log(composeExports(stackLayout(REPO_ROOT)).join("\n"));
+  const layout = stackLayout(REPO_ROOT);
+  const problems = presetConflicts(layout, process.env);
+  if (problems.length) {
+    console.error(problems.join("\n"));
+    process.exit(1);
+  }
+  console.log(composeExports(layout).join("\n"));
 }
