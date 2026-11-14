@@ -30,14 +30,19 @@ function handler(): Handler {
 interface Result {
   status: number;
   body: Record<string, unknown>;
+  headers: Record<string, string>;
 }
 
 async function post(
   body: unknown,
   headers: Record<string, string> = {}
 ): Promise<Result> {
-  const out: Result = { status: 200, body: {} };
+  const out: Result = { status: 200, body: {}, headers: {} };
   const res = {
+    setHeader(name: string, value: string) {
+      out.headers[name] = value;
+      return this;
+    },
     status(code: number) {
       out.status = code;
       return this;
@@ -107,7 +112,11 @@ describe("public lead intake", () => {
     for (let i = 0; i < 5; i++) {
       expect((await post(VALID, a)).status).toBe(202);
     }
-    expect((await post(VALID, a)).status).toBe(429);
+    const refused = await post(VALID, a);
+    expect(refused.status).toBe(429);
+    // An hour's window, refused just after the fifth call: about an hour to wait.
+    expect(Number(refused.headers["Retry-After"])).toBeGreaterThan(3500);
+    expect(Number(refused.headers["Retry-After"])).toBeLessThanOrEqual(3600);
 
     // A different visitor is unaffected by the first one's burst.
     expect((await post(VALID, b)).status).toBe(202);

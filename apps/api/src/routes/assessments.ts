@@ -33,6 +33,7 @@ import {
 import { toInventoryItem } from "../lib/inventory.js";
 import { intQuery } from "../lib/query.js";
 import { markInvalidOnAuthFailure } from "../services/connections.js";
+import { RATE_LIMITS, rateLimit } from "../lib/rate-limit.js";
 
 export const assessmentsRouter = Router();
 
@@ -108,7 +109,7 @@ assessmentsRouter.get("/", handle(async (req, res) => {
 
 // Run an assessment against a connection. Synchronous for now — connector
 // calls are read-only and complete in seconds for small accounts.
-assessmentsRouter.post("/run", handle(async (req, res) => {
+assessmentsRouter.post("/run", rateLimit(RATE_LIMITS.assessmentRun), handle(async (req, res) => {
   const parsed = runSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new InvalidInput("Invalid request", { detail: parsed.error.message });

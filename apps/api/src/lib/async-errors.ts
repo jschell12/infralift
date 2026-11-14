@@ -1,6 +1,7 @@
 import { STATUS_CODES } from "node:http";
 import type { ErrorRequestHandler, NextFunction, Request, Response } from "express";
-import { AppError } from "./errors.js";
+import { AppError, sendAppError } from "./errors.js";
+import { log } from "./log.js";
 
 // ---------------------------------------------------------------------------
 // Express 4 does not catch a rejected async handler. The rejection becomes an
@@ -98,20 +99,20 @@ function clientStatus(err: unknown): number | null {
  * did under Express's default handler, and is not logged: it is the caller's
  * mistake, and the public /intake routes would otherwise fill the log with it.
  *
- * Anything else answers a bare 500 and logs the stack only. Not the error
- * object: body-parser attaches the raw request text to its errors as
- * `err.body`, and request bodies here carry provider tokens.
+ * Anything else answers a 500 with the request id (lib/request-context.ts),
+ * and logs name, message and stack under the same id. Never the error object:
+ * body-parser attaches the raw request text to its errors as `err.body`, and
+ * request bodies here carry provider tokens (lib/log.ts serializeError).
  */
 export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   if (res.headersSent) return next(err);
   // A typed request error (lib/errors.ts) answers with its own status and
   // body wherever it was thrown, wrapped in handle() or not.
-  if (err instanceof AppError) return res.status(err.status).json(err.body());
+  if (err instanceof AppError) return sendAppError(res, err);
   const status = clientStatus(err);
   if (status) {
     return res.status(status).json({ error: STATUS_CODES[status] ?? "bad request" });
   }
-  const detail = err instanceof Error ? (err.stack ?? `${err.name}: ${err.message}`) : typeof err;
-  console.error(`unhandled error on ${req.method} ${req.path}: ${detail}`);
-  res.status(500).json({ error: "internal error" });
+  log.error({ err: err instanceof Error ? err : typeof err, method: req.method, path: req.path }, "unhandled error");
+  res.status(500).json(req.id ? { error: "internal error", requestId: req.id } : { error: "internal error" });
 };

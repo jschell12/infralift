@@ -3,6 +3,7 @@ import { z } from "zod";
 import { handle, parseBody } from "../lib/errors.js";
 import { isSafePath } from "../lib/import/check.js";
 import { adoptFromAssessment, importModule, readImportCheck, scanRepository } from "../services/imports.js";
+import { RATE_LIMITS, rateLimit } from "../lib/rate-limit.js";
 
 // HTTP for importing existing Terraform (services/imports.ts holds the rules).
 //
@@ -46,6 +47,7 @@ const adoptSchema = scanSchema.extend({
 
 importsRouter.post(
   "/scan",
+  rateLimit(RATE_LIMITS.importScan),
   handle(async (req, res) => {
     res.json(await scanRepository(req.user!.orgId, parseBody(scanSchema, req.body)));
   })
@@ -53,6 +55,7 @@ importsRouter.post(
 
 importsRouter.post(
   "/",
+  rateLimit(RATE_LIMITS.importCreate),
   handle(async (req, res) => {
     res.status(202).json(await importModule(req.user!.orgId, parseBody(importSchema, req.body)));
   })
@@ -67,6 +70,7 @@ importsRouter.get(
 
 importsRouter.post(
   "/from-assessment",
+  rateLimit(RATE_LIMITS.importCreate),
   handle(async (req, res) => {
     res.status(202).json(await adoptFromAssessment(req.user!.orgId, parseBody(adoptSchema, req.body)));
   })

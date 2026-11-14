@@ -48,8 +48,12 @@ function route(method: string, path: string) {
 
 async function call(path: string, req: Record<string, unknown>) {
   const stack = route("post", path).stack;
-  const out = { status: 200, body: {} as Record<string, unknown> };
+  const out = { status: 200, body: {} as Record<string, unknown>, headers: {} as Record<string, string> };
   const res = {
+    setHeader(name: string, value: string) {
+      out.headers[name] = value;
+      return this;
+    },
     status(code: number) {
       out.status = code;
       return this;
@@ -159,7 +163,7 @@ describe("POST /codegen is gated", () => {
   });
 
   it("meters locked callers", async () => {
-    let last = { status: 0 };
+    let last: { status: number; headers?: Record<string, string> } = { status: 0 };
     for (let i = 0; i < 25; i++) {
       last = await call("/codegen", {
         body: { assessmentId: "asm_1", migrationTarget: "hetzner" },
@@ -168,6 +172,7 @@ describe("POST /codegen is gated", () => {
       if (last.status === 429) break;
     }
     expect(last.status).toBe(429);
+    expect(Number(last.headers?.["Retry-After"])).toBeGreaterThan(0);
   });
 });
 

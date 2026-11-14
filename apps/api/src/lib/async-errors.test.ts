@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import express, { Router } from "express";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
-import { format } from "node:util";
 import { catchAsyncErrors, errorHandler } from "./async-errors.js";
+import { captureLogs } from "./log.js";
 
 // Real Express, real sockets. Without the wrapper each of these rejections is
 // an unhandledRejection, which exits the process under vitest too, so the
@@ -117,11 +117,9 @@ describe("errorHandler", () => {
   });
 
   it("never logs a request body, which can carry a token", async () => {
-    const logged: string[] = [];
-    const orig = console.error;
-    // util.format renders arguments the way console.error does, including an
-    // Error's own properties such as body-parser's `body`. String() would not.
-    console.error = (...args: unknown[]) => void logged.push(format(...args));
+    // The raw lines, as written: a field the serializer let through would be
+    // in them whatever its name.
+    const logs = captureLogs();
     try {
       // A 5xx whose error object carries a body, the way body-parser's do.
       const app = express();
@@ -139,10 +137,12 @@ describe("errorHandler", () => {
         body: '{"token":"SECRET-abc123",',
       });
     } finally {
-      console.error = orig;
+      logs.restore();
     }
-    expect(logged.join("\n")).not.toContain("SECRET");
-    expect(logged.length).toBe(1);
+    expect(logs.raw.join("\n")).not.toContain("SECRET");
+    // The 500 is logged (once), the malformed body's 400 is not.
+    expect(logs.lines.filter((l) => l.msg === "unhandled error")).toHaveLength(1);
+    expect(logs.raw.join("\n")).toContain("wrapped");
   });
 });
 

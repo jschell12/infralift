@@ -12,6 +12,7 @@ import {
   revokeStack,
   withdrawStack,
 } from "../services/team-stacks.js";
+import { RATE_LIMITS, rateLimit } from "../lib/rate-limit.js";
 
 // HTTP for team stacks (services/team-stacks.ts, ADR 0009). Every customer
 // route is scoped to req.user.orgId by the service; the admin routes are
@@ -37,6 +38,7 @@ teamStacksRouter.get(
 
 teamStacksRouter.post(
   "/",
+  rateLimit(RATE_LIMITS.stackRegister),
   handle(async (req, res) => {
     res.status(201).json(await registerStack(req.user!.orgId, parseBody(registerSchema, req.body)));
   })
@@ -51,6 +53,7 @@ teamStacksRouter.get(
 
 teamStacksRouter.post(
   "/:id/versions",
+  rateLimit(RATE_LIMITS.stackRegister),
   handle(async (req, res) => {
     res.status(201).json(await addStackVersion(req.user!.orgId, req.params.id, parseBody(z.object({ ref }), req.body)));
   })
