@@ -21,7 +21,11 @@
 # The GitHub fake and the API run on the host from source, started by the
 # suite, so tests can read their state directly.
 #
-# Ports bind to 127.0.0.1 only.
+# Ports bind to 127.0.0.1 only. scripts/e2e.sh sets the project name and the
+# ports per checkout (COMPOSE_PROJECT_NAME, E2E_PORT_*, computed by
+# apps/api/e2e/harness/ports.ts), so two worktrees can run the suite at once.
+# The defaults below are for a bare `docker compose` with neither set, and
+# harness/env.ts does not use them: run the stack through scripts/e2e.sh.
 
 name: infralift-e2e
 
@@ -40,7 +44,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: infralift_e2e
-    ports: ["127.0.0.1:55432:5432"]
+    ports: ["127.0.0.1:${E2E_PORT_POSTGRES:-55432}:5432"]
     tmpfs: [/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres", "-d", "infralift_e2e"]
@@ -50,7 +54,7 @@ services:
 
   moto:
     image: motoserver/moto:5.2.5
-    ports: ["127.0.0.1:55000:5000"]
+    ports: ["127.0.0.1:${E2E_PORT_MOTO:-55000}:5000"]
     networks:
       default:
         # hashicorp/aws 6.x reads S3 bucket tags through S3 Control, and the
@@ -73,7 +77,7 @@ services:
     # would refuse. Single process: the image's multiprocess mode crashes.
     command: ["mock", "/spec/cloudflare.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
     volumes: ["./apps/api/e2e/specs:/spec:ro"]
-    ports: ["127.0.0.1:54010:4010"]
+    ports: ["127.0.0.1:${E2E_PORT_CLOUDFLARE:-54010}:4010"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4010/user/tokens/verify',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 3s
@@ -83,7 +87,7 @@ services:
   mock-digitalocean:
     <<: *prism
     command: ["mock", "/spec/digitalocean.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
-    ports: ["127.0.0.1:54011:4010"]
+    ports: ["127.0.0.1:${E2E_PORT_DIGITALOCEAN:-54011}:4010"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4010/v2/account',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 3s
@@ -92,7 +96,7 @@ services:
   mock-render:
     <<: *prism
     command: ["mock", "/spec/render.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
-    ports: ["127.0.0.1:54012:4010"]
+    ports: ["127.0.0.1:${E2E_PORT_RENDER:-54012}:4010"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4010/owners?limit=1',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 3s
@@ -101,7 +105,7 @@ services:
   mock-vercel:
     <<: *prism
     command: ["mock", "/spec/vercel.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
-    ports: ["127.0.0.1:54013:4010"]
+    ports: ["127.0.0.1:${E2E_PORT_VERCEL:-54013}:4010"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4010/v2/user',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 3s
@@ -110,7 +114,7 @@ services:
   mock-heroku:
     <<: *prism
     command: ["mock", "/spec/heroku.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
-    ports: ["127.0.0.1:54014:4010"]
+    ports: ["127.0.0.1:${E2E_PORT_HEROKU:-54014}:4010"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4010/account',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 3s
@@ -119,7 +123,7 @@ services:
   mock-netlify:
     <<: *prism
     command: ["mock", "/spec/netlify.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
-    ports: ["127.0.0.1:54015:4010"]
+    ports: ["127.0.0.1:${E2E_PORT_NETLIFY:-54015}:4010"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4010/user',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 3s
@@ -128,7 +132,7 @@ services:
   mock-flyio-machines:
     <<: *prism
     command: ["mock", "/spec/flyio-machines.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
-    ports: ["127.0.0.1:54016:4010"]
+    ports: ["127.0.0.1:${E2E_PORT_FLYIO_MACHINES:-54016}:4010"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4010/v1/apps/h/volumes',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 3s
@@ -137,7 +141,7 @@ services:
   mock-azure:
     <<: *prism
     command: ["mock", "/spec/azure.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
-    ports: ["127.0.0.1:54017:4010"]
+    ports: ["127.0.0.1:${E2E_PORT_AZURE:-54017}:4010"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4010/subscriptions/h/providers/Microsoft.Storage/storageAccounts?api-version=2023-05-01',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 3s
@@ -146,7 +150,7 @@ services:
   mock-google:
     <<: *prism
     command: ["mock", "/spec/google.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
-    ports: ["127.0.0.1:54018:4010"]
+    ports: ["127.0.0.1:${E2E_PORT_GOOGLE:-54018}:4010"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4010/storage/v1/b?project=h',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 3s

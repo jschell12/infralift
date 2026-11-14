@@ -7,6 +7,14 @@
 //   tsx e2e/specs/extract.ts --check   the same, but fail if what it would write
 //                                      differs from what is committed
 //   tsx e2e/specs/extract.ts render    only the named entries (either mode)
+//   tsx e2e/specs/extract.ts --check --offline
+//                                      no network: checks that each committed
+//                                      subset names the pin sources.ts has,
+//                                      and skips the ones that are not
+//                                      committed (Render), saying so. It does
+//                                      not re-extract, so it cannot see a
+//                                      subset edited by hand; CI runs the
+//                                      full --check.
 //
 // Each subset holds only the operations infralift calls and what they
 // reference, taken from the vendor's own published description at a pinned
@@ -302,14 +310,50 @@ function fail(source: SpecSource, problems: string[]): void {
 
 const json = (doc: OpenApiDocument): string => `${JSON.stringify(doc, null, 1)}\n`;
 
+/** The pin a committed subset says it was extracted from, compared with
+ *  the one sources.ts has, without downloading anything. Null when they
+ *  agree; otherwise what differs. */
+export function committedPinProblem(source: SpecSource, committed: string): string | null {
+  if (!committed) return `${source.out} is not committed`;
+  if (source.format === "graphql") {
+    const label = pinLabel(source.pin);
+    return committed.startsWith(`# The part of ${label} (`) ? null : `${source.out} does not name ${label} in its header`;
+  }
+  const recorded = (JSON.parse(committed) as { "x-infralift-source"?: Record<string, unknown> })["x-infralift-source"] ?? {};
+  const want: Record<string, unknown> =
+    source.format === "bundle" ? { repo: source.repo, commit: source.commit, paths: source.roots.map((r) => r.path) }
+    : source.format === "discovery" ? { repo: source.repo, commit: source.commit, paths: source.documents.map((d) => d.path) }
+    : { ...source.pin };
+  for (const [key, value] of Object.entries(want)) {
+    if (JSON.stringify(recorded[key]) !== JSON.stringify(value)) return `${source.out} records ${key} ${JSON.stringify(recorded[key])}, sources.ts has ${JSON.stringify(value)}`;
+  }
+  return null;
+}
+
 async function main(): Promise<void> {
   const check = process.argv.includes("--check");
+  const offline = process.argv.includes("--offline");
+  if (offline && !check) throw new Error("--offline only applies to --check: writing a subset needs its pinned description");
   const only = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const unknown = only.filter((name) => !SOURCES.some((s) => s.name === name));
   if (unknown.length) throw new Error(`no such entry in sources.ts: ${unknown.join(", ")}`);
   let drift = false;
   for (const source of SOURCES.filter((s) => !only.length || only.includes(s.name))) {
     const out = join(here, source.out);
+    if (offline) {
+      if (!source.license) {
+        console.log(`${source.out}: skipped (--offline). It is not committed, because the description has no licence; it is fetched and verified at setup.`);
+        continue;
+      }
+      const problem = committedPinProblem(source, await readFile(out, "utf8").catch(() => ""));
+      if (problem) {
+        drift = true;
+        console.error(`${problem}; run tsx e2e/specs/extract.ts ${source.name}`);
+      } else {
+        console.log(`${source.out}: names its pin (offline: not re-extracted)`);
+      }
+      continue;
+    }
     if (!source.license) {
       // Not redistributable: written from the pin at setup, never committed
       // (git-ignored), so --check writes it too rather than comparing.

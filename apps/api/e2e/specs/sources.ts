@@ -279,7 +279,7 @@ export const SOURCES: SpecSource[] = [
     format: "openapi",
     out: "render.openapi.json",
     pin: {
-      url: "http://web.archive.org/web/20261111030124id_/https://api-docs.render.com/openapi/render-public-api-1.json",
+      url: "https://web.archive.org/web/20261111030124id_/https://api-docs.render.com/openapi/render-public-api-1.json",
       published: "https://api-docs.render.com/openapi/render-public-api-1.json",
       sha256: "296bf09dc8a0241b6dfc56162805de2468be8d769d6210de5a286cfa0f03fbec",
     },
