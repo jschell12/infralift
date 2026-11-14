@@ -55,6 +55,11 @@ here.
 {{/if}}
 ## First apply
 
+Add a required reviewer to the `production` environment before you merge
+(on GitHub: Settings, Environments, `production`, Required reviewers). GitHub
+creates an environment nobody has configured with no protection at all, so
+without a reviewer a push to main applies with no human step.
+
 {{#if backend_r2}}1. Create the state bucket once, from `bootstrap/`:
    `CLOUDFLARE_API_TOKEN=... tofu init && tofu apply -var cloudflare_account_id=...`
 2. Set the credentials above, then merge this {{change_request}}. The push to

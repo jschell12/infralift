@@ -21,3 +21,17 @@ It departs from `infra.yml` in one way. That workflow plans in one job and uploa
 A required reviewer on `production` approves before the run plans, not after seeing its plan. For the first apply, the plan is the one the adoption pull request's check already showed (import only, nothing changes); later pushes come through pull requests whose checks showed theirs. Review-after-plan would need a second approval and an encrypted artifact with a key the customer creates. The apply needs credentials that can write state, which the read-only check does not; the pull request body tells the customer to put those on the `production` environment.
 
 Workflows in a customer's repository change only when infralift renders them again, and the import job renders them only when a project is created. A project adopted before this change has no apply workflow and gets none automatically; there is no "refresh workflow" action yet. Its rendered files are recorded per project (`TfRendering`), so the current version of both workflows can be rendered from the project's `importJson` with `renderImportCheck` and `renderApplyWorkflow` and committed to the customer's repository by hand. Re-running the project's import job without `adoptFiles` would open that pull request, but no route does that yet.
+
+## Upgrading an adopted project from hashicorp/aws 5.x to 6.73
+
+Adoption pins `hashicorp/aws ~> 6.73.0` (`PROVIDER_SOURCES` in `lib/tf/codegen.ts`, since #151). A project adopted earlier keeps the `~> 5.0` its committed `versions.tf` says, and keeps resolving 5.100.0, until it is rendered again (the gap above). What a re-render to 6.73 does, measured on moto on 2026-11-14 with eight kinds adopted and applied on 5.100.0:
+
+- The workflows need no `init -upgrade`. The flow commits no `.terraform.lock.hcl` (the check commits only `generated.tf`), so the runner's `tofu init` resolves 6.73.0. A customer who committed a lock file of their own gets `locked provider ... 5.100.0 does not match configured version constraint`, and has to run `tofu init -upgrade` once and commit the new lock file.
+- The committed 5.x `generated.tf` plans "No changes" on 6.73.0 against the state 5.100.0 wrote, with no warnings.
+- The first apply on 6.73.0 changes nothing but rewrites state silently: each resource gains the 6.x `region` attribute and the serial goes up by one. Schema versions do not change.
+- Rolling back works: 5.100.0 plans "No changes" against the state 6.73.0 wrote.
+- If the module directory has other files that constrain `hashicorp/aws` to `~> 5.x`, `tofu init` fails on the conflicting constraints. Move those to 6.x in the same change.
+
+These were measured on moto, not on a real account.
+
+**The check's read-only credentials need `s3:ListTagsForResource` on real AWS.** Under 6.x, `hashicorp/aws` reads an S3 bucket's tags through S3 Control, so generating a bucket's code calls `s3:ListTagsForResource` (the e2e stack needed moto reachable at `<account>.moto` for the same reason). A read-only role without it fails the Generate step loudly; it does not hide a difference. Add the action to the policy on the key the check uses. This is inferred from the provider's calls on moto; the first real-account adoption is what confirms it.
