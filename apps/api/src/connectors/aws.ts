@@ -3,6 +3,7 @@ import { GetResourcesCommand, ResourceGroupsTaggingAPIClient } from "@aws-sdk/cl
 import { CostExplorerClient, GetCostAndUsageCommand } from "@aws-sdk/client-cost-explorer";
 import type { ResourceInventoryItem } from "@infralift/shared";
 import { AWS_HTTP } from "../lib/http.js";
+import { DEFAULT_ENDPOINTS, type Endpoints } from "../lib/endpoints.js";
 import { CredentialFormatError, ProviderHttpError, type Connector, type ConnectorAssessment, type VerifyResult } from "./types.js";
 
 // AWS access is a cross-account IAM role in the customer's account, trusted
@@ -87,12 +88,18 @@ const sdkHttp = {
   maxAttempts: AWS_HTTP.maxAttempts,
 };
 
-const sdkClients: AwsClients = {
-  sts: (creds) => new STSClient({ region: "us-east-1", ...sdkHttp, ...(creds ? { credentials: creds } : {}) }),
-  tagging: (region, creds) => new ResourceGroupsTaggingAPIClient({ region, ...sdkHttp, credentials: creds }),
-  // Cost Explorer has one endpoint, in us-east-1.
-  costExplorer: (creds) => new CostExplorerClient({ region: "us-east-1", ...sdkHttp, credentials: creds }),
-};
+/** The real SDK clients. `endpoints.aws` null means the SDK's own regional
+ *  endpoints; a URL (INFRALIFT_ENDPOINT_AWS, lib/endpoints.ts) sends every
+ *  service there, which is how the e2e stack reaches its AWS emulator. */
+export function awsSdkClients(endpoints: Pick<Endpoints, "aws"> = DEFAULT_ENDPOINTS): AwsClients {
+  const base = { ...sdkHttp, ...(endpoints.aws ? { endpoint: endpoints.aws } : {}) };
+  return {
+    sts: (creds) => new STSClient({ region: "us-east-1", ...base, ...(creds ? { credentials: creds } : {}) }),
+    tagging: (region, creds) => new ResourceGroupsTaggingAPIClient({ region, ...base, credentials: creds }),
+    // Cost Explorer has one endpoint, in us-east-1.
+    costExplorer: (creds) => new CostExplorerClient({ region: "us-east-1", ...base, credentials: creds }),
+  };
+}
 
 const errName = (err: unknown): string => (err as { name?: string })?.name ?? "";
 const isAccessDenied = (err: unknown) => /AccessDenied/.test(errName(err));
@@ -157,7 +164,7 @@ export function lastFullMonth(now: Date): { Start: string; End: string } {
   return { Start: start.toISOString().slice(0, 10), End: end.toISOString().slice(0, 10) };
 }
 
-export function createAwsConnector(clients: AwsClients = sdkClients, now: () => Date = () => new Date()): Connector {
+export function createAwsConnector(clients: AwsClients = awsSdkClients(), now: () => Date = () => new Date()): Connector {
   async function check(token: string): Promise<VerifyResult> {
     const payload = parseAwsPayload(token);
     if (!payload) return { valid: false, reason: "not an IAM role ARN (arn:aws:iam::<account>:role/<name>)", expiresAt: null };

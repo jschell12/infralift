@@ -3,6 +3,11 @@ import { startAnalyticsRollup } from "./analytics/rollup.js";
 import { drainJobs, startJobWorker } from "./lib/jobs/queue.js";
 import { startConnectionCheckSweep } from "./services/connection-checks.js";
 import { startDriftSweep } from "./services/drift.js";
+import { resolveRuntimeEndpointsAtBoot } from "./lib/endpoints.js";
+
+// Before listening: an endpoint override in production, or one that is not a
+// URL, stops the process here rather than failing the first provider call.
+resolveRuntimeEndpointsAtBoot();
 
 const port = Number(process.env.PORT ?? 4000);
 

@@ -5,9 +5,15 @@
 
 import { GitCommitError } from "./errors.js";
 import { HTTP_TIMEOUTS_MS, httpFetch } from "../http.js";
+import { DEFAULT_ENDPOINTS } from "../endpoints.js";
 export { GitCommitError } from "./errors.js";
 
-const GITHUB_API = "https://api.github.com";
+/** Who calls GitHub, and where. `apiBase` is the REST API's base URL,
+ *  DEFAULT_ENDPOINTS.githubApi unless overridden (lib/endpoints.ts). */
+export interface GithubAuth {
+  token: string;
+  apiBase?: string;
+}
 
 
 interface ExistingFile {
@@ -16,17 +22,17 @@ interface ExistingFile {
 }
 
 async function gh(
-  token: string,
+  auth: GithubAuth,
   method: string,
   path: string,
   body?: object
 ): Promise<Response> {
   return httpFetch(
-    `${GITHUB_API}${path}`,
+    `${auth.apiBase ?? DEFAULT_ENDPOINTS.githubApi}${path}`,
     {
       method,
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${auth.token}`,
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         ...(body ? { "Content-Type": "application/json" } : {}),
@@ -38,13 +44,13 @@ async function gh(
 }
 
 async function getExistingFile(
-  token: string,
+  auth: GithubAuth,
   repo: string,
   filePath: string,
   branch: string
 ): Promise<ExistingFile | null> {
   const res = await gh(
-    token,
+    auth,
     "GET",
     `/repos/${repo}/contents/${encodeURIComponent(filePath).replace(/%2F/g, "/")}?ref=${encodeURIComponent(branch)}`
   );
@@ -66,6 +72,7 @@ export interface CommitResult {
 
 export async function commitFile(opts: {
   token: string;
+  apiBase?: string;
   repo: string; // owner/repo
   workDir: string; // "" = repo root
   fileName: string;
@@ -77,7 +84,7 @@ export async function commitFile(opts: {
     ? `${opts.workDir.replace(/\/+$/, "")}/${opts.fileName}`
     : opts.fileName;
   const existing = await getExistingFile(
-    opts.token,
+    opts,
     opts.repo,
     filePath,
     opts.branch
@@ -86,7 +93,7 @@ export async function commitFile(opts: {
     return { commitSha: null, noop: true };
   }
   const res = await gh(
-    opts.token,
+    opts,
     "PUT",
     `/repos/${opts.repo}/contents/${encodeURIComponent(filePath).replace(/%2F/g, "/")}`,
     {
@@ -121,6 +128,7 @@ export interface EnsureRepoResult {
  * promises "we create the infra repo" has to do this first. */
 export async function ensureRepo(opts: {
   token: string;
+  apiBase?: string;
   repo: string; // owner/name
   description?: string;
   private?: boolean;
@@ -130,7 +138,7 @@ export async function ensureRepo(opts: {
     throw new GitCommitError(`repo must be "owner/name", got "${opts.repo}"`);
   }
 
-  const existing = await gh(opts.token, "GET", `/repos/${opts.repo}`);
+  const existing = await gh(opts, "GET", `/repos/${opts.repo}`);
   if (existing.ok) {
     const json = (await existing.json()) as { default_branch: string };
     return {
@@ -156,9 +164,9 @@ export async function ensureRepo(opts: {
     auto_init: true, // creates the default branch so there is a ref to commit onto
   };
 
-  let created = await gh(opts.token, "POST", `/orgs/${owner}/repos`, body);
+  let created = await gh(opts, "POST", `/orgs/${owner}/repos`, body);
   if (created.status === 404 || created.status === 403) {
-    created = await gh(opts.token, "POST", `/user/repos`, body);
+    created = await gh(opts, "POST", `/user/repos`, body);
   }
   if (!created.ok) {
     const text = await created.text();
@@ -209,6 +217,7 @@ export interface CommitFilesResult {
  */
 export async function commitFiles(opts: {
   token: string;
+  apiBase?: string;
   repo: string;
   branch: string;
   workDir: string;
@@ -216,7 +225,7 @@ export async function commitFiles(opts: {
   files: { fileName: string; content: string; mode?: "100644" | "100755" }[];
   message: string;
 }): Promise<CommitFilesResult> {
-  const { token, repo, branch } = opts;
+  const { repo, branch } = opts;
   if (opts.files.length === 0) {
     return { commitSha: null, noop: true, paths: [] };
   }
@@ -226,7 +235,7 @@ export async function commitFiles(opts: {
 
   // Current branch head. A repo created with auto_init always has one.
   const refRes = await gh(
-    token,
+    opts,
     "GET",
     `/repos/${repo}/git/ref/heads/${encodeURIComponent(branch)}`
   );
@@ -239,7 +248,7 @@ export async function commitFiles(opts: {
   const ref = (await refRes.json()) as { object: { sha: string } };
   const headSha = ref.object.sha;
 
-  const headCommitRes = await gh(token, "GET", `/repos/${repo}/git/commits/${headSha}`);
+  const headCommitRes = await gh(opts, "GET", `/repos/${repo}/git/commits/${headSha}`);
   if (!headCommitRes.ok) {
     throw new GitCommitError(
       `GitHub commit lookup failed (${headCommitRes.status}) for ${repo}@${headSha}`
@@ -257,7 +266,7 @@ export async function commitFiles(opts: {
   }[] = [];
 
   for (const [i, file] of opts.files.entries()) {
-    const blobRes = await gh(token, "POST", `/repos/${repo}/git/blobs`, {
+    const blobRes = await gh(opts, "POST", `/repos/${repo}/git/blobs`, {
       content: Buffer.from(file.content, "utf8").toString("base64"),
       encoding: "base64",
     });
@@ -271,7 +280,7 @@ export async function commitFiles(opts: {
     tree.push({ path: paths[i], mode: file.mode ?? "100644", type: "blob", sha: blob.sha });
   }
 
-  const treeRes = await gh(token, "POST", `/repos/${repo}/git/trees`, {
+  const treeRes = await gh(opts, "POST", `/repos/${repo}/git/trees`, {
     base_tree: headCommit.tree.sha,
     tree,
   });
@@ -288,7 +297,7 @@ export async function commitFiles(opts: {
     return { commitSha: null, noop: true, paths };
   }
 
-  const commitRes = await gh(token, "POST", `/repos/${repo}/git/commits`, {
+  const commitRes = await gh(opts, "POST", `/repos/${repo}/git/commits`, {
     message: opts.message,
     tree: newTree.sha,
     parents: [headSha],
@@ -302,7 +311,7 @@ export async function commitFiles(opts: {
   const commit = (await commitRes.json()) as { sha: string };
 
   const updateRes = await gh(
-    token,
+    opts,
     "PATCH",
     `/repos/${repo}/git/refs/heads/${encodeURIComponent(branch)}`,
     { sha: commit.sha }
@@ -329,23 +338,25 @@ export async function commitFiles(opts: {
  * written when the repository does not have them yet. */
 export async function fileExists(opts: {
   token: string;
+  apiBase?: string;
   repo: string;
   path: string;
   branch: string;
 }): Promise<boolean> {
-  return (await getExistingFile(opts.token, opts.repo, opts.path, opts.branch)) !== null;
+  return (await getExistingFile(opts, opts.repo, opts.path, opts.branch)) !== null;
 }
 
 /** Creates `branch` at the current head of `from`. */
 export async function createBranch(opts: {
   token: string;
+  apiBase?: string;
   repo: string;
   from: string;
   branch: string;
 }): Promise<{ sha: string }> {
-  const { token, repo } = opts;
+  const { repo } = opts;
   const refRes = await gh(
-    token,
+    opts,
     "GET",
     `/repos/${repo}/git/ref/heads/${encodeURIComponent(opts.from)}`
   );
@@ -355,7 +366,7 @@ export async function createBranch(opts: {
     );
   }
   const sha = ((await refRes.json()) as { object: { sha: string } }).object.sha;
-  const createRes = await gh(token, "POST", `/repos/${repo}/git/refs`, {
+  const createRes = await gh(opts, "POST", `/repos/${repo}/git/refs`, {
     ref: `refs/heads/${opts.branch}`,
     sha,
   });
@@ -371,11 +382,12 @@ export async function createBranch(opts: {
 /** Deletes a branch. Missing is fine: the goal is that it does not exist. */
 export async function deleteBranch(opts: {
   token: string;
+  apiBase?: string;
   repo: string;
   branch: string;
 }): Promise<void> {
   const res = await gh(
-    opts.token,
+    opts,
     "DELETE",
     `/repos/${opts.repo}/git/refs/heads/${encodeURIComponent(opts.branch)}`
   );
@@ -388,13 +400,14 @@ export async function deleteBranch(opts: {
 
 export async function openPullRequest(opts: {
   token: string;
+  apiBase?: string;
   repo: string;
   head: string;
   base: string;
   title: string;
   body: string;
 }): Promise<{ number: number; url: string }> {
-  const res = await gh(opts.token, "POST", `/repos/${opts.repo}/pulls`, {
+  const res = await gh(opts, "POST", `/repos/${opts.repo}/pulls`, {
     head: opts.head,
     base: opts.base,
     title: opts.title,
@@ -415,12 +428,13 @@ export async function openPullRequest(opts: {
  * one. Only branches in the repository itself count, not forks. */
 export async function findOpenPullRequest(opts: {
   token: string;
+  apiBase?: string;
   repo: string;
   base: string;
   isMine: (headRef: string) => boolean;
 }): Promise<{ number: number; url: string; branch: string } | null> {
   const res = await gh(
-    opts.token,
+    opts,
     "GET",
     `/repos/${opts.repo}/pulls?state=open&base=${encodeURIComponent(opts.base)}&per_page=100`
   );

@@ -1,43 +1,49 @@
 import type { Connector, ConnectorAssessment } from "./types.js";
 import { httpFetch } from "../lib/http.js";
+import { DEFAULT_ENDPOINTS, type Endpoints } from "../lib/endpoints.js";
 
 // GitHub is a destination connector (Terraform code generation commits into a
 // customer repo), not an assessment source — assess() reports nothing.
 
-const API = "https://api.github.com";
+/** The GitHub connector, calling endpoints.githubApi (lib/endpoints.ts). */
+export function createGithubConnector(endpoints: Pick<Endpoints, "githubApi"> = DEFAULT_ENDPOINTS): Connector {
+  const api = endpoints.githubApi;
+  const connector: Connector = {
+    provider: "github",
 
-export const githubConnector: Connector = {
-  provider: "github",
+    async verify(token) {
+      return (await connector.check!(token)).valid;
+    },
 
-  async verify(token) {
-    return (await githubConnector.check!(token)).valid;
-  },
+    // A personal access token with an expiry gets it back on every response in
+    // github-authentication-token-expiration; a token without one gets no header.
+    async check(token) {
+      const res = await httpFetch(`${api}/user`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      });
+      const expiresAt = parseGithubExpiration(res.headers.get("github-authentication-token-expiration"));
+      if (res.ok) return { valid: true, reason: null, expiresAt };
+      const body: any = await res.json().catch(() => null);
+      const why = typeof body?.message === "string" ? `: ${body.message.slice(0, 120)}` : "";
+      return { valid: false, reason: `GitHub answered ${res.status}${why}`, expiresAt };
+    },
 
-  // A personal access token with an expiry gets it back on every response in
-  // github-authentication-token-expiration; a token without one gets no header.
-  async check(token) {
-    const res = await httpFetch(`${API}/user`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-    });
-    const expiresAt = parseGithubExpiration(res.headers.get("github-authentication-token-expiration"));
-    if (res.ok) return { valid: true, reason: null, expiresAt };
-    const body: any = await res.json().catch(() => null);
-    const why = typeof body?.message === "string" ? `: ${body.message.slice(0, 120)}` : "";
-    return { valid: false, reason: `GitHub answered ${res.status}${why}`, expiresAt };
-  },
+    async assess(): Promise<ConnectorAssessment> {
+      return {
+        inventory: [],
+        findings: [],
+        estimatedMonthlyCostCents: null,
+      };
+    },
+  };
+  return connector;
+}
 
-  async assess(): Promise<ConnectorAssessment> {
-    return {
-      inventory: [],
-      findings: [],
-      estimatedMonthlyCostCents: null,
-    };
-  },
-};
+export const githubConnector: Connector = createGithubConnector();
 
 /** "2026-12-01 00:00:00 UTC" (or a numeric offset, "-0700") to a Date; null
  *  for an absent or unreadable header. */
