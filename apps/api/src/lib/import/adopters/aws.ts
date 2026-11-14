@@ -73,7 +73,19 @@ export const AWS_KINDS: Record<string, Entry> = {
   // message size; hashicorp/aws 5.x rejected that (anything over 256 KiB), so
   // SQS was not adoptable until adoption moved to 6.x, which accepts it.
   // Measured 2026-11-14 on moto: 6.73.0 plans such a queue to zero changes.
-  "sqs:": { tf: "aws_sqs_queue", id: (a) => `https://sqs.${a.region}.amazonaws.com/${a.account}/${a.rest}` },
+  //
+  // The URL's domain depends on the partition (amazonaws.com.cn in China,
+  // and GovCloud and the isolated partitions have their own), so it is built
+  // only for "aws". awsAdopter.map() already skips every other partition;
+  // this entry refuses on its own as well, so loosening that check later
+  // cannot make it emit a queue URL that does not exist.
+  "sqs:": {
+    tf: "aws_sqs_queue",
+    id: (a) =>
+      a.partition === "aws"
+        ? `https://sqs.${a.region}.amazonaws.com/${a.account}/${a.rest}`
+        : { skip: `the queue URL SQS imports by is only derived for the aws partition, and this queue is in ${a.partition}` },
+  },
   "sns:": { tf: "aws_sns_topic", id: whole },
   "dynamodb:table": { tf: "aws_dynamodb_table", id: single("table") },
   "ecr:repository": { tf: "aws_ecr_repository", id: rest },

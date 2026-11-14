@@ -30,6 +30,10 @@ interface EndpointSpec {
   default: string | null;
   /** What it is, for the startup log and the README table. */
   what: string;
+  /** An older variable that overrides it too, under the same rule. Kept so a
+   *  setting that predates INFRALIFT_ENDPOINT_* is refused in production
+   *  rather than silently honoured or silently ignored. */
+  legacyEnv?: string;
 }
 
 /** Every outbound endpoint a connector or git host client calls. */
@@ -56,6 +60,14 @@ export const ENDPOINT_SPECS = {
   gcpCloudFunctions: { env: "INFRALIFT_ENDPOINT_GCP_CLOUDFUNCTIONS", default: "https://cloudfunctions.googleapis.com", what: "Cloud Functions API" },
   firebaseHosting: { env: "INFRALIFT_ENDPOINT_FIREBASE_HOSTING", default: "https://firebasehosting.googleapis.com", what: "Firebase Hosting API" },
   firestore: { env: "INFRALIFT_ENDPOINT_FIRESTORE", default: "https://firestore.googleapis.com", what: "Firestore API" },
+  // Terraform Cloud tokens go here (lib/tf/tfc-client.ts). A connection to a
+  // Terraform Enterprise host names its own hostname and does not use this.
+  tfcApi: {
+    env: "INFRALIFT_ENDPOINT_TFC_API",
+    default: "https://app.terraform.io/api/v2",
+    what: "Terraform Cloud API (app.terraform.io connections)",
+    legacyEnv: "TFC_API_URL",
+  },
 } as const satisfies Record<string, EndpointSpec>;
 
 export type EndpointName = keyof typeof ENDPOINT_SPECS;
@@ -118,9 +130,15 @@ export function resolveEndpoints(env: Record<string, string | undefined>): Resol
   const overridden: string[] = [];
   for (const [name, spec] of Object.entries(ENDPOINT_SPECS) as [EndpointName, EndpointSpec][]) {
     const raw = env[spec.env]?.trim();
+    const legacy = spec.legacyEnv ? env[spec.legacyEnv]?.trim() : undefined;
+    // Either name is an override, and both are named in a refusal. The
+    // current name wins when both are set.
+    if (legacy) overridden.push(spec.legacyEnv!);
     if (raw) {
       resolved[name] = parseOverride(spec.env, raw);
       overridden.push(spec.env);
+    } else if (legacy) {
+      resolved[name] = parseOverride(spec.legacyEnv!, legacy);
     } else {
       resolved[name] = spec.default;
     }

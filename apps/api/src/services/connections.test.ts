@@ -13,13 +13,14 @@ const update = vi.fn(async (args: { where: { id: string }; data: Record<string, 
 }));
 const updateMany = vi.fn(async () => ({ count: 1 }));
 const del = vi.fn(async () => ({}));
+const create = vi.fn();
 const assessmentCount = vi.fn(async () => 0);
 const projectFindMany = vi.fn(async (): Promise<{ name: string }[]> => []);
 const stackCount = vi.fn(async () => 0);
 
 vi.mock("../lib/db.js", () => ({
   prisma: {
-    providerConnection: { findFirst, update, updateMany, delete: del },
+    providerConnection: { findFirst, update, updateMany, delete: del, create },
     assessment: { count: assessmentCount },
     tfProject: { findMany: projectFindMany },
     stackSource: { count: stackCount },
@@ -60,6 +61,35 @@ vi.stubGlobal("fetch", fetchMock);
 beforeEach(() => {
   vi.clearAllMocks();
   findFirst.mockResolvedValue({ ...ROW });
+});
+
+describe("createConnection", () => {
+  it("answers 409 with a sentence naming the label when the org already has it, not a 500", async () => {
+    const { Prisma } = await import("@prisma/client");
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    create.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("Unique constraint failed on the fields: (`orgId`,`provider`,`label`)", { code: "P2002", clientVersion: "6" })
+    );
+    const err = await svc.createConnection("org_mine", { provider: "github", label: "deploy bot", token: "tok-dup" }).catch((e) => e);
+    expect(err.status).toBe(409);
+    expect(err.message).toBe('You already have a GitHub connection called "deploy bot". Pick another name, or replace that connection\'s credential instead.');
+    expect(err.message).not.toContain("tok-dup");
+  });
+
+  it("leaves any other database error to the 500 handler", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    create.mockRejectedValueOnce(new Error("connection reset"));
+    const err = await svc.createConnection("org_mine", { provider: "github", label: "deploy bot", token: "tok" }).catch((e) => e);
+    expect(err.status).toBeUndefined();
+    expect(err.message).toBe("connection reset");
+  });
+
+  it("returns the summary when the label is free", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    create.mockImplementationOnce(async (args: { data: Record<string, unknown> }) => ({ ...ROW, ...args.data, id: "conn_new" }));
+    const summary = await svc.createConnection("org_mine", { provider: "github", label: "second bot", token: "tok" });
+    expect(summary).toMatchObject({ id: "conn_new", label: "second bot", status: "valid" });
+  });
 });
 
 describe("rotateConnection", () => {
