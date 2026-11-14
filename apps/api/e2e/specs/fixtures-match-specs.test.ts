@@ -104,3 +104,50 @@ describe("recorded fixtures follow the vendors' descriptions", () => {
     expect(undeclaredFields(doc, schema!, body).filter((f) => !allowed.has(f)), "fields the description does not declare").toEqual([]);
   });
 });
+
+// vercel-api.json's projects were recorded live at GET /v9/projects
+// (2026-08-31). The collector reads the same objects at /v10/projects now
+// (#153 finding 1), so they are checked against v10, in two parts:
+//
+//   - every field packages/collectors/vercel.mjs reads (pickProject) that the
+//     recording carries is declared by v10 and has a value v10 allows;
+//   - the body as a whole differs from v10 only in fields the collector does
+//     not read, and exactly these, so a new difference fails here. Measured:
+//     two fields v10 does not declare (below), `gitComments: null` where v10
+//     says an object, and v9's pagination ({count, next: null, prev}), which
+//     matches both of v10's pagination branches when next is null, where the
+//     description says oneOf.
+const VERCEL_V9 = fixture("connectors/__fixtures__/vercel-api.json")["/v9/projects"];
+const COLLECTOR_PROJECT_FIELDS = [
+  "id", "name", "framework", "nodeVersion", "serverlessFunctionRegion", "env",
+  "buildCommand", "outputDirectory", "rootDirectory", "installCommand", "devCommand", "link",
+];
+
+describe("the recorded Vercel /v9/projects body, read at /v10/projects", () => {
+  const { doc, validator } = load("vercel");
+  const schema = responseSchema(doc, { method: "get", path: "/v10/projects" }, 200)!;
+  const pageBranch = (schema.oneOf as any[]).find((b) => b.properties?.projects);
+  const item = pageBranch.properties.projects.items;
+
+  it("has projects to check", () => {
+    expect(VERCEL_V9.projects.length).toBeGreaterThan(0);
+  });
+
+  it.each(COLLECTOR_PROJECT_FIELDS)("%s: declared by v10, and every recorded value is one v10 allows", (field) => {
+    expect(item.properties[field], `v10 does not declare ${field}`).toBeTruthy();
+    for (const p of VERCEL_V9.projects) {
+      if (!(field in p)) continue;
+      expect(validator.check(item.properties[field], p[field]), `${p.name}.${field}`).toBeNull();
+    }
+  });
+
+  it("differs from v10 only in fields the collector does not read", () => {
+    expect(undeclaredFields(doc, schema, VERCEL_V9)).toEqual(
+      VERCEL_V9.projects.flatMap((_: unknown, i: number) => [`$.projects[${i}].previewDeploymentsDisabled`, `$.projects[${i}].previewDeploymentSuffix`])
+    );
+    for (const p of VERCEL_V9.projects) {
+      expect(validator.check(item, fillRequired(doc, item, p))).toBe("/gitComments must be object");
+      expect(validator.check(item, fillRequired(doc, item, { ...p, gitComments: undefined }))).toBeNull();
+    }
+  });
+});

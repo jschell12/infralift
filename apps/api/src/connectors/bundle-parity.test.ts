@@ -25,7 +25,11 @@ function fixture(name: string): Record<string, unknown> {
   );
 }
 
-const VERCEL_API = fixture("vercel-api.json");
+// vercel-api.json is a /v9/projects response captured live; the collector now
+// asks /v10/projects (#153 finding 1), and the recorded body is served there.
+// e2e/specs/fixtures-match-specs.test.ts checks it against the v10 schema.
+const VERCEL_RECORDED = fixture("vercel-api.json");
+const VERCEL_API = { "/v10/projects": VERCEL_RECORDED["/v9/projects"], "/v5/domains": VERCEL_RECORDED["/v5/domains"] };
 const HEROKU_API = fixture("heroku-api.json");
 
 let fetchMock: Mock;
@@ -148,7 +152,7 @@ describe("the snapshot cannot carry secrets", () => {
   it("pins the Vercel request surface too", async () => {
     await collectVercel({ token: "tok", fetchImpl: serve(VERCEL_API) });
     expect(new Set(requested)).toEqual(
-      new Set(["/v9/projects", "/v5/domains"])
+      new Set(["/v10/projects", "/v5/domains"])
     );
   });
 });

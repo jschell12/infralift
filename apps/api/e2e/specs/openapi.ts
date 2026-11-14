@@ -70,7 +70,7 @@ export class SpecValidator {
 
   constructor(private readonly doc: OpenApiDocument) {
     // Registered once, so "#/components/..." inside any schema resolves.
-    this.ajv.addSchema({ components: nullableToJsonSchema(doc.components ?? {}) }, "spec");
+    this.ajv.addSchema({ components: normalized(doc.components ?? {}) }, "spec");
   }
 
   /** null when `value` matches `schema`, else the first few errors as text. */
@@ -94,7 +94,26 @@ export class SpecValidator {
 
 /** A schema whose local refs point into the registered "spec" document. */
 function rebase(schema: Schema): Schema {
-  return nullableToJsonSchema(JSON.parse(JSON.stringify(schema).replace(/"\$ref":"#\//g, '"$ref":"spec#/')));
+  return normalized(JSON.parse(JSON.stringify(schema).replace(/"\$ref":"#\//g, '"$ref":"spec#/')));
+}
+
+/** A vendor schema in the form Ajv compiles. Both steps keep its meaning. */
+function normalized<T>(node: T): T {
+  return withoutDuplicateEnumValues(nullableToJsonSchema(node));
+}
+
+/** Enums listed with a value twice, which JSON Schema forbids and Ajv refuses
+ *  to compile, deduplicated. Vercel's /v10/projects env `target` enum lists
+ *  "development" and "preview" twice each (vercel/sdk@fe01b47). The set of values allowed
+ *  is the same either way. */
+function withoutDuplicateEnumValues<T>(node: T): T {
+  if (Array.isArray(node)) return node.map(withoutDuplicateEnumValues) as T;
+  if (!node || typeof node !== "object") return node;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(node)) {
+    out[k] = k === "enum" && Array.isArray(v) ? [...new Map(v.map((e) => [JSON.stringify(e), e])).values()] : withoutDuplicateEnumValues(v);
+  }
+  return out as T;
 }
 
 /** OpenAPI 3.0's `nullable: true` on a schema with no `type` (a $ref, an
@@ -210,7 +229,11 @@ function flatten(doc: OpenApiDocument, schema: Schema | undefined, value?: unkno
 }
 
 function fits(doc: OpenApiDocument, branch: Schema, value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return true;
+  // An array and an object never fit each other's branch (Vercel's
+  // /v10/projects answers a bare array or an object with `projects`).
+  if (Array.isArray(value)) return branch.type === undefined || branch.type === "array";
+  if (!value || typeof value !== "object") return true;
+  if (branch.type !== undefined && branch.type !== "object") return false;
   for (const [key, v] of Object.entries(value)) {
     const prop = deref(doc, branch.properties?.[key]);
     if (Array.isArray(prop?.enum) && !prop.enum.includes(v)) return false;

@@ -50,6 +50,8 @@ export interface CollectOptions {
 export declare const SCHEMA_VERSION: number;
 export declare const COLLECTOR_VERSION: string;
 export declare const ENDPOINTS: { path: string; why: string }[];
+/** Pages of /v10/projects read before collect() gives up with an error. */
+export declare const MAX_PROJECT_PAGES: number;
 export declare const FIELDS: Record<string, string[]>;
 
 export declare function collect(options: CollectOptions): Promise<VercelSnapshot>;

@@ -128,15 +128,13 @@ describe("Render (Prism, api-docs.render.com archived)", () => {
 
 describe("Vercel (Prism, vercel/sdk vercel-spec.json)", () => {
   const s = connectAndList("vercel", () => "e2e-vercel-token");
-  // Under the mock only. vercel-api.json is a /v9/projects response captured
-  // live on 2026-08-31, so production probably still serves v9; that needs a
-  // real-account check, not this test.
-  it("finding: the collector lists projects at GET /v9/projects, which the description omits, so the inventory fails under the mock", async () => {
-    expect(s.status, JSON.stringify(s.body)).toBe(502);
-    expect((await fetch(`${STACK.mocks.vercel}/v9/projects?limit=100`, { headers: { authorization: "Bearer h" } })).status).toBe(404);
-    // The documented domains call works on its own.
-    const domains: any = await (await fetch(`${STACK.mocks.vercel}/v5/domains?limit=100`, { headers: { authorization: "Bearer h" } })).json();
-    expect(domains.domains.map((d: any) => d.name)).toEqual([VERCEL_SEED.domain.name]);
+  // #153 finding 1: the collector listed projects at /v9/projects, which the
+  // description does not have, and this test pinned the 502. It now lists
+  // them at the documented /v10/projects.
+  it("lists the project and the domain", () => {
+    expect(s.status, JSON.stringify(s.body)).toBe(200);
+    expect(keysOf(s.rows)).toEqual([`vercel:domain ${VERCEL_SEED.domain.id}`, `vercel:project ${VERCEL_SEED.project.id}`].sort());
+    expect(s.rows!.get(`vercel:project ${VERCEL_SEED.project.id}`)).toMatchObject({ name: VERCEL_SEED.project.name });
   });
 });
 

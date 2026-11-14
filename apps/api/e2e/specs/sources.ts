@@ -293,13 +293,11 @@ export const SOURCES: SpecSource[] = [
     // Vercel's SDK repository commits the description it is generated from
     // (https://openapi.vercel.sh/, the published one).
     pin: { repo: "vercel/sdk", commit: "fe01b47433aa130b15c68a738a8773d9dd38b190", path: "vercel-spec.json" },
-    operations: ["/v2/user", "/v5/domains"].map(get),
-    undocumented: [
-      {
-        ...get("/v9/projects"),
-        note: "packages/collectors/vercel.mjs lists projects here; the description has /v10/projects and /v11/projects only, so the mock refuses it and the inventory fails under the mock. Production is unverified: src/connectors/__fixtures__/vercel-api.json is a /v9/projects response captured live on 2026-08-31 (commit 5c6eccb), so v9 still answered then; a real-account check is needed",
-      },
-    ],
+    // /v10/projects, not /v9: the description has v10 and v11 only. The
+    // collector moved from v9 (#153 finding 1); src/connectors/__fixtures__/
+    // vercel-api.json is still the v9 response captured live on 2026-08-31,
+    // and fixtures-match-specs.test.ts checks it against v10.
+    operations: ["/v2/user", "/v5/domains", "/v10/projects"].map(get),
   },
   {
     name: "heroku",

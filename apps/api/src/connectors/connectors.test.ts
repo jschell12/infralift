@@ -94,7 +94,7 @@ describe("vercel", () => {
 
   it("assess inventories projects and domains", async () => {
     mockRoute({
-      "/v9/projects": {
+      "/v10/projects": {
         projects: [
           { id: "p1", name: "my-app", framework: "nextjs", env: [{ key: "A" }] },
         ],
