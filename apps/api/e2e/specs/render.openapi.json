@@ -1,0 +1,2645 @@
+{
+ "openapi": "3.0.2",
+ "info": {
+  "title": "Render Public API",
+  "description": "Manage everything about your Render services",
+  "version": "1.0.0",
+  "contact": {
+   "name": "Render API",
+   "url": "https://community.render.com",
+   "email": "support@render.com"
+  },
+  "x-infralift-subset": "operations infralift calls, from https://api-docs.render.com/openapi/render-public-api-1.json (archived copy http://web.archive.org/web/20261111030124id_/https://api-docs.render.com/openapi/render-public-api-1.json)"
+ },
+ "x-infralift-source": {
+  "url": "http://web.archive.org/web/20261111030124id_/https://api-docs.render.com/openapi/render-public-api-1.json",
+  "published": "https://api-docs.render.com/openapi/render-public-api-1.json",
+  "sha256": "296bf09dc8a0241b6dfc56162805de2468be8d769d6210de5a286cfa0f03fbec"
+ },
+ "servers": [
+  {
+   "url": "https://api.render.com/v1"
+  }
+ ],
+ "security": [
+  {
+   "BearerAuth": []
+  }
+ ],
+ "paths": {
+  "/owners": {
+   "get": {
+    "summary": "List workspaces",
+    "description": "List the workspaces that your API key has access to, optionally filtered by name or owner email address.\n",
+    "operationId": "list-owners",
+    "tags": [
+     "Workspaces"
+    ],
+    "parameters": [
+     {
+      "name": "name",
+      "description": "Only return workspaces with one of the provided names. Only exact matches are returned.",
+      "in": "query",
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     },
+     {
+      "name": "email",
+      "description": "Only return workspaces owned by one of the provided email addresses.",
+      "in": "query",
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     },
+     {
+      "$ref": "#/components/parameters/cursorParam"
+     },
+     {
+      "$ref": "#/components/parameters/limitParam"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/ownerWithCursor"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401Unauthorized"
+     },
+     "406": {
+      "$ref": "#/components/responses/406NotAcceptable"
+     },
+     "429": {
+      "$ref": "#/components/responses/429RateLimit"
+     },
+     "500": {
+      "$ref": "#/components/responses/500InternalServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/503ServiceUnavailable"
+     }
+    }
+   }
+  },
+  "/services": {
+   "get": {
+    "summary": "List services",
+    "description": "List services matching the provided filters. If no filters are provided, returns all services you have permissions to view.\n",
+    "operationId": "list-services",
+    "tags": [
+     "Services"
+    ],
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/nameParam"
+     },
+     {
+      "$ref": "#/components/parameters/serviceTypeParam"
+     },
+     {
+      "$ref": "#/components/parameters/environmentIdParam"
+     },
+     {
+      "$ref": "#/components/parameters/envParam"
+     },
+     {
+      "$ref": "#/components/parameters/regionParam"
+     },
+     {
+      "$ref": "#/components/parameters/suspendedParam"
+     },
+     {
+      "$ref": "#/components/parameters/createdBeforeParam"
+     },
+     {
+      "$ref": "#/components/parameters/createdAfterParam"
+     },
+     {
+      "$ref": "#/components/parameters/updatedBeforeParam"
+     },
+     {
+      "$ref": "#/components/parameters/updatedAfterParam"
+     },
+     {
+      "$ref": "#/components/parameters/ownerIdParam"
+     },
+     {
+      "$ref": "#/components/parameters/includePreviewsParam"
+     },
+     {
+      "$ref": "#/components/parameters/cursorParam"
+     },
+     {
+      "$ref": "#/components/parameters/limitParam"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/serviceList"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/401Unauthorized"
+     },
+     "406": {
+      "$ref": "#/components/responses/406NotAcceptable"
+     },
+     "429": {
+      "$ref": "#/components/responses/429RateLimit"
+     },
+     "500": {
+      "$ref": "#/components/responses/500InternalServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/503ServiceUnavailable"
+     }
+    }
+   }
+  },
+  "/postgres": {
+   "get": {
+    "tags": [
+     "Postgres"
+    ],
+    "summary": "List Postgres instances",
+    "description": "List Postgres instances matching the provided filters. If no filters are provided, all Postgres instances are returned.\n",
+    "operationId": "list-postgres",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/nameParam"
+     },
+     {
+      "$ref": "#/components/parameters/regionParam"
+     },
+     {
+      "$ref": "#/components/parameters/suspendedParam"
+     },
+     {
+      "$ref": "#/components/parameters/createdBeforeParam"
+     },
+     {
+      "$ref": "#/components/parameters/createdAfterParam"
+     },
+     {
+      "$ref": "#/components/parameters/updatedBeforeParam"
+     },
+     {
+      "$ref": "#/components/parameters/updatedAfterParam"
+     },
+     {
+      "$ref": "#/components/parameters/ownerIdParam"
+     },
+     {
+      "$ref": "#/components/parameters/environmentIdParam"
+     },
+     {
+      "$ref": "#/components/parameters/includeReplicasParam"
+     },
+     {
+      "$ref": "#/components/parameters/cursorParam"
+     },
+     {
+      "$ref": "#/components/parameters/limitParam"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/postgresWithCursor"
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/400BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/401Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/404NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/409Conflict"
+     },
+     "429": {
+      "$ref": "#/components/responses/429RateLimit"
+     },
+     "500": {
+      "$ref": "#/components/responses/500InternalServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/503ServiceUnavailable"
+     }
+    }
+   }
+  },
+  "/redis": {
+   "get": {
+    "tags": [
+     "Redis (Deprecated)"
+    ],
+    "summary": "List Redis instances",
+    "deprecated": true,
+    "description": "List Redis instances matching the provided filters. If no filters are provided, all Redis instances are returned.\nThis API is deprecated in favor of the Key Value API.\n",
+    "operationId": "list-redis",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/nameParam"
+     },
+     {
+      "$ref": "#/components/parameters/regionParam"
+     },
+     {
+      "$ref": "#/components/parameters/createdBeforeParam"
+     },
+     {
+      "$ref": "#/components/parameters/createdAfterParam"
+     },
+     {
+      "$ref": "#/components/parameters/updatedBeforeParam"
+     },
+     {
+      "$ref": "#/components/parameters/updatedAfterParam"
+     },
+     {
+      "$ref": "#/components/parameters/ownerIdParam"
+     },
+     {
+      "$ref": "#/components/parameters/environmentIdParam"
+     },
+     {
+      "$ref": "#/components/parameters/cursorParam"
+     },
+     {
+      "$ref": "#/components/parameters/limitParam"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/redisWithCursor"
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/400BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/401Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/404NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/409Conflict"
+     },
+     "429": {
+      "$ref": "#/components/responses/429RateLimit"
+     },
+     "500": {
+      "$ref": "#/components/responses/500InternalServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/503ServiceUnavailable"
+     }
+    }
+   }
+  },
+  "/env-groups": {
+   "get": {
+    "operationId": "list-env-groups",
+    "tags": [
+     "Environment Groups"
+    ],
+    "summary": "List environment groups",
+    "description": "List environment groups matching the provided filters. If no filters are provided, all environment groups are returned.\n",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/nameParam"
+     },
+     {
+      "$ref": "#/components/parameters/createdBeforeParam"
+     },
+     {
+      "$ref": "#/components/parameters/createdAfterParam"
+     },
+     {
+      "$ref": "#/components/parameters/updatedBeforeParam"
+     },
+     {
+      "$ref": "#/components/parameters/updatedAfterParam"
+     },
+     {
+      "$ref": "#/components/parameters/ownerIdParam"
+     },
+     {
+      "$ref": "#/components/parameters/environmentIdParam"
+     },
+     {
+      "$ref": "#/components/parameters/cursorParam"
+     },
+     {
+      "$ref": "#/components/parameters/limitParam"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/envGroupMeta"
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/400BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/401Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/404NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/429RateLimit"
+     },
+     "500": {
+      "$ref": "#/components/responses/500InternalServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/503ServiceUnavailable"
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "parameters": {
+   "createdAfterParam": {
+    "name": "createdAfter",
+    "in": "query",
+    "schema": {
+     "type": "string",
+     "format": "date-time"
+    },
+    "required": false,
+    "description": "Filter for resources created after a certain time (specified as an ISO 8601 timestamp)"
+   },
+   "createdBeforeParam": {
+    "name": "createdBefore",
+    "in": "query",
+    "schema": {
+     "type": "string",
+     "format": "date-time"
+    },
+    "required": false,
+    "description": "Filter for resources created before a certain time (specified as an ISO 8601 timestamp)"
+   },
+   "cursorParam": {
+    "name": "cursor",
+    "in": "query",
+    "required": false,
+    "description": "The position in the result list to start from when fetching paginated results. For details, see [Pagination](https://api-docs.render.com/reference/pagination).",
+    "schema": {
+     "type": "string"
+    }
+   },
+   "envParam": {
+    "name": "env",
+    "in": "query",
+    "schema": {
+     "type": "array",
+     "items": {
+      "$ref": "#/components/schemas/serviceRuntime"
+     }
+    },
+    "style": "form",
+    "explode": false,
+    "required": false,
+    "deprecated": true,
+    "description": "Filter for environments (runtimes) of services (deprecated; use `runtime` instead)"
+   },
+   "environmentIdParam": {
+    "name": "environmentId",
+    "in": "query",
+    "schema": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "style": "form",
+    "explode": false,
+    "required": false,
+    "description": "Filter for resources that belong to an environment"
+   },
+   "includePreviewsParam": {
+    "name": "includePreviews",
+    "in": "query",
+    "schema": {
+     "type": "boolean",
+     "default": true
+    },
+    "required": false,
+    "description": "Include previews in the response"
+   },
+   "includeReplicasParam": {
+    "name": "includeReplicas",
+    "in": "query",
+    "schema": {
+     "type": "boolean",
+     "default": true
+    },
+    "required": false,
+    "description": "Include replicas in the response"
+   },
+   "limitParam": {
+    "name": "limit",
+    "in": "query",
+    "required": false,
+    "description": "The maximum number of items to return. For details, see [Pagination](https://api-docs.render.com/reference/pagination).",
+    "schema": {
+     "type": "integer",
+     "default": 20,
+     "minimum": 1,
+     "maximum": 100,
+     "description": "Defaults to 20"
+    }
+   },
+   "nameParam": {
+    "name": "name",
+    "in": "query",
+    "schema": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "style": "form",
+    "explode": false,
+    "required": false,
+    "description": "Filter by name"
+   },
+   "ownerIdParam": {
+    "name": "ownerId",
+    "in": "query",
+    "description": "The ID of the workspaces to return resources for",
+    "schema": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "style": "form",
+    "explode": false,
+    "required": false
+   },
+   "regionParam": {
+    "name": "region",
+    "in": "query",
+    "schema": {
+     "type": "array",
+     "items": {
+      "$ref": "#/components/schemas/region"
+     }
+    },
+    "style": "form",
+    "explode": false,
+    "required": false,
+    "description": "Filter by resource region"
+   },
+   "serviceTypeParam": {
+    "name": "type",
+    "in": "query",
+    "schema": {
+     "type": "array",
+     "items": {
+      "$ref": "#/components/schemas/serviceType"
+     }
+    },
+    "style": "form",
+    "explode": false,
+    "required": false,
+    "description": "Filter for types of services"
+   },
+   "suspendedParam": {
+    "name": "suspended",
+    "in": "query",
+    "schema": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "enum": [
+       "suspended",
+       "not_suspended"
+      ]
+     }
+    },
+    "style": "form",
+    "explode": false,
+    "required": false,
+    "description": "Filter resources based on whether they're suspended or not suspended"
+   },
+   "updatedAfterParam": {
+    "name": "updatedAfter",
+    "in": "query",
+    "schema": {
+     "type": "string",
+     "format": "date-time"
+    },
+    "required": false,
+    "description": "Filter for resources updated after a certain time (specified as an ISO 8601 timestamp)"
+   },
+   "updatedBeforeParam": {
+    "name": "updatedBefore",
+    "in": "query",
+    "schema": {
+     "type": "string",
+     "format": "date-time"
+    },
+    "required": false,
+    "description": "Filter for resources updated before a certain time (specified as an ISO 8601 timestamp)"
+   }
+  },
+  "responses": {
+   "400BadRequest": {
+    "description": "The request could not be understood by the server.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/error"
+      }
+     }
+    }
+   },
+   "401Unauthorized": {
+    "description": "Authorization information is missing or invalid.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/error"
+      }
+     }
+    }
+   },
+   "404NotFound": {
+    "description": "Unable to find the requested resource.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/error"
+      }
+     }
+    }
+   },
+   "406NotAcceptable": {
+    "description": "Unable to generate preferred media types as specified by Accept request header.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/error"
+      }
+     }
+    }
+   },
+   "409Conflict": {
+    "description": "The current state of the resource conflicts with this request.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/error"
+      }
+     }
+    }
+   },
+   "429RateLimit": {
+    "description": "Rate limit has been surpassed.\n\nRate-limited endpoints also return `RateLimit-Limit`, `RateLimit-Remaining`, and\n`RateLimit-Reset` on successful responses so clients can track their remaining quota.\n",
+    "headers": {
+     "Retry-After": {
+      "description": "Seconds to wait before retrying the request.",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     "RateLimit-Limit": {
+      "description": "Maximum number of requests allowed in the current window.",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     "RateLimit-Remaining": {
+      "description": "Number of requests remaining in the current window. Always `0` for this response.",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     "RateLimit-Reset": {
+      "description": "Seconds until the current rate limit window resets.",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    },
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/error"
+      }
+     }
+    }
+   },
+   "500InternalServerError": {
+    "description": "An unexpected server error has occurred.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/error"
+      }
+     }
+    }
+   },
+   "503ServiceUnavailable": {
+    "description": "Server currently unavailable.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/error"
+      }
+     }
+    }
+   }
+  },
+  "schemas": {
+   "autoDeploy": {
+    "type": "string",
+    "enum": [
+     "yes",
+     "no"
+    ],
+    "default": "yes",
+    "deprecated": true,
+    "description": "Deprecated: use `autoDeployTrigger` instead. You can't set both `autoDeploy` and `autoDeployTrigger` in the same request.\n\n- `yes` is equivalent to `autoDeployTrigger: commit`.\n- `no` is equivalent to `autoDeployTrigger: off`.\n"
+   },
+   "backgroundWorkerDetails": {
+    "type": "object",
+    "required": [
+     "env",
+     "runtime",
+     "envSpecificDetails",
+     "plan",
+     "region",
+     "numInstances",
+     "buildPlan"
+    ],
+    "properties": {
+     "autoscaling": {
+      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+     },
+     "disk": {
+      "$ref": "#/components/schemas/webServiceDetails/properties/disk"
+     },
+     "env": {
+      "$ref": "#/components/schemas/serviceEnv"
+     },
+     "envSpecificDetails": {
+      "$ref": "#/components/schemas/envSpecificDetails"
+     },
+     "numInstances": {
+      "type": "integer",
+      "description": "For a *manually* scaled service, this is the number of instances the service is scaled to. DOES NOT indicate the number of running instances for an *autoscaled* service."
+     },
+     "parentServer": {
+      "$ref": "#/components/schemas/resource"
+     },
+     "plan": {
+      "$ref": "#/components/schemas/plan"
+     },
+     "pullRequestPreviewsEnabled": {
+      "$ref": "#/components/schemas/pullRequestPreviewsEnabled"
+     },
+     "previews": {
+      "$ref": "#/components/schemas/previews"
+     },
+     "region": {
+      "$ref": "#/components/schemas/region"
+     },
+     "runtime": {
+      "$ref": "#/components/schemas/serviceRuntime"
+     },
+     "sshAddress": {
+      "$ref": "#/components/schemas/sshAddress"
+     },
+     "buildPlan": {
+      "$ref": "#/components/schemas/buildPlan"
+     },
+     "maxShutdownDelaySeconds": {
+      "$ref": "#/components/schemas/maxShutdownDelaySeconds"
+     }
+    }
+   },
+   "backgroundWorkerDetailsPOST": {
+    "type": "object",
+    "properties": {
+     "buildSourceId": {
+      "$ref": "#/paths/~1build-sources~1{buildSourceId}/parameters/0/schema",
+      "description": "The ID of the Build Source to build and deploy from. Provides all source and build configuration: omit `repo`, `branch`, `image`, `buildFilter`, `runtime`, and build-related `envSpecificDetails` fields when set. A git-backed Build Source must be in the same region as the service; otherwise the request is rejected with 400 and `code: build_source_region_mismatch`."
+     },
+     "autoscaling": {
+      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+     },
+     "disk": {
+      "$ref": "#/components/schemas/serviceDisk"
+     },
+     "env": {
+      "$ref": "#/components/schemas/serviceEnv"
+     },
+     "runtime": {
+      "$ref": "#/components/schemas/serviceRuntime",
+      "x-go-type-skip-optional-pointer": true,
+      "description": "Required unless `buildSourceId` is set, since the build source provides its own runtime."
+     },
+     "envSpecificDetails": {
+      "$ref": "#/components/schemas/envSpecificDetailsPOST"
+     },
+     "numInstances": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Defaults to 1"
+     },
+     "plan": {
+      "$ref": "#/components/schemas/paidPlan"
+     },
+     "preDeployCommand": {
+      "type": "string"
+     },
+     "pullRequestPreviewsEnabled": {
+      "$ref": "#/components/schemas/pullRequestPreviewsEnabled"
+     },
+     "previews": {
+      "$ref": "#/components/schemas/previews"
+     },
+     "region": {
+      "$ref": "#/components/schemas/region"
+     },
+     "maxShutdownDelaySeconds": {
+      "$ref": "#/components/schemas/maxShutdownDelaySeconds"
+     }
+    }
+   },
+   "buildFilter": {
+    "type": "object",
+    "required": [
+     "paths",
+     "ignoredPaths"
+    ],
+    "properties": {
+     "paths": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "ignoredPaths": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "buildPlan": {
+    "type": "string",
+    "enum": [
+     "starter",
+     "performance"
+    ],
+    "default": "starter"
+   },
+   "cache": {
+    "type": "object",
+    "required": [
+     "profile"
+    ],
+    "properties": {
+     "profile": {
+      "type": "string",
+      "enum": [
+       "no-cache",
+       "origin-controlled",
+       "origin-controlled-all"
+      ],
+      "default": "no-cache"
+     }
+    }
+   },
+   "cidrBlockAndDescription": {
+    "type": "object",
+    "required": [
+     "cidrBlock",
+     "description"
+    ],
+    "properties": {
+     "cidrBlock": {
+      "type": "string"
+     },
+     "description": {
+      "description": "User-provided description of the CIDR block",
+      "type": "string"
+     }
+    }
+   },
+   "cronJobDetails": {
+    "required": [
+     "env",
+     "runtime",
+     "envSpecificDetails",
+     "plan",
+     "region",
+     "schedule",
+     "buildPlan"
+    ],
+    "type": "object",
+    "properties": {
+     "env": {
+      "$ref": "#/components/schemas/serviceEnv"
+     },
+     "envSpecificDetails": {
+      "$ref": "#/components/schemas/envSpecificDetails"
+     },
+     "lastSuccessfulRunAt": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "plan": {
+      "$ref": "#/components/schemas/plan"
+     },
+     "region": {
+      "$ref": "#/components/schemas/region"
+     },
+     "runtime": {
+      "$ref": "#/components/schemas/serviceRuntime"
+     },
+     "schedule": {
+      "type": "string"
+     },
+     "buildPlan": {
+      "$ref": "#/components/schemas/buildPlan"
+     }
+    }
+   },
+   "cronJobDetailsPOST": {
+    "type": "object",
+    "required": [
+     "schedule"
+    ],
+    "properties": {
+     "buildSourceId": {
+      "$ref": "#/paths/~1build-sources~1{buildSourceId}/parameters/0/schema",
+      "description": "The ID of the Build Source to build and deploy from. Provides all source and build configuration: omit `repo`, `branch`, `image`, `buildFilter`, `runtime`, and build-related `envSpecificDetails` fields when set. A git-backed Build Source must be in the same region as the service; otherwise the request is rejected with 400 and `code: build_source_region_mismatch`."
+     },
+     "env": {
+      "$ref": "#/components/schemas/serviceEnv"
+     },
+     "runtime": {
+      "$ref": "#/components/schemas/serviceRuntime",
+      "x-go-type-skip-optional-pointer": true,
+      "description": "Required unless `buildSourceId` is set, since the build source provides its own runtime."
+     },
+     "envSpecificDetails": {
+      "$ref": "#/components/schemas/envSpecificDetails"
+     },
+     "plan": {
+      "$ref": "#/components/schemas/paidPlan"
+     },
+     "region": {
+      "$ref": "#/components/schemas/region"
+     },
+     "schedule": {
+      "type": "string"
+     }
+    }
+   },
+   "cursor": {
+    "type": "string"
+   },
+   "databaseRole": {
+    "type": "string",
+    "enum": [
+     "primary",
+     "replica"
+    ]
+   },
+   "databaseStatus": {
+    "type": "string",
+    "enum": [
+     "creating",
+     "available",
+     "unavailable",
+     "config_restart",
+     "suspended",
+     "maintenance_scheduled",
+     "maintenance_in_progress",
+     "recovery_failed",
+     "recovery_in_progress",
+     "unknown",
+     "updating_instance"
+    ]
+   },
+   "dockerDetails": {
+    "type": "object",
+    "required": [
+     "dockerCommand",
+     "dockerContext",
+     "dockerfilePath"
+    ],
+    "properties": {
+     "dockerCommand": {
+      "type": "string"
+     },
+     "dockerContext": {
+      "type": "string"
+     },
+     "dockerfilePath": {
+      "type": "string"
+     },
+     "preDeployCommand": {
+      "type": "string"
+     },
+     "registryCredential": {
+      "$ref": "#/components/schemas/registryCredential"
+     }
+    }
+   },
+   "dockerDetailsPOST": {
+    "type": "object",
+    "properties": {
+     "dockerCommand": {
+      "type": "string"
+     },
+     "dockerContext": {
+      "type": "string"
+     },
+     "dockerfilePath": {
+      "type": "string",
+      "description": "Defaults to \"./Dockerfile\""
+     },
+     "registryCredentialId": {
+      "type": "string"
+     }
+    }
+   },
+   "envGroupLink": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "type": {
+      "$ref": "#/components/schemas/serviceTypeShort"
+     }
+    }
+   },
+   "envGroupMeta": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "ownerId",
+     "createdAt",
+     "updatedAt",
+     "serviceLinks"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "ownerId": {
+      "type": "string"
+     },
+     "createdAt": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "serviceLinks": {
+      "description": "List of serviceIds linked to the envGroup",
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/envGroupLink"
+      }
+     },
+     "environmentId": {
+      "type": "string"
+     }
+    }
+   },
+   "envSpecificDetails": {
+    "oneOf": [
+     {
+      "$ref": "#/components/schemas/dockerDetails"
+     },
+     {
+      "$ref": "#/components/schemas/nativeEnvironmentDetails"
+     }
+    ]
+   },
+   "envSpecificDetailsPOST": {
+    "oneOf": [
+     {
+      "$ref": "#/components/schemas/dockerDetailsPOST"
+     },
+     {
+      "$ref": "#/components/schemas/nativeEnvironmentDetailsPOST"
+     }
+    ]
+   },
+   "error": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "message": {
+      "type": "string"
+     },
+     "code": {
+      "type": "string",
+      "description": "A stable, machine-readable identifier present on specific errors that clients can handle specially. Each endpoint documents the codes it can return. The errorCode schema lists the full vocabulary of codes."
+     }
+    }
+   },
+   "headerInput": {
+    "type": "object",
+    "required": [
+     "path",
+     "name",
+     "value"
+    ],
+    "properties": {
+     "path": {
+      "type": "string",
+      "description": "The request path to add the header to. Wildcards will cause headers to be applied to all matching paths."
+     },
+     "name": {
+      "type": "string",
+      "description": "Header name"
+     },
+     "value": {
+      "type": "string",
+      "description": "Header value"
+     }
+    }
+   },
+   "image": {
+    "type": "object",
+    "required": [
+     "imagePath",
+     "ownerId"
+    ],
+    "properties": {
+     "ownerId": {
+      "type": "string",
+      "description": "The ID of the owner for this image. This should match the owner of the service as well as the owner of any specified registry credential."
+     },
+     "registryCredentialId": {
+      "type": "string",
+      "description": "Optional reference to the registry credential passed to the image repository to retrieve this image."
+     },
+     "imagePath": {
+      "type": "string",
+      "description": "Path to the image used for this server (e.g docker.io/library/nginx:latest)."
+     }
+    }
+   },
+   "maintenanceMode": {
+    "type": "object",
+    "required": [
+     "enabled",
+     "uri"
+    ],
+    "properties": {
+     "enabled": {
+      "type": "boolean"
+     },
+     "uri": {
+      "type": "string",
+      "description": "The page to be served when [maintenance mode](https://render.com/docs/maintenance-mode) is enabled. When empty, the default maintenance mode page is served."
+     }
+    }
+   },
+   "maxShutdownDelaySeconds": {
+    "type": "integer",
+    "description": "The maximum amount of time (in seconds) that Render waits for your application process to exit gracefully after sending it a SIGTERM signal.",
+    "minimum": 1,
+    "maximum": 300,
+    "default": 30
+   },
+   "nativeEnvironmentDetails": {
+    "type": "object",
+    "required": [
+     "buildCommand",
+     "startCommand"
+    ],
+    "properties": {
+     "buildCommand": {
+      "type": "string"
+     },
+     "startCommand": {
+      "type": "string"
+     },
+     "preDeployCommand": {
+      "type": "string"
+     }
+    }
+   },
+   "nativeEnvironmentDetailsPOST": {
+    "type": "object",
+    "required": [
+     "buildCommand",
+     "startCommand"
+    ],
+    "properties": {
+     "buildCommand": {
+      "type": "string"
+     },
+     "startCommand": {
+      "type": "string"
+     }
+    },
+    "description": "Fields for native environment (runtime) services"
+   },
+   "notifySetting": {
+    "type": "string",
+    "enum": [
+     "default",
+     "notify",
+     "ignore"
+    ]
+   },
+   "owner": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "email",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "email": {
+      "type": "string"
+     },
+     "ipAllowList": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/cidrBlockAndDescription"
+      }
+     },
+     "twoFactorAuthEnabled": {
+      "type": "boolean",
+      "description": "Whether two-factor authentication is enabled for the owner. Only present if `type` is `user`."
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "user",
+       "team"
+      ]
+     }
+    }
+   },
+   "ownerWithCursor": {
+    "type": "object",
+    "properties": {
+     "owner": {
+      "$ref": "#/components/schemas/owner"
+     },
+     "cursor": {
+      "$ref": "#/components/schemas/cursor"
+     }
+    }
+   },
+   "paidPlan": {
+    "type": "string",
+    "enum": [
+     "starter",
+     "standard",
+     "pro",
+     "pro_plus",
+     "pro_max",
+     "pro_ultra",
+     "0.5c-512mb",
+     "1c-2g",
+     "2c-4g",
+     "2c-8g",
+     "2c-16g",
+     "4c-8g",
+     "4c-16g",
+     "4c-32g",
+     "8c-16g",
+     "8c-32g",
+     "8c-64g",
+     "12c-24g",
+     "12c-48g",
+     "12c-96g"
+    ],
+    "default": "0.5c-512mb",
+    "description": "Defaults to `0.5c-512mb` when creating a new service."
+   },
+   "persistenceMode": {
+    "type": "string",
+    "description": "The persistence mode for the Key Value instance. The default for paid instances is journal_snapshot (both journaling and snapshots). Only turn off persistence if you're using this Key Value instance as a cache and are okay with losing data. Free instances do not have persistence.",
+    "enum": [
+     "journal_snapshot",
+     "snapshot",
+     "off"
+    ]
+   },
+   "plan": {
+    "type": "string",
+    "enum": [
+     "starter",
+     "starter_plus",
+     "standard",
+     "standard_plus",
+     "pro",
+     "pro_plus",
+     "pro_max",
+     "pro_ultra",
+     "free",
+     "custom",
+     "starter_legacy",
+     "standard_legacy",
+     "standard_plus_legacy",
+     "pro_legacy",
+     "pro_plus_legacy",
+     "0.5c-512mb",
+     "1c-2g",
+     "2c-4g",
+     "2c-8g",
+     "2c-16g",
+     "4c-8g",
+     "4c-16g",
+     "4c-32g",
+     "8c-16g",
+     "8c-32g",
+     "8c-64g",
+     "12c-24g",
+     "12c-48g",
+     "12c-96g"
+    ],
+    "description": "The compute plan to use. Legacy variants (`*_legacy`) identify grandfathered plans no longer offered for new services. Note that base services on any paid compute plan can't create preview instances with the `free` plan."
+   },
+   "postgres": {
+    "type": "object",
+    "required": [
+     "id",
+     "ipAllowList",
+     "createdAt",
+     "updatedAt",
+     "databaseName",
+     "databaseUser",
+     "highAvailabilityEnabled",
+     "name",
+     "owner",
+     "plan",
+     "region",
+     "readReplicas",
+     "role",
+     "status",
+     "version",
+     "suspended",
+     "suspenders",
+     "dashboardUrl",
+     "diskAutoscalingEnabled",
+     "connectionPool"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "ipAllowList": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/cidrBlockAndDescription"
+      }
+     },
+     "createdAt": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "expiresAt": {
+      "description": "The time at which the database will be expire. Applies to free tier databases only.",
+      "type": "string",
+      "format": "date-time"
+     },
+     "databaseName": {
+      "type": "string"
+     },
+     "databaseUser": {
+      "type": "string"
+     },
+     "environmentId": {
+      "type": "string"
+     },
+     "highAvailabilityEnabled": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     },
+     "owner": {
+      "$ref": "#/components/schemas/owner"
+     },
+     "plan": {
+      "$ref": "#/components/schemas/postgresPOSTInput/properties/plan"
+     },
+     "diskSizeGB": {
+      "type": "integer"
+     },
+     "primaryPostgresID": {
+      "type": "string"
+     },
+     "region": {
+      "$ref": "#/components/schemas/region"
+     },
+     "readReplicas": {
+      "$ref": "#/components/schemas/readReplicas"
+     },
+     "role": {
+      "$ref": "#/components/schemas/databaseRole"
+     },
+     "status": {
+      "$ref": "#/components/schemas/databaseStatus"
+     },
+     "version": {
+      "$ref": "#/components/schemas/postgresVersion"
+     },
+     "suspended": {
+      "type": "string",
+      "enum": [
+       "suspended",
+       "not_suspended"
+      ]
+     },
+     "suspenders": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/suspenderType"
+      }
+     },
+     "dashboardUrl": {
+      "type": "string",
+      "description": "The URL to view the Postgres instance in the Render Dashboard"
+     },
+     "diskAutoscalingEnabled": {
+      "type": "boolean"
+     },
+     "connectionPool": {
+      "type": "string",
+      "description": "What connection pool to use (if any) out of 'pgbouncer' and 'none'"
+     }
+    }
+   },
+   "postgresPOSTInput": {
+    "type": "object",
+    "required": [
+     "name",
+     "plan",
+     "ownerId",
+     "version"
+    ],
+    "properties": {
+     "databaseName": {
+      "type": "string",
+      "default": "randomly generated"
+     },
+     "databaseUser": {
+      "type": "string",
+      "default": "randomly generated"
+     },
+     "datadogAPIKey": {
+      "type": "string",
+      "description": "The Datadog API key for the Datadog agent to monitor the new database."
+     },
+     "datadogSite": {
+      "type": "string",
+      "description": "Datadog region to use for monitoring the new database. Defaults to 'US1'."
+     },
+     "name": {
+      "type": "string",
+      "description": "The name of the database as it will appear in the Render Dashboard"
+     },
+     "enableHighAvailability": {
+      "type": "boolean",
+      "default": false
+     },
+     "environmentId": {
+      "type": "string"
+     },
+     "ownerId": {
+      "type": "string",
+      "description": "The ID of the workspace to create the database for"
+     },
+     "plan": {
+      "type": "string",
+      "enum": [
+       "free",
+       "starter",
+       "standard",
+       "pro",
+       "pro_plus",
+       "custom",
+       "basic_256mb",
+       "basic_1gb",
+       "basic_4gb",
+       "pro_4gb",
+       "pro_8gb",
+       "pro_16gb",
+       "pro_32gb",
+       "pro_64gb",
+       "pro_128gb",
+       "pro_192gb",
+       "pro_256gb",
+       "pro_384gb",
+       "pro_512gb",
+       "accelerated_16gb",
+       "accelerated_32gb",
+       "accelerated_64gb",
+       "accelerated_128gb",
+       "accelerated_256gb",
+       "accelerated_384gb",
+       "accelerated_512gb",
+       "accelerated_768gb",
+       "accelerated_1024gb",
+       "0.1c-256mb",
+       "0.5c-1g",
+       "1c-2g",
+       "1c-4g",
+       "2c-4g",
+       "2c-8g",
+       "2c-16g",
+       "4c-16g",
+       "4c-32g",
+       "8c-32g",
+       "8c-64g",
+       "16c-64g",
+       "16c-128g",
+       "32c-128g",
+       "32c-256g",
+       "48c-192g",
+       "48c-384g",
+       "64c-256g",
+       "64c-512g",
+       "96c-384g",
+       "96c-768g",
+       "128c-512g",
+       "128c-1024g"
+      ]
+     },
+     "diskSizeGB": {
+      "type": "integer",
+      "description": "The number of gigabytes of disk space to allocate for the database"
+     },
+     "enableDiskAutoscaling": {
+      "type": "boolean",
+      "default": false
+     },
+     "connectionPool": {
+      "type": "string",
+      "default": "none",
+      "description": "What connection pool to use (if any) out of 'pgbouncer' and 'none'"
+     },
+     "region": {
+      "$ref": "#/components/schemas/region"
+     },
+     "ipAllowList": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/cidrBlockAndDescription"
+      }
+     },
+     "readReplicas": {
+      "$ref": "#/components/schemas/readReplicasInput"
+     },
+     "version": {
+      "$ref": "#/components/schemas/postgresVersion"
+     }
+    },
+    "description": "Input for creating a database"
+   },
+   "postgresVersion": {
+    "type": "string",
+    "description": "The PostgreSQL version",
+    "enum": [
+     "11",
+     "12",
+     "13",
+     "14",
+     "15",
+     "16",
+     "17",
+     "18"
+    ]
+   },
+   "postgresWithCursor": {
+    "type": "object",
+    "required": [
+     "postgres",
+     "cursor"
+    ],
+    "properties": {
+     "postgres": {
+      "$ref": "#/components/schemas/postgres"
+     },
+     "cursor": {
+      "$ref": "#/components/schemas/cursor"
+     }
+    }
+   },
+   "previews": {
+    "type": "object",
+    "properties": {
+     "generation": {
+      "type": "string",
+      "enum": [
+       "off",
+       "manual",
+       "automatic"
+      ],
+      "default": "off",
+      "description": "Defaults to \"off\""
+     }
+    }
+   },
+   "privateServiceDetails": {
+    "type": "object",
+    "required": [
+     "env",
+     "runtime",
+     "envSpecificDetails",
+     "plan",
+     "region",
+     "numInstances",
+     "buildPlan",
+     "openPorts",
+     "url"
+    ],
+    "properties": {
+     "autoscaling": {
+      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+     },
+     "disk": {
+      "$ref": "#/components/schemas/webServiceDetails/properties/disk"
+     },
+     "env": {
+      "$ref": "#/components/schemas/serviceEnv"
+     },
+     "envSpecificDetails": {
+      "$ref": "#/components/schemas/envSpecificDetails"
+     },
+     "numInstances": {
+      "type": "integer",
+      "description": "For a *manually* scaled service, this is the number of instances the service is scaled to. DOES NOT indicate the number of running instances for an *autoscaled* service."
+     },
+     "openPorts": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/serverPort"
+      }
+     },
+     "parentServer": {
+      "$ref": "#/components/schemas/resource"
+     },
+     "plan": {
+      "$ref": "#/components/schemas/plan"
+     },
+     "pullRequestPreviewsEnabled": {
+      "$ref": "#/components/schemas/pullRequestPreviewsEnabled"
+     },
+     "previews": {
+      "$ref": "#/components/schemas/previews"
+     },
+     "region": {
+      "$ref": "#/components/schemas/region"
+     },
+     "runtime": {
+      "$ref": "#/components/schemas/serviceRuntime"
+     },
+     "sshAddress": {
+      "$ref": "#/components/schemas/sshAddress"
+     },
+     "url": {
+      "type": "string"
+     },
+     "buildPlan": {
+      "$ref": "#/components/schemas/buildPlan"
+     },
+     "maxShutdownDelaySeconds": {
+      "$ref": "#/components/schemas/maxShutdownDelaySeconds"
+     }
+    }
+   },
+   "privateServiceDetailsPOST": {
+    "type": "object",
+    "properties": {
+     "buildSourceId": {
+      "$ref": "#/paths/~1build-sources~1{buildSourceId}/parameters/0/schema",
+      "description": "The ID of the Build Source to build and deploy from. Provides all source and build configuration: omit `repo`, `branch`, `image`, `buildFilter`, `runtime`, and build-related `envSpecificDetails` fields when set. A git-backed Build Source must be in the same region as the service; otherwise the request is rejected with 400 and `code: build_source_region_mismatch`."
+     },
+     "autoscaling": {
+      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+     },
+     "disk": {
+      "$ref": "#/components/schemas/serviceDisk"
+     },
+     "env": {
+      "$ref": "#/components/schemas/serviceEnv"
+     },
+     "runtime": {
+      "$ref": "#/components/schemas/serviceRuntime",
+      "x-go-type-skip-optional-pointer": true,
+      "description": "Required unless `buildSourceId` is set, since the build source provides its own runtime."
+     },
+     "envSpecificDetails": {
+      "$ref": "#/components/schemas/envSpecificDetailsPOST"
+     },
+     "numInstances": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Defaults to 1"
+     },
+     "plan": {
+      "$ref": "#/components/schemas/paidPlan"
+     },
+     "preDeployCommand": {
+      "type": "string"
+     },
+     "pullRequestPreviewsEnabled": {
+      "$ref": "#/components/schemas/pullRequestPreviewsEnabled"
+     },
+     "previews": {
+      "$ref": "#/components/schemas/previews"
+     },
+     "region": {
+      "$ref": "#/components/schemas/region"
+     },
+     "maxShutdownDelaySeconds": {
+      "$ref": "#/components/schemas/maxShutdownDelaySeconds"
+     }
+    }
+   },
+   "pullRequestPreviewsEnabled": {
+    "type": "string",
+    "enum": [
+     "yes",
+     "no"
+    ],
+    "default": "no",
+    "deprecated": true,
+    "description": "This field has been deprecated. previews.generation should be used in its place."
+   },
+   "readReplica": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "The replica instance identifier."
+     },
+     "name": {
+      "type": "string",
+      "description": "The display name of the replica instance."
+     }
+    },
+    "required": [
+     "id",
+     "name"
+    ]
+   },
+   "readReplicaInput": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "The display name of the replica instance."
+     }
+    },
+    "required": [
+     "name"
+    ]
+   },
+   "readReplicas": {
+    "type": "array",
+    "items": {
+     "$ref": "#/components/schemas/readReplica"
+    }
+   },
+   "readReplicasInput": {
+    "type": "array",
+    "items": {
+     "$ref": "#/components/schemas/readReplicaInput"
+    }
+   },
+   "redis": {
+    "type": "object",
+    "description": "A Redis instance",
+    "required": [
+     "id",
+     "createdAt",
+     "updatedAt",
+     "status",
+     "region",
+     "plan",
+     "name",
+     "owner",
+     "options",
+     "ipAllowList",
+     "version",
+     "dashboardUrl"
+    ],
+    "properties": {
+     "id": {
+      "description": "The ID of the Redis instance",
+      "type": "string"
+     },
+     "createdAt": {
+      "description": "The creation time of the Redis instance",
+      "type": "string",
+      "format": "date-time"
+     },
+     "updatedAt": {
+      "description": "The last updated time of the Redis instance",
+      "type": "string",
+      "format": "date-time"
+     },
+     "status": {
+      "$ref": "#/components/schemas/databaseStatus"
+     },
+     "region": {
+      "$ref": "#/components/schemas/region"
+     },
+     "plan": {
+      "$ref": "#/components/schemas/redisPlan"
+     },
+     "name": {
+      "description": "The name of the Redis instance",
+      "type": "string"
+     },
+     "owner": {
+      "$ref": "#/components/schemas/owner"
+     },
+     "options": {
+      "$ref": "#/components/schemas/redisOptions"
+     },
+     "ipAllowList": {
+      "description": "The IP allow list for the Redis instance",
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/cidrBlockAndDescription"
+      }
+     },
+     "environmentId": {
+      "description": "The ID of the environment the Redis instance is associated with",
+      "type": "string"
+     },
+     "version": {
+      "description": "The version of Redis",
+      "type": "string"
+     },
+     "dashboardUrl": {
+      "type": "string",
+      "description": "The URL to view the Redis instance in the Render Dashboard"
+     }
+    }
+   },
+   "redisOptions": {
+    "description": "Options for a Redis instance",
+    "type": "object",
+    "properties": {
+     "maxmemoryPolicy": {
+      "type": "string"
+     },
+     "persistenceMode": {
+      "$ref": "#/components/schemas/persistenceMode"
+     }
+    }
+   },
+   "redisPlan": {
+    "type": "string",
+    "enum": [
+     "free",
+     "starter",
+     "standard",
+     "pro",
+     "pro_plus",
+     "custom",
+     "256mb",
+     "1g",
+     "5g",
+     "10g",
+     "20g",
+     "40g"
+    ],
+    "x-enum-varnames": [
+     "RedisPlanFree",
+     "RedisPlanStarter",
+     "RedisPlanStandard",
+     "RedisPlanPro",
+     "RedisPlanPro_plus",
+     "RedisPlanCustom",
+     "RedisPlan256mb",
+     "RedisPlan1g",
+     "RedisPlan5g",
+     "RedisPlan10g",
+     "RedisPlan20g",
+     "RedisPlan40g"
+    ]
+   },
+   "redisWithCursor": {
+    "type": "object",
+    "required": [
+     "redis",
+     "cursor"
+    ],
+    "properties": {
+     "redis": {
+      "$ref": "#/components/schemas/redis"
+     },
+     "cursor": {
+      "$ref": "#/components/schemas/cursor"
+     }
+    }
+   },
+   "region": {
+    "type": "string",
+    "enum": [
+     "frankfurt",
+     "oregon",
+     "ohio",
+     "singapore",
+     "virginia"
+    ],
+    "default": "oregon",
+    "description": "Defaults to \"oregon\""
+   },
+   "registryCredential": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "username",
+     "registry",
+     "updatedAt"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "Unique identifier for this credential"
+     },
+     "name": {
+      "type": "string",
+      "description": "Descriptive name for this credential"
+     },
+     "registry": {
+      "$ref": "#/components/schemas/registryCredentialRegistry"
+     },
+     "username": {
+      "type": "string",
+      "description": "The username associated with the credential"
+     },
+     "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last updated time for the credential"
+     }
+    }
+   },
+   "registryCredentialRegistry": {
+    "type": "string",
+    "enum": [
+     "GITHUB",
+     "GITLAB",
+     "DOCKER",
+     "GOOGLE_ARTIFACT",
+     "AWS_ECR"
+    ],
+    "description": "The registry to use this credential with"
+   },
+   "registryCredentialSummary": {
+    "type": "object",
+    "required": [
+     "id",
+     "name"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    }
+   },
+   "renderSubdomainPolicy": {
+    "type": "string",
+    "enum": [
+     "enabled",
+     "disabled"
+    ],
+    "description": "Controls whether render.com subdomains are available for the service"
+   },
+   "resource": {
+    "required": [
+     "id",
+     "name"
+    ],
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    }
+   },
+   "routePost": {
+    "type": "object",
+    "required": [
+     "type",
+     "source",
+     "destination"
+    ],
+    "properties": {
+     "type": {
+      "$ref": "#/components/schemas/routeType"
+     },
+     "source": {
+      "type": "string"
+     },
+     "destination": {
+      "type": "string"
+     },
+     "priority": {
+      "type": "integer",
+      "description": "Redirect and Rewrite Rules are applied in priority order starting at 0. Defaults to last in the priority list."
+     }
+    }
+   },
+   "routeType": {
+    "type": "string",
+    "enum": [
+     "redirect",
+     "rewrite"
+    ]
+   },
+   "serverPort": {
+    "type": "object",
+    "required": [
+     "port",
+     "protocol"
+    ],
+    "properties": {
+     "port": {
+      "type": "integer"
+     },
+     "protocol": {
+      "type": "string",
+      "enum": [
+       "TCP",
+       "UDP"
+      ]
+     }
+    }
+   },
+   "service": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "ownerId",
+     "type",
+     "createdAt",
+     "dashboardUrl",
+     "updatedAt",
+     "suspended",
+     "suspenders",
+     "autoDeploy",
+     "notifyOnFail",
+     "slug",
+     "serviceDetails",
+     "rootDir"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "buildSourceId": {
+      "$ref": "#/paths/~1build-sources~1{buildSourceId}/parameters/0/schema",
+      "description": "The ID of the Build Source the service builds and deploys from, if any. A git-backed Build Source must be in the same region as the service."
+     },
+     "autoDeploy": {
+      "$ref": "#/components/schemas/autoDeploy"
+     },
+     "autoDeployTrigger": {
+      "$ref": "#/components/schemas/servicePOST/properties/autoDeployTrigger"
+     },
+     "branch": {
+      "type": "string"
+     },
+     "buildFilter": {
+      "$ref": "#/components/schemas/buildFilter"
+     },
+     "createdAt": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "dashboardUrl": {
+      "type": "string",
+      "description": "The URL to view the service in the Render Dashboard"
+     },
+     "environmentId": {
+      "type": "string"
+     },
+     "imagePath": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "notifyOnFail": {
+      "$ref": "#/components/schemas/notifySetting"
+     },
+     "ownerId": {
+      "type": "string"
+     },
+     "registryCredential": {
+      "$ref": "#/components/schemas/registryCredentialSummary"
+     },
+     "repo": {
+      "type": "string"
+     },
+     "rootDir": {
+      "type": "string"
+     },
+     "slug": {
+      "type": "string"
+     },
+     "suspended": {
+      "type": "string",
+      "title": "serviceSuspendedState",
+      "enum": [
+       "suspended",
+       "not_suspended"
+      ]
+     },
+     "suspenders": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/suspenderType"
+      }
+     },
+     "type": {
+      "$ref": "#/components/schemas/serviceType"
+     },
+     "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "serviceDetails": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/staticSiteDetails"
+       },
+       {
+        "$ref": "#/components/schemas/webServiceDetails"
+       },
+       {
+        "$ref": "#/components/schemas/privateServiceDetails"
+       },
+       {
+        "$ref": "#/components/schemas/backgroundWorkerDetails"
+       },
+       {
+        "$ref": "#/components/schemas/cronJobDetails"
+       }
+      ]
+     }
+    }
+   },
+   "serviceDisk": {
+    "type": "object",
+    "required": [
+     "name",
+     "mountPath"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "mountPath": {
+      "type": "string"
+     },
+     "sizeGB": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Defaults to 1"
+     }
+    }
+   },
+   "serviceEnv": {
+    "type": "string",
+    "enum": [
+     "docker",
+     "elixir",
+     "go",
+     "node",
+     "python",
+     "ruby",
+     "rust",
+     "image"
+    ],
+    "deprecated": true,
+    "description": "This field has been deprecated, runtime should be used in its place."
+   },
+   "serviceList": {
+    "type": "array",
+    "items": {
+     "$ref": "#/components/schemas/serviceWithCursor"
+    }
+   },
+   "servicePOST": {
+    "type": "object",
+    "required": [
+     "type",
+     "name",
+     "ownerId"
+    ],
+    "properties": {
+     "type": {
+      "$ref": "#/components/schemas/serviceType"
+     },
+     "name": {
+      "type": "string",
+      "description": "The service's name. Must be unique within the workspace."
+     },
+     "ownerId": {
+      "type": "string",
+      "description": "The ID of the workspace the service belongs to. Obtain your workspace's ID from its Settings page in the Render Dashboard."
+     },
+     "repo": {
+      "type": "string",
+      "description": "The service's repository URL. Do not specify a branch in this string (use the `branch` parameter instead)."
+     },
+     "autoDeploy": {
+      "$ref": "#/components/schemas/autoDeploy"
+     },
+     "autoDeployTrigger": {
+      "type": "string",
+      "enum": [
+       "commit",
+       "off",
+       "checksPass"
+      ],
+      "description": "Controls autodeploy behavior.\n\n- `commit`: Deploy each time a commit is pushed to the service's linked branch.\n- `checksPass`: Deploy each time a commit is pushed to the linked branch, but only after the commit's CI checks pass.\n- `off`: Disable autodeploys.\n"
+     },
+     "branch": {
+      "type": "string",
+      "description": "The repo branch to pull, build, and deploy. If omitted, uses the repository's default branch."
+     },
+     "image": {
+      "$ref": "#/components/schemas/image"
+     },
+     "buildFilter": {
+      "$ref": "#/components/schemas/buildFilter"
+     },
+     "rootDir": {
+      "type": "string"
+     },
+     "envVars": {
+      "$ref": "#/paths/~1services~1{serviceId}~1env-vars/put/requestBody/content/application~1json/schema"
+     },
+     "secretFiles": {
+      "type": "array",
+      "items": {
+       "$ref": "#/paths/~1services~1{serviceId}~1secret-files/put/requestBody/content/application~1json/schema/items"
+      }
+     },
+     "environmentId": {
+      "type": "string",
+      "description": "The ID of the environment the service belongs to, if any. Obtain an environment's ID from its Settings page in the Render Dashboard."
+     },
+     "serviceDetails": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/staticSiteDetailsPOST"
+       },
+       {
+        "$ref": "#/components/schemas/webServiceDetailsPOST"
+       },
+       {
+        "$ref": "#/components/schemas/privateServiceDetailsPOST"
+       },
+       {
+        "$ref": "#/components/schemas/backgroundWorkerDetailsPOST"
+       },
+       {
+        "$ref": "#/components/schemas/cronJobDetailsPOST"
+       }
+      ]
+     }
+    }
+   },
+   "serviceRuntime": {
+    "type": "string",
+    "enum": [
+     "docker",
+     "elixir",
+     "go",
+     "node",
+     "python",
+     "ruby",
+     "rust",
+     "image"
+    ],
+    "description": "Runtime"
+   },
+   "serviceType": {
+    "type": "string",
+    "enum": [
+     "static_site",
+     "web_service",
+     "private_service",
+     "background_worker",
+     "cron_job"
+    ]
+   },
+   "serviceTypeShort": {
+    "type": "string",
+    "enum": [
+     "static",
+     "web",
+     "pserv",
+     "worker",
+     "cron"
+    ]
+   },
+   "serviceWithCursor": {
+    "type": "object",
+    "required": [
+     "service",
+     "cursor"
+    ],
+    "properties": {
+     "service": {
+      "$ref": "#/components/schemas/service"
+     },
+     "cursor": {
+      "$ref": "#/components/schemas/cursor"
+     }
+    }
+   },
+   "sshAddress": {
+    "type": "string",
+    "description": "The SSH address for the service. Only present for services that have SSH enabled."
+   },
+   "staticSiteDetails": {
+    "type": "object",
+    "required": [
+     "buildCommand",
+     "publishPath",
+     "url",
+     "buildPlan"
+    ],
+    "properties": {
+     "buildCommand": {
+      "type": "string"
+     },
+     "ipAllowList": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/cidrBlockAndDescription"
+      }
+     },
+     "parentServer": {
+      "$ref": "#/components/schemas/resource"
+     },
+     "publishPath": {
+      "type": "string"
+     },
+     "pullRequestPreviewsEnabled": {
+      "$ref": "#/components/schemas/pullRequestPreviewsEnabled"
+     },
+     "previews": {
+      "$ref": "#/components/schemas/previews"
+     },
+     "url": {
+      "type": "string"
+     },
+     "buildPlan": {
+      "$ref": "#/components/schemas/buildPlan"
+     },
+     "renderSubdomainPolicy": {
+      "$ref": "#/components/schemas/renderSubdomainPolicy"
+     }
+    }
+   },
+   "staticSiteDetailsPOST": {
+    "type": "object",
+    "properties": {
+     "buildCommand": {
+      "type": "string"
+     },
+     "headers": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/headerInput"
+      }
+     },
+     "publishPath": {
+      "type": "string",
+      "description": "Defaults to \"public\""
+     },
+     "pullRequestPreviewsEnabled": {
+      "$ref": "#/components/schemas/pullRequestPreviewsEnabled"
+     },
+     "previews": {
+      "$ref": "#/components/schemas/previews"
+     },
+     "routes": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/routePost"
+      }
+     },
+     "renderSubdomainPolicy": {
+      "$ref": "#/components/schemas/renderSubdomainPolicy"
+     },
+     "ipAllowList": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/cidrBlockAndDescription"
+      }
+     }
+    }
+   },
+   "suspenderType": {
+    "type": "string",
+    "enum": [
+     "admin",
+     "billing",
+     "user",
+     "parent_service",
+     "stuck_crashlooping",
+     "hipaa_enablement",
+     "unknown"
+    ]
+   },
+   "webServiceDetails": {
+    "type": "object",
+    "required": [
+     "env",
+     "runtime",
+     "envSpecificDetails",
+     "plan",
+     "region",
+     "numInstances",
+     "buildPlan",
+     "healthCheckPath",
+     "openPorts",
+     "url"
+    ],
+    "properties": {
+     "autoscaling": {
+      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+     },
+     "cache": {
+      "$ref": "#/components/schemas/cache"
+     },
+     "disk": {
+      "type": "object",
+      "required": [
+       "id",
+       "name",
+       "sizeGB",
+       "mountPath"
+      ],
+      "properties": {
+       "id": {
+        "$ref": "#/paths/~1disks~1{diskId}/parameters/0/schema"
+       },
+       "name": {
+        "type": "string"
+       },
+       "sizeGB": {
+        "type": "integer"
+       },
+       "mountPath": {
+        "type": "string"
+       }
+      }
+     },
+     "env": {
+      "$ref": "#/components/schemas/serviceEnv"
+     },
+     "envSpecificDetails": {
+      "$ref": "#/components/schemas/envSpecificDetails"
+     },
+     "healthCheckPath": {
+      "type": "string"
+     },
+     "ipAllowList": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/cidrBlockAndDescription"
+      }
+     },
+     "maintenanceMode": {
+      "$ref": "#/components/schemas/maintenanceMode"
+     },
+     "numInstances": {
+      "type": "integer",
+      "description": "For a *manually* scaled service, this is the number of instances the service is scaled to. DOES NOT indicate the number of running instances for an *autoscaled* service."
+     },
+     "openPorts": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/serverPort"
+      }
+     },
+     "parentServer": {
+      "$ref": "#/components/schemas/resource"
+     },
+     "plan": {
+      "$ref": "#/components/schemas/plan"
+     },
+     "pullRequestPreviewsEnabled": {
+      "$ref": "#/components/schemas/pullRequestPreviewsEnabled"
+     },
+     "previews": {
+      "$ref": "#/components/schemas/previews"
+     },
+     "region": {
+      "$ref": "#/components/schemas/region"
+     },
+     "runtime": {
+      "$ref": "#/components/schemas/serviceRuntime"
+     },
+     "sshAddress": {
+      "$ref": "#/components/schemas/sshAddress"
+     },
+     "url": {
+      "type": "string"
+     },
+     "buildPlan": {
+      "$ref": "#/components/schemas/buildPlan"
+     },
+     "maxShutdownDelaySeconds": {
+      "$ref": "#/components/schemas/maxShutdownDelaySeconds"
+     },
+     "renderSubdomainPolicy": {
+      "$ref": "#/components/schemas/renderSubdomainPolicy"
+     }
+    }
+   },
+   "webServiceDetailsPOST": {
+    "type": "object",
+    "properties": {
+     "buildSourceId": {
+      "$ref": "#/paths/~1build-sources~1{buildSourceId}/parameters/0/schema",
+      "description": "The ID of the Build Source to build and deploy from. Provides all source and build configuration: omit `repo`, `branch`, `image`, `buildFilter`, `runtime`, and build-related `envSpecificDetails` fields when set. A git-backed Build Source must be in the same region as the service; otherwise the request is rejected with 400 and `code: build_source_region_mismatch`."
+     },
+     "autoscaling": {
+      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+     },
+     "disk": {
+      "$ref": "#/components/schemas/serviceDisk"
+     },
+     "env": {
+      "$ref": "#/components/schemas/serviceEnv"
+     },
+     "runtime": {
+      "$ref": "#/components/schemas/serviceRuntime",
+      "x-go-type-skip-optional-pointer": true,
+      "description": "Required unless `buildSourceId` is set, since the build source provides its own runtime."
+     },
+     "envSpecificDetails": {
+      "$ref": "#/components/schemas/envSpecificDetailsPOST"
+     },
+     "healthCheckPath": {
+      "type": "string"
+     },
+     "maintenanceMode": {
+      "$ref": "#/components/schemas/maintenanceMode"
+     },
+     "numInstances": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Defaults to 1"
+     },
+     "plan": {
+      "$ref": "#/components/schemas/plan",
+      "default": "0.5c-512mb",
+      "description": "The compute plan to use. If omitted, defaults to `0.5c-512mb` when creating a new service."
+     },
+     "preDeployCommand": {
+      "type": "string"
+     },
+     "pullRequestPreviewsEnabled": {
+      "$ref": "#/components/schemas/pullRequestPreviewsEnabled"
+     },
+     "previews": {
+      "$ref": "#/components/schemas/previews"
+     },
+     "region": {
+      "$ref": "#/components/schemas/region"
+     },
+     "maxShutdownDelaySeconds": {
+      "$ref": "#/components/schemas/maxShutdownDelaySeconds"
+     },
+     "renderSubdomainPolicy": {
+      "$ref": "#/components/schemas/renderSubdomainPolicy"
+     },
+     "ipAllowList": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/cidrBlockAndDescription"
+      }
+     }
+    }
+   }
+  },
+  "securitySchemes": {
+   "BearerAuth": {
+    "type": "http",
+    "scheme": "bearer"
+   }
+  }
+ }
+}

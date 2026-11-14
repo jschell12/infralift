@@ -1,0 +1,90 @@
+# The part of railwayapp/cli@7da7f0d4dd6061656ed0b001c193945887ee645a/src/gql/schema.json (sha256 361370a5aa34b5e487d98a512dd4d269a1c5bb6d17e133de014d9b34f64ca418)
+# that infralift's queries select (sources.ts). Written by e2e/specs/extract.ts; do not edit.
+
+type Query {
+  """Gets the authenticated user."""
+  me: User!
+
+  """Gets all projects for a user or workspace."""
+  projects(after: String, before: String, first: Int, includeDeleted: Boolean, last: Int, orderBy: ProjectsOrderBy, userId: String, workspaceId: String): QueryProjectsConnection!
+}
+
+type User {
+  id: ID!
+}
+
+type QueryProjectsConnection {
+  edges: [QueryProjectsConnectionEdge!]!
+}
+
+type QueryProjectsConnectionEdge {
+  node: Project!
+}
+
+type Project {
+  description: String
+  environments(after: String, before: String, first: Int, isEphemeral: Boolean, last: Int, sort: SortOrder): ProjectEnvironmentsConnection!
+  id: ID!
+  name: String!
+  plugins(after: String, before: String, first: Int, last: Int): ProjectPluginsConnection! @deprecated(reason: "Plugins have been removed")
+  services(after: String, before: String, first: Int, last: Int): ProjectServicesConnection!
+}
+
+type ProjectEnvironmentsConnection {
+  edges: [ProjectEnvironmentsConnectionEdge!]!
+}
+
+type ProjectEnvironmentsConnectionEdge {
+  node: Environment!
+}
+
+type Environment {
+  id: ID!
+  name: String!
+}
+
+enum SortOrder {
+  asc
+  desc
+}
+
+type ProjectPluginsConnection {
+  edges: [ProjectPluginsConnectionEdge!]!
+}
+
+type ProjectPluginsConnectionEdge {
+  node: Plugin!
+}
+
+type Plugin {
+  friendlyName: String!
+  id: ID!
+  name: PluginType!
+}
+
+enum PluginType {
+  mongodb
+  mysql
+  postgresql
+  redis
+}
+
+type ProjectServicesConnection {
+  edges: [ProjectServicesConnectionEdge!]!
+}
+
+type ProjectServicesConnectionEdge {
+  node: Service!
+}
+
+type Service {
+  icon: String
+  id: ID!
+  name: String!
+}
+
+enum ProjectsOrderBy {
+  CREATED_AT_DESC
+  NAME_ASC
+  UPDATED_AT_DESC
+}

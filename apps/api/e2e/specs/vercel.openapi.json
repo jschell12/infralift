@@ -1,0 +1,1162 @@
+{
+ "openapi": "3.0.3",
+ "info": {
+  "title": "Vercel REST API & SDK",
+  "description": "The [`@vercel/sdk`](https://www.npmjs.com/package/@vercel/sdk) is a type-safe Typescript SDK that allows you to access the resources and methods of the Vercel REST API. Learn how to [install it](https://vercel.com/docs/rest-api/sdk#installing-vercel-sdk) and [authenticate](https://vercel.com/docs/rest-api/sdk#authentication) with a Vercel access token.",
+  "contact": {
+   "email": "support@vercel.com",
+   "name": "Vercel Support",
+   "url": "https://vercel.com/support"
+  },
+  "version": "0.0.1",
+  "x-infralift-subset": "operations infralift calls, from vercel/sdk@fe01b47433aa130b15c68a738a8773d9dd38b190/vercel-spec.json"
+ },
+ "x-infralift-source": {
+  "repo": "vercel/sdk",
+  "commit": "fe01b47433aa130b15c68a738a8773d9dd38b190",
+  "path": "vercel-spec.json",
+  "sha256": "f96d1077e4152c4b51b1c821a7525f9bbb0ceea45ddd3a6141138041a26893cd"
+ },
+ "servers": [
+  {
+   "url": "https://api.vercel.com",
+   "description": "Production API"
+  }
+ ],
+ "security": [],
+ "paths": {
+  "/v2/user": {
+   "get": {
+    "description": "Retrieves information related to the currently authenticated User.",
+    "operationId": "getAuthUser",
+    "security": [
+     {
+      "bearerToken": []
+     }
+    ],
+    "summary": "Get the User",
+    "tags": [
+     "user"
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful response.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "user": {
+           "oneOf": [
+            {
+             "$ref": "#/components/schemas/AuthUser"
+            },
+            {
+             "$ref": "#/components/schemas/AuthUserLimited"
+            }
+           ]
+          }
+         },
+         "required": [
+          "user"
+         ],
+         "type": "object",
+         "description": "Successful response.",
+         "x-vercel-cli": {
+          "displayProperty": "user",
+          "displayColumns": {
+           "name": "user.name",
+           "id": "user.id",
+           "email": "user.email",
+           "username": "user.username",
+           "defaultTeamId": "user.defaultTeamId",
+           "createdAt": "user.createdAt",
+           "blockedAt": "user.softBlock.blockedAt",
+           "blockedReason": "user.softBlock.reason"
+          }
+         }
+        }
+       }
+      }
+     },
+     "302": {
+      "description": ""
+     },
+     "400": {
+      "description": ""
+     },
+     "401": {
+      "description": "The request is not authorized."
+     },
+     "403": {
+      "description": "You do not have permission to access this resource."
+     },
+     "409": {
+      "description": ""
+     },
+     "410": {
+      "description": ""
+     }
+    },
+    "x-vercel-cli": {
+     "supportedSubcommands": true,
+     "supportedProduction": false
+    },
+    "parameters": [],
+    "x-speakeasy-test": false
+   }
+  },
+  "/v5/domains": {
+   "get": {
+    "description": "Retrieves a list of domains registered for the authenticated user or team. By default it returns the last 20 domains if no limit is provided.",
+    "operationId": "getDomains",
+    "security": [
+     {
+      "bearerToken": []
+     }
+    ],
+    "summary": "List all the domains",
+    "tags": [
+     "domains"
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful response retrieving a list of domains.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "domains": {
+           "items": {
+            "properties": {
+             "boughtAt": {
+              "nullable": true,
+              "type": "number",
+              "description": "If it was purchased through Vercel, the timestamp in milliseconds when it was purchased."
+             },
+             "createdAt": {
+              "type": "number",
+              "description": "Timestamp in milliseconds when the domain was created in the registry."
+             },
+             "creator": {
+              "properties": {
+               "customerId": {
+                "nullable": true,
+                "type": "string"
+               },
+               "email": {
+                "type": "string"
+               },
+               "id": {
+                "type": "string"
+               },
+               "isDomainReseller": {
+                "type": "boolean",
+                "enum": [
+                 false,
+                 true
+                ]
+               },
+               "username": {
+                "type": "string"
+               }
+              },
+              "required": [
+               "email",
+               "id",
+               "username"
+              ],
+              "type": "object",
+              "description": "An object containing information of the domain creator, including the user's id, username, and email."
+             },
+             "customNameservers": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array",
+              "description": "A list of custom nameservers for the domain to point to. Only applies to domains purchased with Vercel."
+             },
+             "echMode": {
+              "type": "string",
+              "enum": [
+               "auto",
+               "disabled",
+               "enabled"
+              ],
+              "description": "Whether the domain is enrolled in Encrypted Client Hello. `auto` leaves the decision to Vercel, `enabled` always enrolls, and `disabled` never enrolls and opts out of automatic enrollment."
+             },
+             "expiresAt": {
+              "nullable": true,
+              "type": "number",
+              "description": "Timestamp in milliseconds at which the domain is set to expire. null if not bought with Vercel."
+             },
+             "id": {
+              "type": "string",
+              "description": "The unique identifier of the domain."
+             },
+             "intendedNameservers": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array",
+              "description": "A list of the intended nameservers for the domain to point to Vercel DNS."
+             },
+             "name": {
+              "type": "string",
+              "description": "The domain name."
+             },
+             "nameservers": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array",
+              "description": "A list of the current nameservers of the domain."
+             },
+             "renew": {
+              "type": "boolean",
+              "enum": [
+               false,
+               true
+              ],
+              "description": "Indicates whether the domain is set to automatically renew."
+             },
+             "serviceType": {
+              "type": "string",
+              "enum": [
+               "external",
+               "na",
+               "zeit.world"
+              ],
+              "description": "The type of service the domain is handled by. `external` if the DNS is externally handled, `zeit.world` if handled with Vercel, or `na` if the service is not available."
+             },
+             "teamId": {
+              "nullable": true,
+              "type": "string"
+             },
+             "transferredAt": {
+              "nullable": true,
+              "type": "number",
+              "description": "Timestamp in milliseconds at which the domain was successfully transferred into Vercel. `null` if the transfer is still processing or was never transferred in."
+             },
+             "transferStartedAt": {
+              "type": "number",
+              "description": "If transferred into Vercel, timestamp in milliseconds when the domain transfer was initiated."
+             },
+             "userId": {
+              "type": "string"
+             },
+             "verified": {
+              "type": "boolean",
+              "enum": [
+               false,
+               true
+              ],
+              "description": "If the domain has the ownership verified."
+             }
+            },
+            "required": [
+             "boughtAt",
+             "createdAt",
+             "creator",
+             "echMode",
+             "expiresAt",
+             "id",
+             "intendedNameservers",
+             "name",
+             "nameservers",
+             "serviceType",
+             "teamId",
+             "userId",
+             "verified"
+            ],
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "pagination": {
+           "$ref": "#/components/schemas/Pagination"
+          }
+         },
+         "required": [
+          "domains",
+          "pagination"
+         ],
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "One of the provided values in the request query is invalid."
+     },
+     "401": {
+      "description": "The request is not authorized."
+     },
+     "403": {
+      "description": "You do not have permission to access this resource."
+     },
+     "409": {
+      "description": ""
+     },
+     "410": {
+      "description": ""
+     }
+    },
+    "x-vercel-cli": {
+     "supportedSubcommands": true,
+     "supportedProduction": false,
+     "aliases": [
+      "ls",
+      "list"
+     ]
+    },
+    "parameters": [
+     {
+      "name": "limit",
+      "description": "Maximum number of domains to list from a request.",
+      "in": "query",
+      "schema": {
+       "description": "Maximum number of domains to list from a request.",
+       "type": "number"
+      }
+     },
+     {
+      "name": "since",
+      "description": "Get domains created after this JavaScript timestamp.",
+      "in": "query",
+      "schema": {
+       "description": "Get domains created after this JavaScript timestamp.",
+       "type": "number"
+      }
+     },
+     {
+      "name": "until",
+      "description": "Get domains created before this JavaScript timestamp.",
+      "in": "query",
+      "schema": {
+       "description": "Get domains created before this JavaScript timestamp.",
+       "type": "number"
+      }
+     },
+     {
+      "description": "The Team identifier to perform the request on behalf of.",
+      "in": "query",
+      "name": "teamId",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "description": "The Team slug to perform the request on behalf of.",
+      "in": "query",
+      "name": "slug",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "AuthUser": {
+    "properties": {
+     "accountUpdateContext": {
+      "properties": {
+       "canOptOut": {
+        "type": "boolean",
+        "enum": [
+         false,
+         true
+        ],
+        "description": "Whether this user can cancel their optional Account Update flow."
+       },
+       "managedTeams": {
+        "items": {
+         "properties": {
+          "avatar": {
+           "nullable": true,
+           "type": "string"
+          },
+          "name": {
+           "type": "string"
+          },
+          "slug": {
+           "type": "string"
+          },
+          "teamId": {
+           "type": "string"
+          },
+          "workEmail": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "avatar",
+          "name",
+          "slug",
+          "teamId",
+          "workEmail"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "organization": {
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         },
+         "slug": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "name",
+         "slug"
+        ],
+        "type": "object"
+       },
+       "orphanSsoTeam": {
+        "properties": {
+         "avatar": {
+          "nullable": true,
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         },
+         "slug": {
+          "type": "string"
+         },
+         "teamId": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "avatar",
+         "name",
+         "slug",
+         "teamId"
+        ],
+        "type": "object",
+        "description": "Orphans only: the team whose Directory Sync invite SSO sign-in redeems for a managed account once Update Account is complete."
+       },
+       "verifiedEmuDomains": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "canOptOut",
+       "managedTeams",
+       "verifiedEmuDomains"
+      ],
+      "type": "object",
+      "description": "Context for the Update Account screen. Present only when `isAccountUpdateRequired` is true. `managedTeams` is empty for orphan mode (user matches an EMU domain but is not on the team). When the teams the user must complete Update Account for include an organization's backing team, that team is listed as the organization, followed by the organization's Enterprise Managed root and child teams the user is a member of, including through Directory Sync group mappings."
+     },
+     "activeDashboardViews": {
+      "items": {
+       "properties": {
+        "favoritesViewPreference": {
+         "nullable": true,
+         "type": "string",
+         "enum": [
+          "closed",
+          "open",
+          null
+         ]
+        },
+        "recentsViewPreference": {
+         "nullable": true,
+         "type": "string",
+         "enum": [
+          "closed",
+          "open",
+          null
+         ]
+        },
+        "scopeId": {
+         "type": "string"
+        },
+        "viewPreference": {
+         "nullable": true,
+         "type": "string",
+         "enum": [
+          "cards",
+          "list",
+          null
+         ]
+        }
+       },
+       "required": [
+        "scopeId"
+       ],
+       "type": "object",
+       "description": "set of dashboard view preferences (cards or list) per scopeId"
+      },
+      "type": "array",
+      "description": "set of dashboard view preferences (cards or list) per scopeId"
+     },
+     "avatar": {
+      "nullable": true,
+      "type": "string",
+      "description": "SHA1 hash of the avatar for the User account. Can be used in conjuction with the ... endpoint to retrieve the avatar image."
+     },
+     "billing": {
+      "nullable": true,
+      "type": "object",
+      "description": "An object containing billing infomation associated with the User account."
+     },
+     "createdAt": {
+      "type": "number",
+      "description": "UNIX timestamp (in milliseconds) when the User account was created."
+     },
+     "dataCache": {
+      "properties": {
+       "excessBillingEnabled": {
+        "type": "boolean",
+        "enum": [
+         false,
+         true
+        ]
+       }
+      },
+      "type": "object",
+      "description": "data cache settings"
+     },
+     "defaultTeamId": {
+      "nullable": true,
+      "type": "string",
+      "description": "The user's default team."
+     },
+     "dismissedToasts": {
+      "items": {
+       "properties": {
+        "dismissals": {
+         "items": {
+          "properties": {
+           "createdAt": {
+            "type": "number"
+           },
+           "scopeId": {
+            "type": "string"
+           }
+          },
+          "required": [
+           "createdAt",
+           "scopeId"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "name": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "dismissals",
+        "name"
+       ],
+       "type": "object",
+       "description": "A record of when, under a certain scopeId, a toast was dismissed"
+      },
+      "type": "array",
+      "description": "A record of when, under a certain scopeId, a toast was dismissed"
+     },
+     "email": {
+      "type": "string",
+      "description": "Email address associated with the User account."
+     },
+     "favoriteProjectsAndSpaces": {
+      "items": {
+       "properties": {
+        "projectId": {
+         "type": "string"
+        },
+        "teamId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "projectId",
+        "teamId"
+       ],
+       "type": "object",
+       "description": "A list of projects and spaces across teams that a user has marked as a favorite."
+      },
+      "type": "array",
+      "description": "A list of projects and spaces across teams that a user has marked as a favorite."
+     },
+     "featureBlocks": {
+      "properties": {
+       "speedInsightsFree": {
+        "properties": {
+         "blockedFrom": {
+          "type": "number"
+         },
+         "blockedUntil": {
+          "type": "number"
+         },
+         "blockReason": {
+          "type": "string",
+          "enum": [
+           "admin_override",
+           "hard_blocked",
+           "limits_exceeded"
+          ]
+         },
+         "isCurrentlyBlocked": {
+          "type": "boolean",
+          "enum": [
+           false,
+           true
+          ]
+         }
+        },
+        "required": [
+         "blockReason",
+         "isCurrentlyBlocked"
+        ],
+        "type": "object",
+        "description": "Client-facing view of the `speedInsightsFree` ingestion block. The dashboard needs `blockReason` to tell usage pauses apart from admin blocks."
+       },
+       "webAnalytics": {
+        "properties": {
+         "blockedFrom": {
+          "type": "number"
+         },
+         "blockedUntil": {
+          "type": "number"
+         },
+         "isCurrentlyBlocked": {
+          "type": "boolean",
+          "enum": [
+           false,
+           true
+          ]
+         }
+        },
+        "required": [
+         "isCurrentlyBlocked"
+        ],
+        "type": "object"
+       }
+      },
+      "type": "object",
+      "description": "Feature blocks for the user"
+     },
+     "hasTrialAvailable": {
+      "type": "boolean",
+      "enum": [
+       false,
+       true
+      ],
+      "description": "Whether the user has a trial available for a paid plan subscription."
+     },
+     "id": {
+      "type": "string",
+      "description": "The User's unique identifier."
+     },
+     "importFlowGitNamespace": {
+      "nullable": true,
+      "oneOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "importFlowGitNamespaceId": {
+      "nullable": true,
+      "oneOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "importFlowGitProvider": {
+      "nullable": true,
+      "type": "string",
+      "enum": [
+       "bitbucket",
+       "cursor-origin",
+       "github",
+       "github-custom-host",
+       "github-limited",
+       "gitlab",
+       "vercel",
+       null
+      ]
+     },
+     "isAccountUpdateRequired": {
+      "type": "boolean",
+      "enum": [
+       false,
+       true
+      ],
+      "description": "When `true`, the user must complete the EMU Update Account flow before they can use the dashboard."
+     },
+     "isEnterpriseManaged": {
+      "type": "boolean",
+      "enum": [
+       false,
+       true
+      ],
+      "description": "Indicates whether the user is managed by an enterprise."
+     },
+     "name": {
+      "nullable": true,
+      "type": "string",
+      "description": "Name associated with the User account, or `null` if none has been provided."
+     },
+     "preferredScopesAndGitNamespaces": {
+      "items": {
+       "properties": {
+        "gitNamespaceId": {
+         "nullable": true,
+         "oneOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "number"
+          }
+         ]
+        },
+        "scopeId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "gitNamespaceId",
+        "scopeId"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "remoteCaching": {
+      "properties": {
+       "enabled": {
+        "type": "boolean",
+        "enum": [
+         false,
+         true
+        ]
+       }
+      },
+      "type": "object",
+      "description": "remote caching settings"
+     },
+     "resourceConfig": {
+      "properties": {
+       "awsAccountIds": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "awsAccountType": {
+        "type": "string",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "blobStores": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "buildEntitlements": {
+        "properties": {
+         "enhancedBuilds": {
+          "type": "boolean",
+          "enum": [
+           false,
+           true
+          ],
+          "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+         }
+        },
+        "type": "object",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "buildQueue": {
+        "properties": {
+         "configuration": {
+          "type": "string",
+          "enum": [
+           "SKIP_NAMESPACE_QUEUE",
+           "WAIT_FOR_NAMESPACE_QUEUE"
+          ],
+          "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+         }
+        },
+        "type": "object",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "bulkRedirectsFreeLimitOverride": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "cfZoneName": {
+        "type": "string",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "concurrentBuilds": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "cronJobsPerProject": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "customEnvironmentsPerProject": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "edgeConfigs": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "edgeConfigSize": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "edgeFunctionExecutionTimeoutMs": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "edgeFunctionMaxSizeBytes": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "elasticConcurrencyEnabled": {
+        "type": "boolean",
+        "enum": [
+         false,
+         true
+        ],
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "flagsExplorerOverridesThreshold": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "flagsExplorerUnlimitedOverrides": {
+        "type": "boolean",
+        "enum": [
+         false,
+         true
+        ],
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "imageOptimizationType": {
+        "type": "string",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "integrationStores": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "kvDatabases": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "microfrontendGroupsPerTeam": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "microfrontendProjectsPerGroup": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "nodeType": {
+        "type": "string",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "postgresDatabases": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "security": {
+        "properties": {
+         "customRules": {
+          "type": "number",
+          "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+         },
+         "ipBlocks": {
+          "type": "number",
+          "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+         },
+         "ipBypass": {
+          "type": "number",
+          "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+         },
+         "rateLimit": {
+          "type": "number",
+          "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+         },
+         "securityLists": {
+          "type": "number",
+          "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+         },
+         "teamLevelConditions": {
+          "type": "number",
+          "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+         },
+         "teamLevelRules": {
+          "type": "number",
+          "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+         },
+         "teamLevelRulesets": {
+          "type": "number",
+          "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+         }
+        },
+        "type": "object",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "serverlessFunctionMaxDuration": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       },
+       "serverlessFunctionMaxMemorySize": {
+        "type": "number",
+        "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+       }
+      },
+      "type": "object",
+      "description": "An object containing infomation related to the amount of platform resources may be allocated to the User account."
+     },
+     "shouldShowEnterpriseManagedWelcome": {
+      "type": "boolean",
+      "enum": [
+       false,
+       true
+      ],
+      "description": "Whether the Enterprise Managed User joined the current team through the Update Account flow and should see its welcome experience."
+     },
+     "softBlock": {
+      "nullable": true,
+      "properties": {
+       "blockedAt": {
+        "type": "number"
+       },
+       "blockedDueToOverageType": {
+        "type": "string",
+        "enum": [
+         "analyticsUsage",
+         "artifacts",
+         "bandwidth",
+         "blobDataTransfer",
+         "blobTotalAdvancedRequests",
+         "blobTotalAvgSizeInBytes",
+         "blobTotalGetResponseObjectSizeInBytes",
+         "blobTotalSimpleRequests",
+         "connectDataTransfer",
+         "dataCacheRead",
+         "dataCacheWrite",
+         "edgeConfigRead",
+         "edgeConfigWrite",
+         "edgeFunctionExecutionUnits",
+         "edgeMiddlewareInvocations",
+         "edgeRequest",
+         "edgeRequestAdditionalCpuDuration",
+         "elasticConcurrencyBuildSlots",
+         "fastDataTransfer",
+         "fastOriginTransfer",
+         "fluidCpuDuration",
+         "fluidDuration",
+         "functionDuration",
+         "functionInvocation",
+         "imageOptimizationCacheRead",
+         "imageOptimizationCacheWrite",
+         "imageOptimizationTransformation",
+         "logDrainsVolume",
+         "monitoringMetric",
+         "observabilityEvent",
+         "onDemandConcurrencyMinutes",
+         "runtimeCacheRead",
+         "runtimeCacheWrite",
+         "serverlessFunctionExecution",
+         "sourceImages",
+         "wafOwaspExcessBytes",
+         "wafOwaspRequests",
+         "wafRateLimitRequest",
+         "webAnalyticsEvent"
+        ]
+       },
+       "reason": {
+        "type": "string",
+        "enum": [
+         "BLOCKED_FOR_PLATFORM_ABUSE",
+         "DOMAIN_OWNER_DELETION_REQUEST",
+         "ENTERPRISE_TRIAL_ENDED",
+         "ENTERPRISE_UNPAID_INVOICE",
+         "EXPOSURE_CAP_EXCEEDED",
+         "FAIR_USE_LIMITS_EXCEEDED",
+         "SUBSCRIPTION_CANCELED",
+         "SUBSCRIPTION_EXPIRED",
+         "UNPAID_INVOICE"
+        ]
+       },
+       "unpauseAt": {
+        "type": "number",
+        "description": "Since September 2026. Set only by `billing-usage-alerts` for usage plans with a `blockDurationMs`; its presence marks a pause that expires on its own."
+       }
+      },
+      "required": [
+       "blockedAt",
+       "reason"
+      ],
+      "type": "object",
+      "description": "When the User account has been \"soft blocked\", this property will contain the date when the restriction was enacted, and the identifier for why."
+     },
+     "stagingPrefix": {
+      "type": "string",
+      "description": "Prefix that will be used in the URL of \"Preview\" deployments created by the User account."
+     },
+     "username": {
+      "type": "string",
+      "description": "Unique username associated with the User account."
+     }
+    },
+    "required": [
+     "avatar",
+     "billing",
+     "createdAt",
+     "defaultTeamId",
+     "email",
+     "hasTrialAvailable",
+     "id",
+     "name",
+     "resourceConfig",
+     "softBlock",
+     "stagingPrefix",
+     "username"
+    ],
+    "type": "object",
+    "description": "Data for the currently authenticated User."
+   },
+   "AuthUserLimited": {
+    "properties": {
+     "avatar": {
+      "nullable": true,
+      "type": "string",
+      "description": "SHA1 hash of the avatar for the User account. Can be used in conjuction with the ... endpoint to retrieve the avatar image."
+     },
+     "defaultTeamId": {
+      "nullable": true,
+      "type": "string",
+      "description": "The user's default team."
+     },
+     "email": {
+      "type": "string",
+      "description": "Email address associated with the User account."
+     },
+     "id": {
+      "type": "string",
+      "description": "The User's unique identifier."
+     },
+     "isEnterpriseManaged": {
+      "type": "boolean",
+      "enum": [
+       false,
+       true
+      ],
+      "description": "Indicates whether the user is managed by an enterprise."
+     },
+     "limited": {
+      "type": "boolean",
+      "enum": [
+       true
+      ],
+      "description": "Property indicating that this User data contains only limited information, due to the authentication token missing privileges to read the full User data. Re-login with email, GitHub, GitLab or Bitbucket in order to upgrade the authentication token with the necessary privileges."
+     },
+     "name": {
+      "nullable": true,
+      "type": "string",
+      "description": "Name associated with the User account, or `null` if none has been provided."
+     },
+     "shouldShowEnterpriseManagedWelcome": {
+      "type": "boolean",
+      "enum": [
+       false,
+       true
+      ],
+      "description": "Whether the Enterprise Managed User joined the current team through the Update Account flow and should see its welcome experience."
+     },
+     "username": {
+      "type": "string",
+      "description": "Unique username associated with the User account."
+     }
+    },
+    "required": [
+     "avatar",
+     "defaultTeamId",
+     "email",
+     "id",
+     "limited",
+     "name",
+     "username"
+    ],
+    "type": "object",
+    "description": "A limited form of data for the currently authenticated User, due to the authentication token missing privileges to read the full User data."
+   },
+   "Pagination": {
+    "properties": {
+     "count": {
+      "type": "number",
+      "description": "Amount of items in the current page."
+     },
+     "next": {
+      "nullable": true,
+      "type": "number",
+      "description": "Timestamp that must be used to request the next page."
+     },
+     "prev": {
+      "nullable": true,
+      "type": "number",
+      "description": "Timestamp that must be used to request the previous page."
+     }
+    },
+    "required": [
+     "count",
+     "next",
+     "prev"
+    ],
+    "type": "object",
+    "description": "This object contains information related to the pagination of the current request, including the necessary parameters to get the next or previous page of data."
+   }
+  },
+  "securitySchemes": {
+   "bearerToken": {
+    "type": "http",
+    "description": "Default authentication mechanism",
+    "scheme": "bearer"
+   },
+   "oauth2": {
+    "type": "oauth2",
+    "flows": {
+     "authorizationCode": {
+      "authorizationUrl": "https://api.vercel.com/oauth/authorize",
+      "tokenUrl": "https://api.vercel.com/oauth/access_token",
+      "scopes": {}
+     }
+    }
+   }
+  }
+ }
+}
