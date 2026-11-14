@@ -3,7 +3,15 @@
  "info": {
   "title": "DigitalOcean API",
   "version": "2.0",
-  "x-infralift-subset": "operations infralift calls, from digitalocean/openapi@998192821fe95ee79e41f577933601d009179dcf/specification/DigitalOcean-public.v2.yaml"
+  "x-infralift-subset": "operations infralift calls, from digitalocean/openapi@998192821fe95ee79e41f577933601d009179dcf/specification/DigitalOcean-public.v2.yaml",
+  "license": {
+   "name": "Apache-2.0",
+   "url": "https://github.com/digitalocean/openapi/blob/998192821fe95ee79e41f577933601d009179dcf/LICENSE"
+  },
+  "x-infralift-notice": [
+   "DigitalOcean, LLC (repository owner; the LICENSE file has no copyright line). Licensed under Apache-2.0: https://github.com/digitalocean/openapi/blob/998192821fe95ee79e41f577933601d009179dcf/LICENSE",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE."
+  ]
  },
  "x-infralift-source": {
   "repo": "digitalocean/openapi",

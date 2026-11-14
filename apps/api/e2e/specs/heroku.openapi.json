@@ -3,7 +3,15 @@
  "info": {
   "title": "Heroku Platform API",
   "version": "3",
-  "x-infralift-subset": "operations infralift calls, from heroku/heroku-go@eb24213a9cbb17f6af5003d23a92923949f3b48a/v6/schema.json"
+  "x-infralift-subset": "operations infralift calls, from heroku/heroku-go@eb24213a9cbb17f6af5003d23a92923949f3b48a/v6/schema.json",
+  "license": {
+   "name": "MIT",
+   "url": "https://github.com/heroku/heroku-go/blob/eb24213a9cbb17f6af5003d23a92923949f3b48a/LICENSE"
+  },
+  "x-infralift-notice": [
+   "Copyright (c) 2014-2016 Timothée Peignier. Licensed under MIT: https://github.com/heroku/heroku-go/blob/eb24213a9cbb17f6af5003d23a92923949f3b48a/LICENSE",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE."
+  ]
  },
  "paths": {
   "/account": {

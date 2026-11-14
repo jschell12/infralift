@@ -40,11 +40,26 @@ export interface Undocumented extends OperationRef {
   note: string;
 }
 
+/** The licence the vendor's description is published under, carried into
+ *  the subset (info.license and x-infralift-notice, or a comment header in
+ *  SDL) and listed in the repository's NOTICE. */
+export interface SpecLicense {
+  spdx: "MIT" | "Apache-2.0" | "BSD-3-Clause" | "MPL-2.0";
+  /** The copyright line of the upstream LICENSE, or the owner where it has none. */
+  holder: string;
+  /** The upstream LICENSE at the pinned commit. */
+  url: string;
+}
+
 interface Base {
   name: string;
   /** The file written beside this one. */
   out: string;
   undocumented?: Undocumented[];
+  /** null: the description carries no licence that permits redistribution.
+   *  Its subset is never committed: extract.ts writes it at setup (scripts/
+   *  e2e.sh, CI) from the pin, verified, to a git-ignored path. */
+  license: SpecLicense | null;
 }
 
 /** One OpenAPI 3 file: the operations and the components they reference,
@@ -212,6 +227,7 @@ export const RAILWAY_PLAN_QUERY = `{
 export const SOURCES: SpecSource[] = [
   {
     name: "github",
+    license: { spdx: "MIT", holder: "Copyright (c) 2020 GitHub", url: "https://github.com/github/rest-api-description/blob/53fd7d2ea1380eabdcfcc9ab9a043a56ef444fd6/LICENSE.md" },
     format: "openapi",
     out: "github.openapi.json",
     pin: { repo: "github/rest-api-description", commit: "53fd7d2ea1380eabdcfcc9ab9a043a56ef444fd6", path: "descriptions/api.github.com/api.github.com.json" },
@@ -219,6 +235,7 @@ export const SOURCES: SpecSource[] = [
   },
   {
     name: "cloudflare",
+    license: { spdx: "BSD-3-Clause", holder: "Copyright (c) 2022, Cloudflare", url: "https://github.com/cloudflare/api-schemas/blob/8b1a451819bc546d410e41cca71a86bcc2779808/LICENSE" },
     format: "openapi",
     out: "cloudflare.openapi.json",
     pin: { repo: "cloudflare/api-schemas", commit: "8b1a451819bc546d410e41cca71a86bcc2779808", path: "openapi.json" },
@@ -235,6 +252,7 @@ export const SOURCES: SpecSource[] = [
   },
   {
     name: "digitalocean",
+    license: { spdx: "Apache-2.0", holder: "DigitalOcean, LLC (repository owner; the LICENSE file has no copyright line)", url: "https://github.com/digitalocean/openapi/blob/998192821fe95ee79e41f577933601d009179dcf/LICENSE" },
     format: "bundle",
     out: "digitalocean.openapi.json",
     repo: "digitalocean/openapi",
@@ -254,6 +272,10 @@ export const SOURCES: SpecSource[] = [
   },
   {
     name: "render",
+    // No licence: api-docs.render.com states none, the file has no
+    // info.license, and Render's public repositories do not commit it. So the
+    // subset is fetched and checked at setup, never committed.
+    license: null,
     format: "openapi",
     out: "render.openapi.json",
     pin: {
@@ -265,6 +287,7 @@ export const SOURCES: SpecSource[] = [
   },
   {
     name: "vercel",
+    license: { spdx: "Apache-2.0", holder: "Vercel, Inc. (repository owner; the LICENSE file has no copyright line)", url: "https://github.com/vercel/sdk/blob/fe01b47433aa130b15c68a738a8773d9dd38b190/LICENSE" },
     format: "openapi",
     out: "vercel.openapi.json",
     // Vercel's SDK repository commits the description it is generated from
@@ -274,12 +297,13 @@ export const SOURCES: SpecSource[] = [
     undocumented: [
       {
         ...get("/v9/projects"),
-        note: "packages/collectors/vercel.mjs lists projects here; the description has /v10/projects and /v11/projects only, so the mock refuses it and the inventory fails",
+        note: "packages/collectors/vercel.mjs lists projects here; the description has /v10/projects and /v11/projects only, so the mock refuses it and the inventory fails under the mock. Production is unverified: src/connectors/__fixtures__/vercel-api.json is a /v9/projects response captured live on 2026-08-31 (commit 5c6eccb), so v9 still answered then; a real-account check is needed",
       },
     ],
   },
   {
     name: "heroku",
+    license: { spdx: "MIT", holder: "Copyright (c) 2014-2016 Timothée Peignier", url: "https://github.com/heroku/heroku-go/blob/eb24213a9cbb17f6af5003d23a92923949f3b48a/LICENSE" },
     format: "hyper-schema",
     out: "heroku.openapi.json",
     // heroku-go is generated from the Platform API's JSON Hyper-Schema
@@ -297,6 +321,7 @@ export const SOURCES: SpecSource[] = [
   },
   {
     name: "netlify",
+    license: { spdx: "MIT", holder: "Copyright (c) 2016 Netlify", url: "https://github.com/netlify/open-api/blob/96b688490fa406c71e4453e041ec5a0587d35f0b/LICENSE" },
     format: "bundle",
     out: "netlify.openapi.json",
     repo: "netlify/open-api",
@@ -311,6 +336,7 @@ export const SOURCES: SpecSource[] = [
   },
   {
     name: "flyio-machines",
+    license: { spdx: "Apache-2.0", holder: "Fly.io, Inc. (repository owner; the LICENSE file has no copyright line)", url: "https://github.com/superfly/docs/blob/040858621eea858652b156a71ffe6472e3af724b/LICENSE" },
     format: "openapi",
     out: "flyio-machines.openapi.json",
     pin: { repo: "superfly/docs", commit: "040858621eea858652b156a71ffe6472e3af724b", path: "api/machines/openapi.json" },
@@ -318,6 +344,7 @@ export const SOURCES: SpecSource[] = [
   },
   {
     name: "flyio",
+    license: { spdx: "Apache-2.0", holder: "Fly.io, Inc. (repository owner; the LICENSE file has no copyright line)", url: "https://github.com/superfly/fly-go/blob/84b82d65ccb067218680ddb4b6a5c10d3e05078d/LICENSE" },
     format: "graphql",
     out: "flyio.graphql",
     // fly-go is Fly.io's Go client for api.fly.io/graphql and commits the schema.
@@ -327,6 +354,7 @@ export const SOURCES: SpecSource[] = [
   },
   {
     name: "railway",
+    license: { spdx: "MIT", holder: "Copyright (c) 2023 Railway Corp.", url: "https://github.com/railwayapp/cli/blob/7da7f0d4dd6061656ed0b001c193945887ee645a/LICENSE" },
     format: "graphql",
     out: "railway.graphql",
     // Railway's CLI commits the introspection result of backboard.railway.com/graphql/v2.
@@ -342,6 +370,7 @@ export const SOURCES: SpecSource[] = [
   },
   {
     name: "azure",
+    license: { spdx: "MIT", holder: "Copyright (c) 2017 Microsoft", url: "https://github.com/Azure/azure-rest-api-specs/blob/6a42ee6dd4a2c09f9f03eba31cc13ab20e434353/LICENSE" },
     format: "bundle",
     out: "azure.openapi.json",
     repo: "Azure/azure-rest-api-specs",
@@ -376,6 +405,7 @@ export const SOURCES: SpecSource[] = [
   },
   {
     name: "google",
+    license: { spdx: "BSD-3-Clause", holder: "Copyright (c) 2011 Google Inc. All rights reserved.", url: "https://github.com/googleapis/google-api-go-client/blob/2a50de2f986c6287e7c29d3bdfbf0e6defe9923c/LICENSE" },
     format: "discovery",
     out: "google.openapi.json",
     // google-api-go-client commits each API's discovery document.
@@ -396,6 +426,7 @@ export const SOURCES: SpecSource[] = [
   },
   {
     name: "tfc",
+    license: { spdx: "MPL-2.0", holder: "Copyright (c) 2018 HashiCorp, Inc.", url: "https://github.com/hashicorp/go-tfe/blob/55fa43504b980ba9a50d73a3e69772d1d6819239/LICENSE" },
     format: "openapi",
     out: "tfc.openapi.json",
     // HashiCorp's go-tfe commits the HCP Terraform API description. Not

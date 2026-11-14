@@ -123,7 +123,10 @@ describe("Render (Prism, api-docs.render.com archived)", () => {
 
 describe("Vercel (Prism, vercel/sdk vercel-spec.json)", () => {
   const s = connectAndList("vercel", () => "e2e-vercel-token");
-  it("finding: the inventory fails, because the collector lists projects at GET /v9/projects, which the description does not have", async () => {
+  // Under the mock only. vercel-api.json is a /v9/projects response captured
+  // live on 2026-08-31, so production probably still serves v9; that needs a
+  // real-account check, not this test.
+  it("finding: the collector lists projects at GET /v9/projects, which the description omits, so the inventory fails under the mock", async () => {
     expect(s.status, JSON.stringify(s.body)).toBe(502);
     expect((await fetch(`${STACK.mocks.vercel}/v9/projects?limit=100`, { headers: { authorization: "Bearer h" } })).status).toBe(404);
     // The documented domains call works on its own.

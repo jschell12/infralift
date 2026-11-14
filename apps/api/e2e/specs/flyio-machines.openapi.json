@@ -9,7 +9,11 @@
    "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
   },
   "version": "1.0",
-  "x-infralift-subset": "operations infralift calls, from superfly/docs@040858621eea858652b156a71ffe6472e3af724b/api/machines/openapi.json"
+  "x-infralift-subset": "operations infralift calls, from superfly/docs@040858621eea858652b156a71ffe6472e3af724b/api/machines/openapi.json",
+  "x-infralift-notice": [
+   "Fly.io, Inc. (repository owner; the LICENSE file has no copyright line). Licensed under Apache-2.0: https://github.com/superfly/docs/blob/040858621eea858652b156a71ffe6472e3af724b/LICENSE",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE."
+  ]
  },
  "x-infralift-source": {
   "repo": "superfly/docs",

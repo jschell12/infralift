@@ -8,7 +8,11 @@
   },
   "title": "Cloudflare API",
   "version": "4.0.0",
-  "x-infralift-subset": "operations infralift calls, from cloudflare/api-schemas@8b1a451819bc546d410e41cca71a86bcc2779808/openapi.json"
+  "x-infralift-subset": "operations infralift calls, from cloudflare/api-schemas@8b1a451819bc546d410e41cca71a86bcc2779808/openapi.json",
+  "x-infralift-notice": [
+   "Copyright (c) 2022, Cloudflare. Licensed under BSD-3-Clause: https://github.com/cloudflare/api-schemas/blob/8b1a451819bc546d410e41cca71a86bcc2779808/LICENSE",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE."
+  ]
  },
  "x-infralift-source": {
   "repo": "cloudflare/api-schemas",

@@ -2,7 +2,8 @@
 // packages/collectors/vercel.mjs reads; extract.ts fills the rest from the
 // response schema and checks the example against it. There is no projects
 // example: the collector lists projects at /v9/projects, which Vercel's
-// description does not have (sources.ts records it as undocumented).
+// description does not have (sources.ts records it as undocumented; whether
+// production still serves it is unverified).
 
 export const VERCEL_SEED = {
   user: { id: "e2e0user000000000000001", username: "infralift-e2e" },

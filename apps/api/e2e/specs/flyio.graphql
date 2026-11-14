@@ -1,5 +1,7 @@
 # The part of superfly/fly-go@84b82d65ccb067218680ddb4b6a5c10d3e05078d/schema.graphql (sha256 eed95d75e6bda16031277463df4e5b3aad8d70c3e08e58248ede140f06f34abf)
 # that infralift's queries select (sources.ts). Written by e2e/specs/extract.ts; do not edit.
+# Fly.io, Inc. (repository owner; the LICENSE file has no copyright line). Licensed under Apache-2.0: https://github.com/superfly/fly-go/blob/84b82d65ccb067218680ddb4b6a5c10d3e05078d/LICENSE
+# A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE.
 
 schema {
   query: Queries

@@ -3,7 +3,15 @@
  "info": {
   "title": "Netlify's API documentation",
   "version": "2.63.1",
-  "x-infralift-subset": "operations infralift calls, from netlify/open-api@96b688490fa406c71e4453e041ec5a0587d35f0b/swagger.yml"
+  "x-infralift-subset": "operations infralift calls, from netlify/open-api@96b688490fa406c71e4453e041ec5a0587d35f0b/swagger.yml",
+  "license": {
+   "name": "MIT",
+   "url": "https://github.com/netlify/open-api/blob/96b688490fa406c71e4453e041ec5a0587d35f0b/LICENSE"
+  },
+  "x-infralift-notice": [
+   "Copyright (c) 2016 Netlify. Licensed under MIT: https://github.com/netlify/open-api/blob/96b688490fa406c71e4453e041ec5a0587d35f0b/LICENSE",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE."
+  ]
  },
  "x-infralift-source": {
   "repo": "netlify/open-api",

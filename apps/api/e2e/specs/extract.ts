@@ -38,9 +38,21 @@ const here = dirname(fileURLToPath(import.meta.url));
  *  recorded digest stops the extraction: the archived copy is the pin. */
 async function download(pin: GithubPin | UrlPin): Promise<{ text: string; sha256: string }> {
   const url = "url" in pin ? pin.url : `https://raw.githubusercontent.com/${pin.repo}/${pin.commit}/${pin.path}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(120_000) });
-  if (!res.ok) throw new Error(`${url} answered ${res.status}`);
-  const text = await res.text();
+  // The archive is slower and flakier than GitHub: three tries, backing off,
+  // for a network error or a 5xx. A 4xx or a digest mismatch is not retried.
+  let text = "";
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(120_000) });
+      if (!res.ok) throw Object.assign(new Error(`${url} answered ${res.status}`), { status: res.status });
+      text = await res.text();
+      break;
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (attempt >= 3 || (status !== undefined && status < 500)) throw err;
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
+  }
   const sha256 = createHash("sha256").update(text).digest("hex");
   if ("url" in pin && sha256 !== pin.sha256) throw new Error(`${url} has sha256 ${sha256}, not the pinned ${pin.sha256}`);
   return { text, sha256 };
@@ -163,7 +175,7 @@ async function extract(source: SpecSource): Promise<string> {
       const { text, sha256 } = await download(source.pin);
       const full = inlinePathRefs(JSON.parse(text) as OpenApiDocument);
       fail(source, stillUndocumented(source, [full]));
-      return json(seeded(source, subset(source, full, sha256)));
+      return json(noticed(source, seeded(source, subset(source, full, sha256))));
     }
     case "bundle": {
       const read = githubReader(source.repo, source.commit);
@@ -174,20 +186,20 @@ async function extract(source: SpecSource): Promise<string> {
         "swagger" in bundled.version
           ? swagger2ToOpenApi(bundled)
           : { openapi: bundled.version.openapi, info: bundled.info, paths: bundled.paths as OpenApiDocument["paths"], components: { schemas: bundled.schemas as Record<string, Schema> } };
-      return json(seeded(source, withSource(base, source.repo, source.commit, source.roots.map((r) => r.path))));
+      return json(noticed(source, seeded(source, withSource(base, source.repo, source.commit, source.roots.map((r) => r.path)))));
     }
     case "discovery": {
       const read = githubReader(source.repo, source.commit);
       const docs = await Promise.all(source.documents.map(async (d) => ({ doc: (await read(d.path)) as Record<string, any>, operations: d.operations })));
       const base = discoveryToOpenApi(docs);
-      return json(seeded(source, withSource(base, source.repo, source.commit, source.documents.map((d) => d.path))));
+      return json(noticed(source, seeded(source, withSource(base, source.repo, source.commit, source.documents.map((d) => d.path)))));
     }
     case "hyper-schema": {
       const { text, sha256 } = await download(source.pin);
       const base = hyperSchemaToOpenApi(JSON.parse(text), source.operations);
       base.info = { ...(base.info as object), "x-infralift-subset": `operations infralift calls, from ${pinLabel(source.pin)}` };
       base["x-infralift-source"] = { ...source.pin, sha256 };
-      return json(seeded(source, base));
+      return json(noticed(source, seeded(source, base)));
     }
     case "graphql": {
       const { text, sha256 } = await download(source.pin);
@@ -198,7 +210,10 @@ async function extract(source: SpecSource): Promise<string> {
         stillRejected.map((r) => `a query recorded as rejected now validates; revisit: ${r.note}`)
       );
       const sdl = printSubset(graphqlSubset(full, source.queries));
-      return `# The part of ${pinLabel(source.pin)} (sha256 ${sha256})\n# that infralift's queries select (sources.ts). Written by e2e/specs/extract.ts; do not edit.\n\n${sdl}\n`;
+      const notice = noticeText(source)
+        .map((line) => `# ${line}\n`)
+        .join("");
+      return `# The part of ${pinLabel(source.pin)} (sha256 ${sha256})\n# that infralift's queries select (sources.ts). Written by e2e/specs/extract.ts; do not edit.\n${notice}\n${sdl}\n`;
     }
   }
 }
@@ -218,6 +233,48 @@ function inlinePathRefs(doc: OpenApiDocument): OpenApiDocument {
     return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, resolve(v, depth)]));
   };
   return resolve(doc, 0) as OpenApiDocument;
+}
+
+/** The upstream copyright and licence notice for a subset, as lines. A
+ *  subset is a modified copy, so it says so; an MPL-2.0 source also carries
+ *  the MPL's Exhibit A notice, since the subset stays under the MPL. */
+function noticeText(source: SpecSource): string[] {
+  const l = source.license;
+  if (!l) return [];
+  const lines = [
+    `${l.holder.replace(/\.$/, "")}. Licensed under ${l.spdx}: ${l.url}`,
+    "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE.",
+  ];
+  if (l.spdx === "MPL-2.0") {
+    lines.push(
+      "This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/."
+    );
+  }
+  return lines;
+}
+
+/** `doc` with the notice in its info: the upstream info.license kept where
+ *  it has one, else the source's; the notice lines as x-infralift-notice. */
+function noticed(source: SpecSource, doc: OpenApiDocument): OpenApiDocument {
+  const l = source.license;
+  if (!l) return doc;
+  const info = doc.info as Record<string, unknown>;
+  doc.info = { ...info, license: info.license ?? { name: l.spdx, url: l.url }, "x-infralift-notice": noticeText(source) };
+  return doc;
+}
+
+/** extract() for a source with no licence, with an error that says what
+ *  to do when the archived copy cannot be fetched or no longer matches. */
+async function extractUnlicensed(source: SpecSource): Promise<string> {
+  try {
+    return await extract(source);
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `${source.name}: could not write ${source.out} from its pin (${why}). It is fetched at setup because it cannot be committed; ` +
+        `the e2e stack needs network access to the pinned URL, and a sha256 mismatch means the archived copy changed: re-pin it in sources.ts.`
+    );
+  }
 }
 
 function withSource(doc: OpenApiDocument, repo: string, commit: string, paths: string[]): OpenApiDocument {
@@ -252,8 +309,15 @@ async function main(): Promise<void> {
   if (unknown.length) throw new Error(`no such entry in sources.ts: ${unknown.join(", ")}`);
   let drift = false;
   for (const source of SOURCES.filter((s) => !only.length || only.includes(s.name))) {
-    const text = await extract(source);
     const out = join(here, source.out);
+    if (!source.license) {
+      // Not redistributable: written from the pin at setup, never committed
+      // (git-ignored), so --check writes it too rather than comparing.
+      await writeFile(out, await extractUnlicensed(source));
+      console.log(`wrote ${source.out} (fetched at setup, git-ignored: the description has no licence to commit it under)`);
+      continue;
+    }
+    const text = await extract(source);
     if (check) {
       const committed = await readFile(out, "utf8").catch(() => "");
       if (committed !== text) {

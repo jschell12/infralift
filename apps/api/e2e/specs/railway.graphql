@@ -1,5 +1,7 @@
 # The part of railwayapp/cli@7da7f0d4dd6061656ed0b001c193945887ee645a/src/gql/schema.json (sha256 361370a5aa34b5e487d98a512dd4d269a1c5bb6d17e133de014d9b34f64ca418)
 # that infralift's queries select (sources.ts). Written by e2e/specs/extract.ts; do not edit.
+# Copyright (c) 2023 Railway Corp. Licensed under MIT: https://github.com/railwayapp/cli/blob/7da7f0d4dd6061656ed0b001c193945887ee645a/LICENSE
+# A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE.
 
 type Query {
   """Gets the authenticated user."""

@@ -3,7 +3,15 @@
  "info": {
   "title": "WebApps API Client",
   "version": "2024-04-01",
-  "x-infralift-subset": "operations infralift calls, from Azure/azure-rest-api-specs@6a42ee6dd4a2c09f9f03eba31cc13ab20e434353 (6 files)"
+  "x-infralift-subset": "operations infralift calls, from Azure/azure-rest-api-specs@6a42ee6dd4a2c09f9f03eba31cc13ab20e434353 (6 files)",
+  "license": {
+   "name": "MIT",
+   "url": "https://github.com/Azure/azure-rest-api-specs/blob/6a42ee6dd4a2c09f9f03eba31cc13ab20e434353/LICENSE"
+  },
+  "x-infralift-notice": [
+   "Copyright (c) 2017 Microsoft. Licensed under MIT: https://github.com/Azure/azure-rest-api-specs/blob/6a42ee6dd4a2c09f9f03eba31cc13ab20e434353/LICENSE",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE."
+  ]
  },
  "x-infralift-source": {
   "repo": "Azure/azure-rest-api-specs",

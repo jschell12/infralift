@@ -3,7 +3,15 @@
  "info": {
   "title": "Google APIs (discovery documents)",
   "version": "discovery",
-  "x-infralift-subset": "operations infralift calls, from googleapis/google-api-go-client@2a50de2f986c6287e7c29d3bdfbf0e6defe9923c (7 files)"
+  "x-infralift-subset": "operations infralift calls, from googleapis/google-api-go-client@2a50de2f986c6287e7c29d3bdfbf0e6defe9923c (7 files)",
+  "license": {
+   "name": "BSD-3-Clause",
+   "url": "https://github.com/googleapis/google-api-go-client/blob/2a50de2f986c6287e7c29d3bdfbf0e6defe9923c/LICENSE"
+  },
+  "x-infralift-notice": [
+   "Copyright (c) 2011 Google Inc. All rights reserved. Licensed under BSD-3-Clause: https://github.com/googleapis/google-api-go-client/blob/2a50de2f986c6287e7c29d3bdfbf0e6defe9923c/LICENSE",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE."
+  ]
  },
  "x-infralift-source": {
   "repo": "googleapis/google-api-go-client",

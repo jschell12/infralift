@@ -17,3 +17,5 @@ out/
 # Session log: kept locally, not published (this repository is public).
 STATUS.md
 apps/api/e2e/.api*.log
+# Render's description has no licence to commit it under; written at setup (apps/api/e2e/specs/sources.ts).
+apps/api/e2e/specs/render.openapi.json

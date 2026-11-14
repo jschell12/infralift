@@ -26,6 +26,9 @@ trap stop EXIT
 # A fresh stack every run: leftovers from an aborted run would collide.
 "${compose[@]}" down --remove-orphans >/dev/null 2>&1 || true
 "${compose[@]}" build tofu
+# Render's description has no licence, so its subset is not committed: write
+# it from the pin (verified by sha256) before Prism mounts the specs.
+pnpm --filter @infralift/api e2e:specs render
 docker compose -f docker-compose.e2e.yml --profile mocks up -d --wait
 
 pnpm --filter @infralift/api exec vitest run --config vitest.e2e.config.ts "$@"

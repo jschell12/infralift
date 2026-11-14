@@ -9,7 +9,15 @@
    "url": "https://vercel.com/support"
   },
   "version": "0.0.1",
-  "x-infralift-subset": "operations infralift calls, from vercel/sdk@fe01b47433aa130b15c68a738a8773d9dd38b190/vercel-spec.json"
+  "x-infralift-subset": "operations infralift calls, from vercel/sdk@fe01b47433aa130b15c68a738a8773d9dd38b190/vercel-spec.json",
+  "license": {
+   "name": "Apache-2.0",
+   "url": "https://github.com/vercel/sdk/blob/fe01b47433aa130b15c68a738a8773d9dd38b190/LICENSE"
+  },
+  "x-infralift-notice": [
+   "Vercel, Inc. (repository owner; the LICENSE file has no copyright line). Licensed under Apache-2.0: https://github.com/vercel/sdk/blob/fe01b47433aa130b15c68a738a8773d9dd38b190/LICENSE",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE."
+  ]
  },
  "x-infralift-source": {
   "repo": "vercel/sdk",

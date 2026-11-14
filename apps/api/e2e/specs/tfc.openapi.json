@@ -12,7 +12,12 @@
    "name": "API Support",
    "url": "https://developer.hashicorp.com/terraform/cloud-docs/api-docs"
   },
-  "x-infralift-subset": "operations infralift calls, from hashicorp/go-tfe@55fa43504b980ba9a50d73a3e69772d1d6819239/v2/openapi/spec.json"
+  "x-infralift-subset": "operations infralift calls, from hashicorp/go-tfe@55fa43504b980ba9a50d73a3e69772d1d6819239/v2/openapi/spec.json",
+  "x-infralift-notice": [
+   "Copyright (c) 2018 HashiCorp, Inc. Licensed under MPL-2.0: https://github.com/hashicorp/go-tfe/blob/55fa43504b980ba9a50d73a3e69772d1d6819239/LICENSE",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE.",
+   "This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/."
+  ]
  },
  "x-infralift-source": {
   "repo": "hashicorp/go-tfe",
