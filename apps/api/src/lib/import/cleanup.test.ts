@@ -9,9 +9,10 @@ import { renderImportCheck } from "./check.js";
 import { renderAdoption, planAdoption } from "./adopt.js";
 import { scanRepo } from "./scan.js";
 
-// The fixtures are real `plan -generate-config-out` output, captured from the
-// e2e stack (moto 5.2.5, OpenTofu 1.12.6, hashicorp/aws 5.100.0) on 2026-11-14;
-// each file's header says how. moto, not real AWS.
+// The fixtures are real `plan -generate-config-out` output from the e2e stack
+// (moto 5.2.5, OpenTofu 1.12.6, hashicorp/aws 5.100.0) on 2026-11-14: one from
+// a `make e2e` run, one from API-created resources on the same stack. Each
+// file's header says how. moto, not real AWS.
 const FIX = join(__dirname, "__fixtures__");
 const MOTO = readFileSync(join(FIX, "generated-aws-moto.tf"), "utf8");
 const API_CREATED = readFileSync(join(FIX, "generated-aws-moto-api-created.tf"), "utf8");
@@ -44,31 +45,23 @@ function without(content: string, lines: string[]): string {
 /** The lines the cleanup should remove from generated-aws-moto.tf, read off
  *  the fixture: these are the lines `tofu validate` rejected there. */
 const MOTO_REMOVED = [
-  // aws_security_group.web
   '  name_prefix            = ""',
-  // aws_subnet.a
   '  availability_zone_id                           = "use1-az6"',
   "  enable_lni_at_device_index                     = 0",
   '  ipv6_cidr_block                                = ""',
-  // aws_sns_topic.events
   '  fifo_throughput_scope                    = ""',
   '  name_prefix                              = ""',
   "  signature_version                = 0",
   '  tracing_config = ""',
-  // aws_cloudwatch_log_group.app
   '  log_group_class   = ""',
   '  name_prefix       = ""',
-  // aws_dynamodb_table.sessions
   "    recovery_period_in_days = 0",
-  // aws_kms_key.data
   '  custom_key_store_id                = ""',
   "  rotation_period_in_days = 0",
   '  xks_key_id = ""',
-  // aws_vpc.main
   '  ipv6_cidr_block                      = ""',
   '  ipv6_ipam_pool_id                    = ""',
   "  ipv6_netmask_length                  = 0",
-  // aws_s3_bucket.assets
   '  bucket_prefix       = ""',
 ];
 
@@ -83,9 +76,9 @@ describe("cleaning generated AWS code (hashicorp/aws 5.100.0, captured on moto)"
     const r = clean(MOTO);
     const log = r.stdout.trim().split("\n");
     expect(log).toHaveLength(MOTO_REMOVED.length + 1);
-    expect(log).toContain("generated.tf:245: removed bucket_prefix from aws_s3_bucket.assets: computed from the bucket name, which is set; the two conflict");
+    expect(log).toContain("generated.tf:226: removed bucket_prefix from aws_s3_bucket.e2e_handmade_assets: computed from the bucket name, which is set; the two conflict");
     expect(log).toContain(
-      "generated.tf:178: removed point_in_time_recovery.recovery_period_in_days from aws_dynamodb_table.sessions: 0 means not set, and the provider rejects 0 as out of range"
+      "generated.tf:191: removed point_in_time_recovery.recovery_period_in_days from aws_dynamodb_table.e2e_handmade_sessions: 0 means not set, and the provider rejects 0 as out of range"
     );
     expect(log.at(-1)).toBe(`removed ${MOTO_REMOVED.length} generated attribute(s) the provider rejects`);
     // The availability zone id is a real value; the log must not carry it.
@@ -98,11 +91,6 @@ describe("cleaning generated AWS code (hashicorp/aws 5.100.0, captured on moto)"
     for (const [type, rules] of Object.entries(GENERATED_CLEANUP_RULES)) {
       for (const rule of rules) expect(log, `${type} ${rule.attribute}`).toMatch(new RegExp(` removed ${rule.attribute.replace(".", "\\.")} from ${type}\\.`));
     }
-  });
-
-  it("leaves the queue, which has no rules, byte for byte", () => {
-    const queue = /# __generated__ by OpenTofu\nresource "aws_sqs_queue"[\s\S]*?\n}\n/.exec(MOTO)![0];
-    expect(clean(MOTO).result).toContain(queue);
   });
 
   it("keeps a real value where the rule names a placeholder", () => {
@@ -138,7 +126,10 @@ describe("what the cleanup will not touch", () => {
     const r = clean(API_CREATED);
     expect(r.status, r.stderr).toBe(0);
     expect(r.result).toContain('  key_usage                          = ""\n');
-    expect(r.result).toContain("  max_message_size                  = 1048576\n");
+    // The queue has no rules (not adoptable yet), so it passes through whole.
+    const queue = /# __generated__ by OpenTofu\nresource "aws_sqs_queue"[\s\S]*?\n}\n/.exec(API_CREATED)![0];
+    expect(r.result).toContain(queue);
+    expect(queue).toContain("  max_message_size                  = 1048576\n");
     // The rules that do apply to this key still do.
     expect(r.result).toBe(
       without(API_CREATED, ['  custom_key_store_id                = ""', "  rotation_period_in_days = 0", '  xks_key_id              = ""'])

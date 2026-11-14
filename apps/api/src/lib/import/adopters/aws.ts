@@ -68,8 +68,18 @@ export const AWS_KINDS: Record<string, Entry> = {
   "rds:db": { tf: "aws_db_instance", id: rest },
   "rds:cluster": { tf: "aws_rds_cluster", id: rest },
   "lambda:function": { tf: "aws_lambda_function", id: single("function") },
-  // aws_sqs_queue imports by queue URL, which is derivable for the aws partition.
-  "sqs:": { tf: "aws_sqs_queue", id: (a) => `https://sqs.${a.region}.amazonaws.com/${a.account}/${a.rest}` },
+  // Not adoptable yet. SQS gives a queue made outside Terraform a 1 MiB
+  // maximum message size by default (AWS SetQueueAttributes docs), and
+  // hashicorp/aws 5.x, which adoption pins, rejects anything over 256 KiB, so
+  // the generated code can never pass the check and no rule can honestly fix
+  // it: writing 262144 would shrink the queue. Measured 2026-11-14 on moto,
+  // whose default is also 1 MiB: 5.100.0 refuses 1048576, 6.73.0 accepts it.
+  // Moving adoption to ~> 6.0 is the way back; the import id is then the
+  // queue URL, `https://sqs.${a.region}.amazonaws.com/${a.account}/${a.rest}`.
+  "sqs:": {
+    tf: "aws_sqs_queue",
+    id: () => ({ skip: "not adoptable yet: SQS queues default to a 1 MiB message size, which the AWS provider version adoption uses (5.x) cannot write" }),
+  },
   "sns:": { tf: "aws_sns_topic", id: whole },
   "dynamodb:table": { tf: "aws_dynamodb_table", id: single("table") },
   "ecr:repository": { tf: "aws_ecr_repository", id: rest },

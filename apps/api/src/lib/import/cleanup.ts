@@ -80,17 +80,19 @@ const EMPTY_CONFLICTS = "empty means not set, and the provider rejects it beside
 
 /**
  * The rules, per Terraform resource type. Every entry was measured on
- * 2026-11-14: OpenTofu 1.12.6, hashicorp/aws 5.100.0, moto 5.2.5. Each is the
- * `tofu validate` error that generated code produced, and after removal the
- * nine kinds planned "9 to import, 0 to change, 0 to destroy". Snippets are in
- * __fixtures__/generated-aws-moto.tf.
+ * 2026-11-14 with OpenTofu 1.12.6, hashicorp/aws 5.100.0 and moto 5.2.5, not
+ * against real AWS: each is a `tofu validate` error that generated code
+ * produced. With them removed, a probe of nine kinds planned "9 to import,
+ * 0 to change, 0 to destroy", and `make e2e` plans its eight adoptable kinds
+ * the same way on the first run. Snippets: __fixtures__/generated-aws-moto.tf.
  *
  * Deliberately absent: `aws_kms_key.key_usage = ""`. moto omits KeyUsage for a
- * key created without one, the provider then defaults it to ENCRYPT_DECRYPT,
- * and the plan replaces the key. Real AWS always returns KeyUsage. Removing
- * the line would not hide that (the plan shows the replacement), but it would
- * turn a validate error into a replacement, which reads worse, so the line is
- * left for the gate to refuse.
+ * key created without one; the provider then defaults it to ENCRYPT_DECRYPT
+ * and the plan replaces the key (measured). AWS documents KeyUsage as part of
+ * every key's metadata, so real keys should not hit this, but that is not
+ * verified here. Removing the line would not hide anything (the plan shows the
+ * replacement), but it would turn a validate error into a replacement, so the
+ * line is left for the gate to refuse.
  *
  * aws_sqs_queue is not here because it is not adoptable yet: see the sqs entry
  * in adopters/aws.ts.
