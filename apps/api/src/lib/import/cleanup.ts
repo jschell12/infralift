@@ -6,8 +6,9 @@ import type { Step } from "./check.js";
 // Terraform generates resource code by writing every attribute the provider
 // read back, including ones that hold the provider's "not set" value. Some
 // providers then reject their own output. Measured 2026-11-14 with OpenTofu
-// 1.12.6 and hashicorp/aws 5.100.0 (what adoption's `~> 5.0` resolves to),
-// against moto: every one of nine AWS kinds failed `validate`, e.g.
+// 1.12.6 against moto, first on hashicorp/aws 5.100.0 and again on 6.73.0
+// (what adoption's `~> 6.73` resolves to): every one of nine AWS kinds failed
+// `validate` on both, e.g.
 // `bucket_prefix = ""` beside `bucket` (conflicts) and
 // `fifo_throughput_scope = ""` (not one of the allowed values). So every AWS
 // adoption check failed with "The plan failed before it could compare
@@ -51,6 +52,11 @@ import type { Step } from "./check.js";
 // diagnostic that justified it. Measure first (a generated snippet, the
 // validate error, a plan of zero changes after removal), then add the entry
 // and a fixture test in cleanup.test.ts.
+//
+// The table belongs to one provider version. Raising adoption's AWS pin
+// (PROVIDER_SOURCES in lib/tf/codegen.ts) means re-capturing the fixtures
+// from a `make e2e` run on the new version and keeping only rules that still
+// match a line in them; cleanup.test.ts fails on a rule that matches none.
 // ---------------------------------------------------------------------------
 
 /** Remove the line when it holds exactly this "not set" value. */
@@ -80,11 +86,16 @@ const EMPTY_CONFLICTS = "empty means not set, and the provider rejects it beside
 
 /**
  * The rules, per Terraform resource type. Every entry was measured on
- * 2026-11-14 with OpenTofu 1.12.6, hashicorp/aws 5.100.0 and moto 5.2.5, not
+ * 2026-11-14 with OpenTofu 1.12.6, hashicorp/aws 6.73.0 and moto 5.2.5, not
  * against real AWS: each is a `tofu validate` error that generated code
  * produced. With them removed, a probe of nine kinds planned "9 to import,
- * 0 to change, 0 to destroy", and `make e2e` plans its eight adoptable kinds
+ * 0 to change, 0 to destroy", and `make e2e` plans its nine adoptable kinds
  * the same way on the first run. Snippets: __fixtures__/generated-aws-moto.tf.
+ *
+ * What moving from 5.100.0 changed: every 5.x rule still matches a line 6.x
+ * writes, and two kinds gained rules. aws_sns_topic writes a new
+ * `maximum_message_size = 0`. aws_sqs_queue is adoptable again (6.x accepts
+ * SQS's 1 MiB default message size; 5.x did not) and needs four.
  *
  * Deliberately absent: `aws_kms_key.key_usage = ""`. moto omits KeyUsage for a
  * key created without one; the provider then defaults it to ENCRYPT_DECRYPT
@@ -93,9 +104,6 @@ const EMPTY_CONFLICTS = "empty means not set, and the provider rejects it beside
  * verified here. Removing the line would not hide anything (the plan shows the
  * replacement), but it would turn a validate error into a replacement, so the
  * line is left for the gate to refuse.
- *
- * aws_sqs_queue is not here because it is not adoptable yet: see the sqs entry
- * in adopters/aws.ts.
  */
 export const GENERATED_CLEANUP_RULES: Readonly<Record<string, readonly CleanupRule[]>> = {
   aws_s3_bucket: [{ attribute: "bucket_prefix", derivedFrom: "bucket", why: "computed from the bucket name, which is set; the two conflict" }],
@@ -105,6 +113,7 @@ export const GENERATED_CLEANUP_RULES: Readonly<Record<string, readonly CleanupRu
     { attribute: "fifo_throughput_scope", placeholder: '""', why: NOT_AN_ALLOWED_VALUE },
     { attribute: "signature_version", placeholder: "0", why: OUT_OF_RANGE },
     { attribute: "tracing_config", placeholder: '""', why: NOT_AN_ALLOWED_VALUE },
+    { attribute: "maximum_message_size", placeholder: "0", why: OUT_OF_RANGE },
   ],
   aws_cloudwatch_log_group: [
     { attribute: "name_prefix", derivedFrom: "name", why: NAME_PREFIX },
@@ -129,6 +138,12 @@ export const GENERATED_CLEANUP_RULES: Readonly<Record<string, readonly CleanupRu
     },
     { attribute: "enable_lni_at_device_index", placeholder: "0", why: "0 means not set, and the provider rejects 0" },
     { attribute: "ipv6_cidr_block", placeholder: '""', why: "empty means not set, and the provider rejects an empty CIDR block" },
+  ],
+  aws_sqs_queue: [
+    { attribute: "name_prefix", derivedFrom: "name", why: NAME_PREFIX },
+    { attribute: "deduplication_scope", placeholder: '""', why: NOT_AN_ALLOWED_VALUE },
+    { attribute: "fifo_throughput_limit", placeholder: '""', why: NOT_AN_ALLOWED_VALUE },
+    { attribute: "kms_master_key_id", placeholder: '""', why: EMPTY_CONFLICTS },
   ],
 };
 

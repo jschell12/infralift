@@ -3,7 +3,7 @@ import { tfName } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // AWS: the connector inventories anything the Tagging API returns, keyed by
-// ARN. This table turns an ARN into the hashicorp/aws v5 resource type and the
+// ARN. This table turns an ARN into the hashicorp/aws v6 resource type and the
 // import id that resource's docs give. Where the ARN alone cannot produce the
 // id, the entry says so rather than guessing.
 //
@@ -68,18 +68,12 @@ export const AWS_KINDS: Record<string, Entry> = {
   "rds:db": { tf: "aws_db_instance", id: rest },
   "rds:cluster": { tf: "aws_rds_cluster", id: rest },
   "lambda:function": { tf: "aws_lambda_function", id: single("function") },
-  // Not adoptable yet. SQS gives a queue made outside Terraform a 1 MiB
-  // maximum message size by default (AWS SetQueueAttributes docs), and
-  // hashicorp/aws 5.x, which adoption pins, rejects anything over 256 KiB, so
-  // the generated code can never pass the check and no rule can honestly fix
-  // it: writing 262144 would shrink the queue. Measured 2026-11-14 on moto,
-  // whose default is also 1 MiB: 5.100.0 refuses 1048576, 6.73.0 accepts it.
-  // Moving adoption to ~> 6.0 is the way back; the import id is then the
-  // queue URL, `https://sqs.${a.region}.amazonaws.com/${a.account}/${a.rest}`.
-  "sqs:": {
-    tf: "aws_sqs_queue",
-    id: () => ({ skip: "not adoptable yet: SQS queues default to a 1 MiB message size, which the AWS provider version adoption uses (5.x) cannot write" }),
-  },
+  // aws_sqs_queue imports by queue URL, which is derivable for the aws
+  // partition. A queue made outside Terraform gets SQS's 1 MiB default
+  // message size; hashicorp/aws 5.x rejected that (anything over 256 KiB), so
+  // SQS was not adoptable until adoption moved to 6.x, which accepts it.
+  // Measured 2026-11-14 on moto: 6.73.0 plans such a queue to zero changes.
+  "sqs:": { tf: "aws_sqs_queue", id: (a) => `https://sqs.${a.region}.amazonaws.com/${a.account}/${a.rest}` },
   "sns:": { tf: "aws_sns_topic", id: whole },
   "dynamodb:table": { tf: "aws_dynamodb_table", id: single("table") },
   "ecr:repository": { tf: "aws_ecr_repository", id: rest },

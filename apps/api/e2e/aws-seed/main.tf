@@ -5,7 +5,7 @@
 # what the Resource Groups Tagging API returns.
 terraform {
   required_providers {
-    aws = { source = "hashicorp/aws", version = "~> 5.0" }
+    aws = { source = "hashicorp/aws", version = "~> 6.73" }
   }
 }
 
@@ -75,6 +75,6 @@ resource "aws_cloudwatch_log_group" "app" {
   tags = { env = "e2e" }
 }
 
-# The SQS queue is not here: the provider (5.x) would create it at 256 KiB,
-# but a queue made in the console or CLI gets SQS's 1 MiB default, which is
-# the case that matters. The suite creates it through moto's API instead.
+# The SQS queue is not here: a queue made in the console or CLI gets SQS's own
+# defaults (a 1 MiB message size), which is the case that matters, so the
+# suite creates it through moto's API instead of through the provider.

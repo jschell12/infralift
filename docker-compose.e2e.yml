@@ -36,6 +36,13 @@ services:
   moto:
     image: motoserver/moto:5.2.5
     ports: ["127.0.0.1:55000:5000"]
+    networks:
+      default:
+        # hashicorp/aws 6.x reads S3 bucket tags through S3 Control, and the
+        # SDK puts the account id in front of the endpoint's host
+        # (123456789012.moto:5000). That is moto's default account, so this
+        # name has to reach moto too, or generating a bucket's code fails.
+        aliases: ["123456789012.moto"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/moto-api/data.json')"]
       interval: 2s
