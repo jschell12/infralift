@@ -36,7 +36,10 @@ const account = { id: CF_SEED.account.id, name: CF_SEED.account.name };
 /** GET responses by the description's path template. */
 export const CF_EXAMPLES: Record<string, unknown> = {
   "/user/tokens/verify": envelope({ id: CF_SEED.token.id, status: CF_SEED.token.status }),
-  "/accounts": envelope([account], page(1)),
+  // Cloudflare's description gives the account list's result_info no
+  // total_pages (iam_result_info), so the seed has none; the connector then
+  // reads the list as one page.
+  "/accounts": envelope([account], { page: 1, per_page: 50, count: 1, total_count: 1 }),
   "/accounts/{account_id}/workers/scripts": envelope([{ id: CF_SEED.worker.id, modified_on: "2026-01-01T00:00:00Z" }]),
   "/accounts/{account_id}/pages/projects": envelope(
     [

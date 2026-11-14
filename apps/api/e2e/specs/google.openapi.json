@@ -73,6 +73,19 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/run_GoogleCloudRunV2ListServicesResponse"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/google.ts)",
+          "value": {
+           "services": [
+            {
+             "name": "projects/infralift-e2e/locations/us-central1/services/e2e-run",
+             "uri": "https://e2e-run-abc123-uc.a.run.app"
+            }
+           ]
+          }
+         }
         }
        }
       }
@@ -151,6 +164,26 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/compute_InstanceAggregatedList"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/google.ts)",
+          "value": {
+           "kind": "compute#instanceAggregatedList",
+           "items": {
+            "zones/us-central1-a": {
+             "instances": [
+              {
+               "id": "1234567890123456789",
+               "name": "e2e-vm",
+               "machineType": "https://www.googleapis.com/compute/v1/projects/infralift-e2e/zones/us-central1-a/machineTypes/e2-small",
+               "status": "RUNNING"
+              }
+             ]
+            }
+           }
+          }
+         }
         }
        }
       }
@@ -212,6 +245,29 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/sqladmin_InstancesListResponse"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/google.ts)",
+          "value": {
+           "kind": "sql#instancesList",
+           "items": [
+            {
+             "kind": "sql#instance",
+             "name": "e2e-sql",
+             "project": "infralift-e2e",
+             "region": "us-central1",
+             "databaseVersion": "POSTGRES_16",
+             "state": "RUNNABLE",
+             "settings": {
+              "kind": "sql#settings",
+              "tier": "db-custom-1-3840",
+              "dataDiskSizeGb": "10"
+             }
+            }
+           ]
+          }
+         }
         }
        }
       }
@@ -301,6 +357,23 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/storage_Buckets"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/google.ts)",
+          "value": {
+           "kind": "storage#buckets",
+           "items": [
+            {
+             "kind": "storage#bucket",
+             "id": "infralift-e2e-assets",
+             "name": "infralift-e2e-assets",
+             "location": "US",
+             "storageClass": "STANDARD"
+            }
+           ]
+          }
+         }
         }
        }
       }
@@ -370,6 +443,22 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/cloudfunctions_ListFunctionsResponse"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/google.ts)",
+          "value": {
+           "functions": [
+            {
+             "name": "projects/infralift-e2e/locations/us-central1/functions/e2e-fn",
+             "buildConfig": {
+              "runtime": "nodejs22"
+             },
+             "state": "ACTIVE"
+            }
+           ]
+          }
+         }
         }
        }
       }
@@ -415,6 +504,20 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/firebasehosting_ListSitesResponse"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/google.ts)",
+          "value": {
+           "sites": [
+            {
+             "name": "projects/infralift-e2e/sites/infralift-e2e",
+             "defaultUrl": "https://infralift-e2e.web.app",
+             "type": "DEFAULT_SITE"
+            }
+           ]
+          }
+         }
         }
        }
       }
@@ -451,6 +554,20 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/firestore_GoogleFirestoreAdminV1ListDatabasesResponse"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/google.ts)",
+          "value": {
+           "databases": [
+            {
+             "name": "projects/infralift-e2e/databases/(default)",
+             "locationId": "nam5",
+             "type": "FIRESTORE_NATIVE"
+            }
+           ]
+          }
+         }
         }
        }
       }

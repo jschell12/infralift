@@ -18,6 +18,15 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/account"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/heroku.ts)",
+          "value": {
+           "id": "e2e0a0a0-0000-4000-8000-0000000001aa",
+           "email": "e2e@infralift-e2e-heroku.example"
+          }
+         }
         }
        }
       }
@@ -42,6 +51,26 @@
          "type": [
           "array"
          ]
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/heroku.ts)",
+          "value": [
+           {
+            "id": "e2e0a0a0-0000-4000-8000-000000000101",
+            "name": "infralift-e2e-app",
+            "region": {
+             "id": "59accabd-516d-4f0e-83e6-6e3757701145",
+             "name": "us"
+            },
+            "stack": {
+             "id": "74cfe988-7527-4ca9-9667-77bb9f3029cf",
+             "name": "heroku-24"
+            },
+            "maintenance": false
+           }
+          ]
+         }
         }
        }
       }
@@ -75,6 +104,18 @@
          "type": [
           "array"
          ]
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/heroku.ts)",
+          "value": [
+           {
+            "type": "web",
+            "size": "Basic",
+            "quantity": 1
+           }
+          ]
+         }
         }
        }
       }
@@ -108,6 +149,30 @@
          "type": [
           "array"
          ]
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/heroku.ts)",
+          "value": [
+           {
+            "id": "e2e0a0a0-0000-4000-8000-000000000102",
+            "name": "postgresql-e2e-12345",
+            "addon_service": {
+             "id": "6c67493d-8fc2-4cd4-9161-4f1ec11cbe69",
+             "name": "heroku-postgresql"
+            },
+            "plan": {
+             "id": "a1c2e1b4-2e3b-4b5c-9b64-1b2c3d4e5f60",
+             "name": "heroku-postgresql:essential-0"
+            },
+            "billed_price": {
+             "cents": 500,
+             "contract": false,
+             "unit": "month"
+            }
+           }
+          ]
+         }
         }
        }
       }
@@ -120,6 +185,7 @@
   "schemas": {
    "account": {
     "description": "An account represents an individual signed up to use the Heroku platform.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -297,6 +363,7 @@
      },
      "identity_provider": {
       "description": "Identity Provider details for federated users.",
+      "additionalProperties": false,
       "properties": {
        "id": {
         "$ref": "#/components/schemas/identity-provider/definitions/id"
@@ -370,6 +437,7 @@
         "$ref": "#/components/schemas/team/definitions/name"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object",
        "null"
@@ -385,6 +453,7 @@
         "$ref": "#/components/schemas/team/definitions/name"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object",
        "null"
@@ -394,6 +463,7 @@
    },
    "add-on": {
     "description": "Add-ons represent add-ons that have been provisioned and attached to one or more apps.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -557,6 +627,7 @@
         "$ref": "#/components/schemas/add-on-service/definitions/name"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object"
       ]
@@ -593,7 +664,8 @@
          "string"
         ]
        }
-      }
+      },
+      "additionalProperties": false
      },
      "app": {
       "description": "billing application associated with this add-on",
@@ -607,7 +679,8 @@
        "name": {
         "$ref": "#/components/schemas/app/definitions/name"
        }
-      }
+      },
+      "additionalProperties": false
      },
      "billed_price": {
       "description": "billed price",
@@ -622,6 +695,7 @@
         "$ref": "#/components/schemas/plan/definitions/unit"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object",
        "null"
@@ -649,6 +723,7 @@
         "$ref": "#/components/schemas/plan/definitions/name"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object"
       ]
@@ -669,6 +744,7 @@
    },
    "add-on-plan-action": {
     "description": "Add-on Plan Actions are Provider functionality for specific add-on installations",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -733,6 +809,7 @@
    },
    "add-on-service": {
     "description": "Add-on services represent add-ons that may be provisioned for apps. Endpoints under add-on services can be accessed without authentication.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -855,6 +932,7 @@
    },
    "app": {
     "description": "An app represents the program that you would like to deploy and run on Heroku.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -1000,6 +1078,7 @@
         "$ref": "#/components/schemas/stack/definitions/name"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object"
       ]
@@ -1032,6 +1111,7 @@
         "$ref": "#/components/schemas/account/definitions/id"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object"
       ]
@@ -1076,6 +1156,7 @@
         "$ref": "#/components/schemas/region/definitions/name"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object"
       ]
@@ -1117,6 +1198,7 @@
         "$ref": "#/components/schemas/stack/definitions/name"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object"
       ]
@@ -1131,6 +1213,7 @@
    },
    "enterprise-account": {
     "description": "Enterprise accounts allow companies to manage their development teams and billing.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -1160,6 +1243,7 @@
      },
      "identity_provider": {
       "description": "Identity Provider associated with the Enterprise Account",
+      "additionalProperties": false,
       "type": [
        "null",
        "object"
@@ -1237,6 +1321,7 @@
    },
    "formation": {
     "description": "The formation of processes that should be maintained for an app. Update the formation to scale processes or change dyno sizes. Available process type names and commands are defined by the `process_types` attribute for the [slug](#slug) currently released on an app.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -1367,6 +1452,7 @@
    },
    "identity-provider": {
     "description": "Identity Providers represent the SAML configuration of an Enterprise Account or Team.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -1510,6 +1596,7 @@
    },
    "plan": {
     "description": "Plans represent different configurations of add-ons that may be added to apps. Endpoints under add-on services can be accessed without authentication.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -1666,6 +1753,7 @@
         "$ref": "#/components/schemas/add-on-service/definitions/name"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object"
       ]
@@ -1710,6 +1798,7 @@
         "$ref": "#/components/schemas/plan/definitions/unit"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object"
       ]
@@ -1730,6 +1819,7 @@
    },
    "region": {
     "description": "A region represents a geographic location in which your application may run.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -1872,6 +1962,7 @@
    },
    "space": {
     "description": "A space is an isolated, highly available, secure app execution environment.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -2005,6 +2096,7 @@
         "$ref": "#/components/schemas/region/definitions/name"
        }
       },
+      "additionalProperties": false,
       "type": [
        "object"
       ]
@@ -2028,6 +2120,7 @@
    },
    "stack": {
     "description": "Stacks are the different application execution environments available in the Heroku platform.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -2111,6 +2204,7 @@
    },
    "team": {
     "description": "Teams allow you to manage access to a shared group of applications and other resources.",
+    "additionalProperties": false,
     "type": [
      "object"
     ],
@@ -2171,6 +2265,7 @@
      },
      "identity_provider": {
       "description": "Identity Provider associated with the Team",
+      "additionalProperties": false,
       "type": [
        "null",
        "object"

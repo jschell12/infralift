@@ -74,6 +74,27 @@
            "blockedReason": "user.softBlock.reason"
           }
          }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/vercel.ts)",
+          "value": {
+           "user": {
+            "id": "e2e0user000000000000001",
+            "username": "infralift-e2e",
+            "email": "e2e@infralift-e2e-vercel.example",
+            "avatar": null,
+            "billing": null,
+            "createdAt": 0,
+            "defaultTeamId": null,
+            "hasTrialAvailable": false,
+            "name": null,
+            "resourceConfig": {},
+            "softBlock": null,
+            "stagingPrefix": ""
+           }
+          }
+         }
         }
        }
       }
@@ -281,6 +302,39 @@
           "pagination"
          ],
          "type": "object"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/vercel.ts)",
+          "value": {
+           "domains": [
+            {
+             "id": "dom_e2e0000000000000001",
+             "name": "infralift-e2e-vercel.example",
+             "serviceType": "zeit.world",
+             "boughtAt": null,
+             "createdAt": 0,
+             "creator": {
+              "email": "",
+              "id": "",
+              "username": ""
+             },
+             "echMode": "auto",
+             "expiresAt": null,
+             "intendedNameservers": [],
+             "nameservers": [],
+             "teamId": null,
+             "userId": "",
+             "verified": false
+            }
+           ],
+           "pagination": {
+            "count": 1,
+            "next": null,
+            "prev": null
+           }
+          }
+         }
         }
        }
       }

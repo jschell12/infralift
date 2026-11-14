@@ -28,6 +28,15 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/user"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/netlify.ts)",
+          "value": {
+           "id": "e2e0user00000000000000001",
+           "email": "e2e@infralift-e2e-netlify.example"
+          }
+         }
         }
        }
       }
@@ -104,6 +113,24 @@
          "items": {
           "$ref": "#/components/schemas/site"
          }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/netlify.ts)",
+          "value": [
+           {
+            "id": "e2e0a0a0-0000-4000-8000-000000000201",
+            "name": "infralift-e2e-site",
+            "custom_domain": "www.infralift-e2e-netlify.example",
+            "build_settings": {
+             "repo_url": "https://github.com/infralift-e2e/site",
+             "dir": "dist",
+             "cmd": "npm run build",
+             "functions_dir": "netlify/functions"
+            }
+           }
+          ]
+         }
         }
        }
       }
@@ -146,6 +173,18 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/dnsZones"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/netlify.ts)",
+          "value": [
+           {
+            "id": "e2e0zone00000000000000001",
+            "name": "infralift-e2e-netlify.example",
+            "records": []
+           }
+          ]
+         }
         }
        }
       }
@@ -189,6 +228,19 @@
          "type": "array",
          "items": {
           "$ref": "#/components/schemas/buildHook"
+         }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/netlify.ts)",
+          "value": [
+           {
+            "id": "e2e0hook00000000000000001",
+            "title": "deploy",
+            "branch": "main",
+            "url": "https://api.netlify.com/build_hooks/e2e0hook00000000000000001"
+           }
+          ]
          }
         }
        }

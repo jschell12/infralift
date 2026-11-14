@@ -129,6 +129,27 @@
          "items": {
           "$ref": "#/components/schemas/Machine"
          }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/flyio.ts)",
+          "value": [
+           {
+            "id": "e2e0machine0001",
+            "name": "e2e-machine",
+            "state": "started",
+            "region": "iad",
+            "config": {
+             "image": "registry.fly.io/infralift-e2e-fly:latest",
+             "guest": {
+              "cpu_kind": "shared",
+              "cpus": 1,
+              "memory_mb": 256
+             }
+            }
+           }
+          ]
+         }
         }
        }
       }
@@ -206,6 +227,21 @@
          "type": "array",
          "items": {
           "$ref": "#/components/schemas/Volume"
+         }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/flyio.ts)",
+          "value": [
+           {
+            "id": "vol_e2e00000000000001",
+            "name": "e2e_data",
+            "region": "iad",
+            "size_gb": 1,
+            "state": "created",
+            "encrypted": true
+           }
+          ]
          }
         }
        }

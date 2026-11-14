@@ -8,8 +8,18 @@
 #               moto is Apache-2.0 and needs neither.
 #   cloudflare  Prism serving Cloudflare's own OpenAPI description (the subset
 #               infralift calls, at a pinned commit) with a seeded account
+#   mock-*      Prism serving the other providers' descriptions the same way
+#               (profile "mocks"): DigitalOcean, Render, Vercel, Heroku,
+#               Netlify, the Fly.io Machines API, Azure Resource Manager, and
+#               Google Cloud and Firebase. Pins and seeds: apps/api/e2e/specs
+#               (sources.ts, seeds/). GraphQL (Railway, Fly.io's platform API)
+#               and the OAuth token endpoints are served by the provider fake
+#               the suite starts on the host (apps/api/e2e/provider-fakes).
 #   tofu        OpenTofu with bash and jq, run per step by the suite (profile
 #               "tools", so `up` does not start it)
+#   gitlab      GitLab CE (profile "gitlab", opt-in: several GB of RAM and
+#               minutes to boot). E2E_GITLAB=1 scripts/e2e.sh starts it and
+#               runs e2e/gitlab.e2e.test.ts; nothing else needs it.
 #
 # The GitHub fake and the API run on the host from source, started by the
 # suite, so tests can read their state directly.
@@ -17,6 +27,14 @@
 # Ports bind to 127.0.0.1 only.
 
 name: infralift-e2e
+
+# One Prism per description: Prism serves a single document. --errors refuses
+# a request the description would reject; single process, as for cloudflare.
+x-prism: &prism
+  image: stoplight/prism:5.15.10
+  platform: linux/amd64
+  profiles: ["mocks"]
+  volumes: ["./apps/api/e2e/specs:/spec:ro"]
 
 services:
   postgres:
@@ -64,6 +82,98 @@ services:
       interval: 3s
       timeout: 5s
       retries: 40
+
+  mock-digitalocean:
+    <<: *prism
+    command: ["mock", "/spec/digitalocean.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
+    ports: ["127.0.0.1:54011:4010"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4010/v2/account',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+  mock-render:
+    <<: *prism
+    command: ["mock", "/spec/render.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
+    ports: ["127.0.0.1:54012:4010"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4010/owners?limit=1',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+  mock-vercel:
+    <<: *prism
+    command: ["mock", "/spec/vercel.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
+    ports: ["127.0.0.1:54013:4010"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4010/v2/user',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+  mock-heroku:
+    <<: *prism
+    command: ["mock", "/spec/heroku.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
+    ports: ["127.0.0.1:54014:4010"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4010/account',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+  mock-netlify:
+    <<: *prism
+    command: ["mock", "/spec/netlify.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
+    ports: ["127.0.0.1:54015:4010"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4010/user',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+  mock-flyio-machines:
+    <<: *prism
+    command: ["mock", "/spec/flyio-machines.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
+    ports: ["127.0.0.1:54016:4010"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4010/v1/apps/h/volumes',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+  mock-azure:
+    <<: *prism
+    command: ["mock", "/spec/azure.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
+    ports: ["127.0.0.1:54017:4010"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4010/subscriptions/h/providers/Microsoft.Storage/storageAccounts?api-version=2023-05-01',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+  mock-google:
+    <<: *prism
+    command: ["mock", "/spec/google.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
+    ports: ["127.0.0.1:54018:4010"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4010/storage/v1/b?project=h',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  gitlab:
+    image: gitlab/gitlab-ce:18.5.1-ce.0
+    profiles: ["gitlab"]
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://127.0.0.1:54080'
+        puma['worker_processes'] = 0
+        sidekiq['concurrency'] = 2
+        prometheus_monitoring['enable'] = false
+        gitlab_rails['initial_root_password'] = 'e2e-not-a-secret-9f3k2'
+    ports: ["127.0.0.1:54080:54080"]
+    shm_size: 256m
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:54080/-/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 120s
 
   tofu:
     build: ./apps/api/e2e/tofu

@@ -28,7 +28,7 @@ import { buildClientSchema, buildSchema, type GraphQLSchema } from "graphql";
 import { bundle, githubReader } from "./bundle.js";
 import { discoveryToOpenApi, hyperSchemaToOpenApi, swagger2ToOpenApi } from "./convert.js";
 import { graphqlSubset, printSubset, queryProblems } from "./graphql-subset.js";
-import { fillRequired, responseSchema, SpecValidator, type OpenApiDocument, type Schema } from "./openapi.js";
+import { deref, fillRequired, responseSchema, SpecValidator, undeclaredFields, type OpenApiDocument, type Schema } from "./openapi.js";
 import { SEEDS } from "./seeds/index.js";
 import { SOURCES, type GithubPin, type OpenApiSource, type SpecSource, type UrlPin } from "./sources.js";
 
@@ -134,6 +134,8 @@ export function seedExamples(doc: OpenApiDocument, examples: Record<string, unkn
     const example = fillRequired(doc, schema, seed);
     const error = validator.check(schema, example);
     if (error) problems.push(`${path}: ${error}`);
+    const invented = undeclaredFields(doc, schema, seed);
+    if (invented.length) problems.push(`${path}: fields the description does not declare: ${invented.join(", ")}`);
     const op = doc.paths[path].get;
     const content = op.responses["200"].content;
     const type = content["application/json"] ? "application/json" : Object.keys(content)[0];
@@ -159,7 +161,7 @@ async function extract(source: SpecSource): Promise<string> {
   switch (source.format) {
     case "openapi": {
       const { text, sha256 } = await download(source.pin);
-      const full = JSON.parse(text) as OpenApiDocument;
+      const full = inlinePathRefs(JSON.parse(text) as OpenApiDocument);
       fail(source, stillUndocumented(source, [full]));
       return json(seeded(source, subset(source, full, sha256)));
     }
@@ -199,6 +201,23 @@ async function extract(source: SpecSource): Promise<string> {
       return `# The part of ${pinLabel(source.pin)} (sha256 ${sha256})\n# that infralift's queries select (sources.ts). Written by e2e/specs/extract.ts; do not edit.\n\n${sdl}\n`;
     }
   }
+}
+
+/** Refs into #/paths (Render's components point at a path's parameter
+ *  schema) replaced by what they point at, since a subset keeps only some
+ *  paths and components. A no-op for descriptions without them. */
+function inlinePathRefs(doc: OpenApiDocument): OpenApiDocument {
+  const resolve = (node: unknown, depth: number): unknown => {
+    if (Array.isArray(node)) return node.map((n) => resolve(n, depth));
+    if (!node || typeof node !== "object") return node;
+    const ref = (node as Record<string, unknown>).$ref;
+    if (typeof ref === "string" && ref.startsWith("#/paths/")) {
+      if (depth > 10) throw new Error(`${ref}: refs into #/paths nest too deep`);
+      return resolve(deref(doc, { $ref: ref }), depth + 1);
+    }
+    return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, resolve(v, depth)]));
+  };
+  return resolve(doc, 0) as OpenApiDocument;
 }
 
 function withSource(doc: OpenApiDocument, repo: string, commit: string, paths: string[]): OpenApiDocument {

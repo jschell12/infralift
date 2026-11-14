@@ -58,6 +58,29 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/WebAppCollection"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/azure.ts)",
+          "value": {
+           "value": [
+            {
+             "id": "/subscriptions/e2e0a0a0-0000-4000-8000-000000000401/resourceGroups/infralift-e2e/providers/Microsoft.Web/sites/infralift-e2e-web",
+             "name": "infralift-e2e-web",
+             "location": "eastus",
+             "kind": "app,linux",
+             "properties": {
+              "state": "Running",
+              "defaultHostName": "infralift-e2e-web.azurewebsites.net",
+              "httpsOnly": true,
+              "siteConfig": {
+               "linuxFxVersion": "NODE|22-lts"
+              }
+             }
+            }
+           ]
+          }
+         }
         }
        }
       }
@@ -124,6 +147,26 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/AppServicePlanCollection"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/azure.ts)",
+          "value": {
+           "value": [
+            {
+             "id": "/subscriptions/e2e0a0a0-0000-4000-8000-000000000401/resourceGroups/infralift-e2e/providers/Microsoft.Web/serverfarms/infralift-e2e-plan",
+             "name": "infralift-e2e-plan",
+             "location": "eastus",
+             "kind": "linux",
+             "sku": {
+              "name": "B1",
+              "tier": "Basic",
+              "capacity": 1
+             }
+            }
+           ]
+          }
+         }
         }
        }
       }
@@ -212,6 +255,31 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/VirtualMachineListResult"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/azure.ts)",
+          "value": {
+           "value": [
+            {
+             "id": "/subscriptions/e2e0a0a0-0000-4000-8000-000000000401/resourceGroups/infralift-e2e/providers/Microsoft.Compute/virtualMachines/infralift-e2e-vm",
+             "name": "infralift-e2e-vm",
+             "location": "eastus",
+             "properties": {
+              "hardwareProfile": {
+               "vmSize": "Standard_B1s"
+              },
+              "storageProfile": {
+               "osDisk": {
+                "osType": "Linux",
+                "createOption": "FromImage"
+               }
+              }
+             }
+            }
+           ]
+          }
+         }
         }
        }
       }
@@ -277,6 +345,23 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/ServerListResult"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/azure.ts)",
+          "value": {
+           "value": [
+            {
+             "id": "/subscriptions/e2e0a0a0-0000-4000-8000-000000000401/resourceGroups/infralift-e2e/providers/Microsoft.Sql/servers/infralift-e2e-sql",
+             "name": "infralift-e2e-sql",
+             "location": "eastus",
+             "properties": {
+              "version": "12.0"
+             }
+            }
+           ]
+          }
+         }
         }
        }
       }
@@ -361,6 +446,27 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/DatabaseListResult"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/azure.ts)",
+          "value": {
+           "value": [
+            {
+             "id": "/subscriptions/e2e0a0a0-0000-4000-8000-000000000401/resourceGroups/infralift-e2e/providers/Microsoft.Sql/servers/infralift-e2e-sql/databases/appdb",
+             "name": "appdb",
+             "location": "eastus",
+             "sku": {
+              "name": "Basic",
+              "tier": "Basic"
+             },
+             "properties": {
+              "maxSizeBytes": 2147483648
+             }
+            }
+           ]
+          }
+         }
         }
        }
       }
@@ -415,6 +521,24 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/StorageAccountListResult"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/azure.ts)",
+          "value": {
+           "value": [
+            {
+             "id": "/subscriptions/e2e0a0a0-0000-4000-8000-000000000401/resourceGroups/infralift-e2e/providers/Microsoft.Storage/storageAccounts/infraliftee2e",
+             "name": "infraliftee2e",
+             "location": "eastus",
+             "kind": "StorageV2",
+             "sku": {
+              "name": "Standard_LRS"
+             }
+            }
+           ]
+          }
+         }
         }
        }
       }

@@ -208,6 +208,8 @@ function hyperSchema(node: unknown): unknown {
       out[k] = Object.fromEntries(Object.entries(v).map(([name, s]) => [name, hyperSchema(s)]));
       continue;
     }
+    // prmd's strictProperties: no properties beyond those listed.
+    if (k === "strictProperties" && v === true && !("additionalProperties" in node)) out.additionalProperties = false;
     if (HYPER_ONLY_KEYS.has(k)) continue;
     out[k] = k === "$ref" && typeof v === "string" ? v.replace(/^#\/definitions\//, "#/components/schemas/") : hyperSchema(v);
   }

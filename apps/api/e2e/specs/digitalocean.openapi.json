@@ -52,6 +52,22 @@
            "$ref": "#/components/schemas/account"
           }
          }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/digitalocean.ts)",
+          "value": {
+           "account": {
+            "email": "e2e@infralift-e2e-do.example",
+            "uuid": "e2e0a0a0-0000-4000-8000-0000000000aa",
+            "status": "active",
+            "droplet_limit": 0,
+            "floating_ip_limit": 0,
+            "email_verified": false,
+            "status_message": ""
+           }
+          }
+         }
         }
        }
       }
@@ -295,6 +311,60 @@
            "$ref": "#/components/schemas/meta"
           }
          ]
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/digitalocean.ts)",
+          "value": {
+           "droplets": [
+            {
+             "id": 3164444,
+             "name": "e2e-web-1",
+             "size_slug": "s-1vcpu-1gb",
+             "region": {
+              "slug": "nyc3",
+              "name": "New York 3",
+              "features": [],
+              "available": false,
+              "sizes": []
+             },
+             "vcpus": 1,
+             "memory": 1024,
+             "disk": 25,
+             "status": "active",
+             "image": {
+              "slug": "ubuntu-24-04-x64",
+              "name": "24.04 (LTS) x64"
+             },
+             "locked": false,
+             "created_at": "2026-01-01T00:00:00Z",
+             "features": [],
+             "backup_ids": [],
+             "next_backup_window": null,
+             "snapshot_ids": [],
+             "volume_ids": [],
+             "size": {
+              "slug": "",
+              "memory": 8,
+              "vcpus": 0,
+              "disk": 0,
+              "transfer": 0,
+              "price_monthly": 0,
+              "price_hourly": 0,
+              "regions": [],
+              "available": true,
+              "description": ""
+             },
+             "networks": {},
+             "tags": []
+            }
+           ],
+           "links": {},
+           "meta": {
+            "total": 1
+           }
+          }
+         }
         }
        }
       }
@@ -477,6 +547,29 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/apps_response"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/digitalocean.ts)",
+          "value": {
+           "apps": [
+            {
+             "id": "e2e0a0a0-0000-4000-8000-000000000001",
+             "spec": {
+              "name": "e2e-app"
+             },
+             "tier_slug": "basic",
+             "region": {
+              "slug": "nyc"
+             }
+            }
+           ],
+           "links": {},
+           "meta": {
+            "total": 1
+           }
+          }
+         }
         }
        }
       },
@@ -682,6 +775,25 @@
            "items": {
             "$ref": "#/components/schemas/database_cluster_read"
            }
+          }
+         }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/digitalocean.ts)",
+          "value": {
+           "databases": [
+            {
+             "id": "e2e0a0a0-0000-4000-8000-000000000002",
+             "name": "e2e-pg",
+             "engine": "pg",
+             "version": "16",
+             "region": "nyc3",
+             "size": "db-s-1vcpu-1gb",
+             "num_nodes": 1,
+             "status": "online"
+            }
+           ]
           }
          }
         }
@@ -930,6 +1042,23 @@
            "$ref": "#/components/schemas/meta"
           }
          ]
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/digitalocean.ts)",
+          "value": {
+           "domains": [
+            {
+             "name": "infralift-e2e-do.example",
+             "ttl": 1800
+            }
+           ],
+           "links": {},
+           "meta": {
+            "total": 1
+           }
+          }
+         }
         }
        }
       }
@@ -1142,6 +1271,35 @@
            "$ref": "#/components/schemas/meta"
           }
          ]
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/digitalocean.ts)",
+          "value": {
+           "kubernetes_clusters": [
+            {
+             "id": "e2e0a0a0-0000-4000-8000-000000000003",
+             "name": "e2e-k8s",
+             "region": "nyc3",
+             "version": "1.31.1-do.5",
+             "node_pools": [
+              {
+               "size": "s-1vcpu-2gb",
+               "name": "e2e-pool",
+               "count": 1
+              }
+             ],
+             "status": {
+              "state": "running"
+             }
+            }
+           ],
+           "links": {},
+           "meta": {
+            "total": 1
+           }
+          }
+         }
         }
        }
       }

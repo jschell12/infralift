@@ -75,6 +75,22 @@
          "items": {
           "$ref": "#/components/schemas/ownerWithCursor"
          }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/render.ts)",
+          "value": [
+           {
+            "cursor": "c1",
+            "owner": {
+             "id": "tea-e2e0000000000000000",
+             "name": "infralift e2e",
+             "email": "e2e@infralift-e2e-render.example",
+             "type": "team"
+            }
+           }
+          ]
+         }
         }
        }
       }
@@ -156,6 +172,38 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/serviceList"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/render.ts)",
+          "value": [
+           {
+            "cursor": "c1",
+            "service": {
+             "id": "srv-e2e0000000000000001",
+             "name": "e2e-web",
+             "type": "web_service",
+             "ownerId": "tea-e2e0000000000000000",
+             "repo": "https://github.com/infralift-e2e/web",
+             "autoDeploy": "yes",
+             "createdAt": "2026-01-01T00:00:00Z",
+             "dashboardUrl": "",
+             "notifyOnFail": "default",
+             "rootDir": "",
+             "slug": "",
+             "suspended": "suspended",
+             "suspenders": [],
+             "updatedAt": "2026-01-01T00:00:00Z",
+             "serviceDetails": {
+              "buildCommand": "",
+              "publishPath": "",
+              "url": "",
+              "buildPlan": "starter"
+             }
+            }
+           }
+          ]
+         }
         }
        }
       }
@@ -233,6 +281,43 @@
          "type": "array",
          "items": {
           "$ref": "#/components/schemas/postgresWithCursor"
+         }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/render.ts)",
+          "value": [
+           {
+            "cursor": "c1",
+            "postgres": {
+             "id": "dpg-e2e0000000000000002",
+             "name": "e2e-pg",
+             "databaseName": "app",
+             "plan": "basic_256mb",
+             "region": "oregon",
+             "version": "16",
+             "status": "available",
+             "ipAllowList": [],
+             "createdAt": "2026-01-01T00:00:00Z",
+             "updatedAt": "2026-01-01T00:00:00Z",
+             "databaseUser": "",
+             "highAvailabilityEnabled": false,
+             "owner": {
+              "id": "",
+              "name": "",
+              "email": "",
+              "type": "user"
+             },
+             "readReplicas": [],
+             "role": "primary",
+             "suspended": "suspended",
+             "suspenders": [],
+             "dashboardUrl": "",
+             "diskAutoscalingEnabled": false,
+             "connectionPool": ""
+            }
+           }
+          ]
          }
         }
        }
@@ -313,6 +398,35 @@
          "items": {
           "$ref": "#/components/schemas/redisWithCursor"
          }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/render.ts)",
+          "value": [
+           {
+            "cursor": "c1",
+            "redis": {
+             "id": "red-e2e0000000000000003",
+             "name": "e2e-cache",
+             "plan": "starter",
+             "region": "oregon",
+             "status": "available",
+             "createdAt": "2026-01-01T00:00:00Z",
+             "updatedAt": "2026-01-01T00:00:00Z",
+             "owner": {
+              "id": "",
+              "name": "",
+              "email": "",
+              "type": "user"
+             },
+             "options": {},
+             "ipAllowList": [],
+             "version": "",
+             "dashboardUrl": ""
+            }
+           }
+          ]
+         }
         }
        }
       }
@@ -387,6 +501,21 @@
          "type": "array",
          "items": {
           "$ref": "#/components/schemas/envGroupMeta"
+         }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/render.ts)",
+          "value": [
+           {
+            "id": "evg-e2e0000000000000004",
+            "name": "e2e-shared",
+            "ownerId": "tea-e2e0000000000000000",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "serviceLinks": []
+           }
+          ]
          }
         }
        }
@@ -734,7 +863,70 @@
     ],
     "properties": {
      "autoscaling": {
-      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+      "type": "object",
+      "required": [
+       "enabled",
+       "min",
+       "max",
+       "criteria"
+      ],
+      "properties": {
+       "enabled": {
+        "type": "boolean",
+        "default": false
+       },
+       "min": {
+        "type": "integer",
+        "description": "The minimum number of instances for the service"
+       },
+       "max": {
+        "type": "integer",
+        "description": "The maximum number of instances for the service"
+       },
+       "criteria": {
+        "type": "object",
+        "required": [
+         "cpu",
+         "memory"
+        ],
+        "properties": {
+         "cpu": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         },
+         "memory": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         }
+        }
+       }
+      }
      },
      "disk": {
       "$ref": "#/components/schemas/webServiceDetails/properties/disk"
@@ -782,11 +974,73 @@
     "type": "object",
     "properties": {
      "buildSourceId": {
-      "$ref": "#/paths/~1build-sources~1{buildSourceId}/parameters/0/schema",
-      "description": "The ID of the Build Source to build and deploy from. Provides all source and build configuration: omit `repo`, `branch`, `image`, `buildFilter`, `runtime`, and build-related `envSpecificDetails` fields when set. A git-backed Build Source must be in the same region as the service; otherwise the request is rejected with 400 and `code: build_source_region_mismatch`."
+      "type": "string"
      },
      "autoscaling": {
-      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+      "type": "object",
+      "required": [
+       "enabled",
+       "min",
+       "max",
+       "criteria"
+      ],
+      "properties": {
+       "enabled": {
+        "type": "boolean",
+        "default": false
+       },
+       "min": {
+        "type": "integer",
+        "description": "The minimum number of instances for the service"
+       },
+       "max": {
+        "type": "integer",
+        "description": "The maximum number of instances for the service"
+       },
+       "criteria": {
+        "type": "object",
+        "required": [
+         "cpu",
+         "memory"
+        ],
+        "properties": {
+         "cpu": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         },
+         "memory": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         }
+        }
+       }
+      }
      },
      "disk": {
       "$ref": "#/components/schemas/serviceDisk"
@@ -936,8 +1190,7 @@
     ],
     "properties": {
      "buildSourceId": {
-      "$ref": "#/paths/~1build-sources~1{buildSourceId}/parameters/0/schema",
-      "description": "The ID of the Build Source to build and deploy from. Provides all source and build configuration: omit `repo`, `branch`, `image`, `buildFilter`, `runtime`, and build-related `envSpecificDetails` fields when set. A git-backed Build Source must be in the same region as the service; otherwise the request is rejected with 400 and `code: build_source_region_mismatch`."
+      "type": "string"
      },
      "env": {
       "$ref": "#/components/schemas/serviceEnv"
@@ -1652,7 +1905,70 @@
     ],
     "properties": {
      "autoscaling": {
-      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+      "type": "object",
+      "required": [
+       "enabled",
+       "min",
+       "max",
+       "criteria"
+      ],
+      "properties": {
+       "enabled": {
+        "type": "boolean",
+        "default": false
+       },
+       "min": {
+        "type": "integer",
+        "description": "The minimum number of instances for the service"
+       },
+       "max": {
+        "type": "integer",
+        "description": "The maximum number of instances for the service"
+       },
+       "criteria": {
+        "type": "object",
+        "required": [
+         "cpu",
+         "memory"
+        ],
+        "properties": {
+         "cpu": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         },
+         "memory": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         }
+        }
+       }
+      }
      },
      "disk": {
       "$ref": "#/components/schemas/webServiceDetails/properties/disk"
@@ -1709,11 +2025,73 @@
     "type": "object",
     "properties": {
      "buildSourceId": {
-      "$ref": "#/paths/~1build-sources~1{buildSourceId}/parameters/0/schema",
-      "description": "The ID of the Build Source to build and deploy from. Provides all source and build configuration: omit `repo`, `branch`, `image`, `buildFilter`, `runtime`, and build-related `envSpecificDetails` fields when set. A git-backed Build Source must be in the same region as the service; otherwise the request is rejected with 400 and `code: build_source_region_mismatch`."
+      "type": "string"
      },
      "autoscaling": {
-      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+      "type": "object",
+      "required": [
+       "enabled",
+       "min",
+       "max",
+       "criteria"
+      ],
+      "properties": {
+       "enabled": {
+        "type": "boolean",
+        "default": false
+       },
+       "min": {
+        "type": "integer",
+        "description": "The minimum number of instances for the service"
+       },
+       "max": {
+        "type": "integer",
+        "description": "The maximum number of instances for the service"
+       },
+       "criteria": {
+        "type": "object",
+        "required": [
+         "cpu",
+         "memory"
+        ],
+        "properties": {
+         "cpu": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         },
+         "memory": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         }
+        }
+       }
+      }
      },
      "disk": {
       "$ref": "#/components/schemas/serviceDisk"
@@ -2101,8 +2479,7 @@
       "type": "string"
      },
      "buildSourceId": {
-      "$ref": "#/paths/~1build-sources~1{buildSourceId}/parameters/0/schema",
-      "description": "The ID of the Build Source the service builds and deploys from, if any. A git-backed Build Source must be in the same region as the service."
+      "type": "string"
      },
      "autoDeploy": {
       "$ref": "#/components/schemas/autoDeploy"
@@ -2283,12 +2660,60 @@
       "type": "string"
      },
      "envVars": {
-      "$ref": "#/paths/~1services~1{serviceId}~1env-vars/put/requestBody/content/application~1json/schema"
+      "type": "array",
+      "items": {
+       "type": "object",
+       "oneOf": [
+        {
+         "type": "object",
+         "required": [
+          "key",
+          "value"
+         ],
+         "properties": {
+          "key": {
+           "type": "string"
+          },
+          "value": {
+           "type": "string"
+          }
+         }
+        },
+        {
+         "type": "object",
+         "required": [
+          "key",
+          "generateValue"
+         ],
+         "properties": {
+          "key": {
+           "type": "string"
+          },
+          "generateValue": {
+           "type": "boolean",
+           "description": "If true, Render generates a strong random value for this environment variable on creation. Cannot be combined with `value`."
+          }
+         }
+        }
+       ]
+      }
      },
      "secretFiles": {
       "type": "array",
       "items": {
-       "$ref": "#/paths/~1services~1{serviceId}~1secret-files/put/requestBody/content/application~1json/schema/items"
+       "type": "object",
+       "required": [
+        "name",
+        "content"
+       ],
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "content": {
+         "type": "string"
+        }
+       }
       }
      },
      "environmentId": {
@@ -2477,7 +2902,70 @@
     ],
     "properties": {
      "autoscaling": {
-      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+      "type": "object",
+      "required": [
+       "enabled",
+       "min",
+       "max",
+       "criteria"
+      ],
+      "properties": {
+       "enabled": {
+        "type": "boolean",
+        "default": false
+       },
+       "min": {
+        "type": "integer",
+        "description": "The minimum number of instances for the service"
+       },
+       "max": {
+        "type": "integer",
+        "description": "The maximum number of instances for the service"
+       },
+       "criteria": {
+        "type": "object",
+        "required": [
+         "cpu",
+         "memory"
+        ],
+        "properties": {
+         "cpu": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         },
+         "memory": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         }
+        }
+       }
+      }
      },
      "cache": {
       "$ref": "#/components/schemas/cache"
@@ -2492,7 +2980,8 @@
       ],
       "properties": {
        "id": {
-        "$ref": "#/paths/~1disks~1{diskId}/parameters/0/schema"
+        "type": "string",
+        "pattern": "^dsk-[0-9a-z]{20}$"
        },
        "name": {
         "type": "string"
@@ -2572,11 +3061,73 @@
     "type": "object",
     "properties": {
      "buildSourceId": {
-      "$ref": "#/paths/~1build-sources~1{buildSourceId}/parameters/0/schema",
-      "description": "The ID of the Build Source to build and deploy from. Provides all source and build configuration: omit `repo`, `branch`, `image`, `buildFilter`, `runtime`, and build-related `envSpecificDetails` fields when set. A git-backed Build Source must be in the same region as the service; otherwise the request is rejected with 400 and `code: build_source_region_mismatch`."
+      "type": "string"
      },
      "autoscaling": {
-      "$ref": "#/paths/~1services~1{serviceId}~1autoscaling/put/requestBody/content/application~1json/schema"
+      "type": "object",
+      "required": [
+       "enabled",
+       "min",
+       "max",
+       "criteria"
+      ],
+      "properties": {
+       "enabled": {
+        "type": "boolean",
+        "default": false
+       },
+       "min": {
+        "type": "integer",
+        "description": "The minimum number of instances for the service"
+       },
+       "max": {
+        "type": "integer",
+        "description": "The maximum number of instances for the service"
+       },
+       "criteria": {
+        "type": "object",
+        "required": [
+         "cpu",
+         "memory"
+        ],
+        "properties": {
+         "cpu": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         },
+         "memory": {
+          "type": "object",
+          "required": [
+           "enabled",
+           "percentage"
+          ],
+          "properties": {
+           "enabled": {
+            "type": "boolean",
+            "default": false
+           },
+           "percentage": {
+            "type": "integer",
+            "description": "Determines when your service will be scaled. If the average resource utilization is significantly above/below the target, we will increase/decrease the number of instances.\n"
+           }
+          }
+         }
+        }
+       }
+      }
      },
      "disk": {
       "$ref": "#/components/schemas/serviceDisk"
