@@ -204,7 +204,11 @@ const PROVIDER_SOURCES: Partial<
   digitalocean: { name: "digitalocean", source: "digitalocean/digitalocean", version: "~> 2.0" },
   firebase: { name: "google", source: "hashicorp/google", version: "~> 6.0" },
   gcp: { name: "google", source: "hashicorp/google", version: "~> 6.0" },
-  aws: { name: "aws", source: "hashicorp/aws", version: "~> 5.0" },
+  // Adoption pins this too (lib/import/adopt.ts). Patch releases only: the
+  // check's cleanup rules (lib/import/cleanup.ts) were measured on 6.73.0, and
+  // a new minor can write attributes they do not cover. Raising it means
+  // re-measuring them (that file's header); cleanup.test.ts fails until then.
+  aws: { name: "aws", source: "hashicorp/aws", version: "~> 6.73.0" },
   azure: { name: "azurerm", source: "hashicorp/azurerm", version: "~> 4.0" },
   cloudflare: { name: "cloudflare", source: "cloudflare/cloudflare", version: "~> 5.0" },
   netlify: { name: "netlify", source: "netlify/netlify", version: "~> 0.4" },

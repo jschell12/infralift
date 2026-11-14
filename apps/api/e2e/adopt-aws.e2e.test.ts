@@ -39,10 +39,12 @@ const ADOPTABLE_TYPES = [
   "aws_s3_bucket",
   "aws_security_group",
   "aws_sns_topic",
+  "aws_sqs_queue",
   "aws_subnet",
   "aws_vpc",
 ];
-/** Built by hand too, and listed, but not adoptable yet (adopters/aws.ts). */
+/** Made through moto's API rather than the seed, so it has SQS's own defaults
+ *  (a 1 MiB message size), which hashicorp/aws 5.x could not write. */
 const QUEUE = `arn:aws:sqs:us-east-1:${STACK.awsAccount}:e2e-handmade-jobs`;
 const N = String(ADOPTABLE_TYPES.length);
 
@@ -143,15 +145,14 @@ describe("adopt from an AWS account", () => {
     awsId = aws.body.id;
   });
 
-  it("lists the hand-built resources as unmanaged: one of each adoptable kind, and the queue disabled with its reason", async () => {
+  it("lists the hand-built resources as unmanaged: one of each adoptable kind, the console-made queue included", async () => {
     const { status, body } = await api("GET", `/connections/${awsId}/unmanaged?refresh=1`);
     expect(status).toBe(200);
     const byId = new Map<string, any>(body.resources.map((r: any) => [r.providerId, r]));
     for (const arn of Object.values(ADOPTED)) expect(byId.get(arn), arn).toMatchObject({ adoptable: true });
     expect(byId.get(ADOPTED.bucket)).toMatchObject({ type: "aws:s3_bucket", terraformType: "aws_s3_bucket" });
     expect(byId.get(STACK.awsAccount)).toMatchObject({ type: "aws:account", adoptable: false });
-    expect(byId.get(QUEUE)).toMatchObject({ adoptable: false, terraformType: null });
-    expect(byId.get(QUEUE).reason).toMatch(/^not adoptable yet: SQS queues default to a 1 MiB message size/);
+    expect(byId.get(QUEUE)).toMatchObject({ adoptable: true, terraformType: "aws_sqs_queue" });
     expect(body.backendDefaults.awsRegion).toBe("us-east-1");
 
     const adoptable = body.resources.filter((r: any) => r.adoptable);
@@ -179,7 +180,6 @@ describe("adopt from an AWS account", () => {
     const after = await api("GET", `/connections/${awsId}/unmanaged`);
     const left = after.body.resources.map((r: any) => r.providerId);
     for (const r of adopted) expect(left).not.toContain(r.providerId);
-    expect(left).toContain(QUEUE);
   });
 
   it("opens one pull request carrying import blocks, a provider, a backend and both workflows", async () => {
@@ -197,6 +197,7 @@ describe("adopt from an AWS account", () => {
     expect(imports).toContain('id       = "e2e-handmade-assets"');
     expect(imports).toContain('id       = "e2e-handmade-sessions"');
     expect(imports).toContain(`id       = "${ADOPTED.topic}"`);
+    expect(imports).toContain(`id       = "https://sqs.us-east-1.amazonaws.com/${STACK.awsAccount}/e2e-handmade-jobs"`);
     expect(files.get(`${PATH}/versions.tf`)).toContain('backend "s3"');
     expect(files.has(`${PATH}/generated.tf`)).toBe(false);
     checkWorkflow = parseWorkflow(files.get(CHECK_FILE)!);
@@ -212,8 +213,10 @@ describe("adopt from an AWS account", () => {
     }
     const raw = readFileSync(join(dir, PATH, "generated.tf"), "utf8");
     expect(raw.match(/^resource "/gm)).toHaveLength(ADOPTABLE_TYPES.length);
-    // What hashicorp/aws 5.x writes and then rejects, before the cleanup.
+    // What hashicorp/aws 6.x writes and then rejects, before the cleanup.
     expect(raw).toContain('bucket_prefix       = ""');
+    // The queue's 1 MiB default, which 5.x rejected and 6.x accepts.
+    expect(raw).toMatch(/^  max_message_size += 1048576$/m);
 
     // The cleanup step, then the gate: no hand edit between them.
     const cleaned = await runStep({ wf: checkWorkflow, job: "plan", name: CLEANUP_STEP_NAME, dir, env: CI_ENV });
@@ -222,6 +225,8 @@ describe("adopt from an AWS account", () => {
     const generated = readFileSync(join(dir, PATH, "generated.tf"), "utf8");
     expect(generated.match(/^resource "/gm)).toHaveLength(ADOPTABLE_TYPES.length);
     expect(generated).not.toContain("bucket_prefix");
+    // Kept as read: the cleanup has no rule that touches the queue's size.
+    expect(generated).toMatch(/^  max_message_size += 1048576$/m);
 
     const gate = await runStep({ wf: checkWorkflow, job: "plan", name: "Plan (read-only, no lock)", dir, env: CI_ENV });
     expect(gate.code, gate.output).toBe(0);
