@@ -5,7 +5,7 @@ import { herokuConnector } from "./heroku.js";
 import { firebaseConnector } from "./firebase.js";
 import { githubConnector, parseGithubExpiration } from "./github.js";
 import { readFileSync } from "node:fs";
-import { netlifyConnector } from "./netlify.js";
+import { netlifyConnector, NETLIFY_FORMS_CONCURRENCY } from "./netlify.js";
 import { renderConnector } from "./render.js";
 import { railwayConnector } from "./railway.js";
 import { flyioConnector } from "./flyio.js";
@@ -370,7 +370,7 @@ describe("netlify", () => {
         },
       ],
       "/dns_zones": [{ id: "z1", name: "example.com", records: [{ id: "r1" }, { id: "r2" }] }],
-      "/forms?": [{ id: "f1", name: "contact", submission_count: 42 }],
+      "/sites/s1/forms": [{ id: "f1", site_id: "s1", name: "contact", submission_count: 42 }],
       "/build_hooks": [{ id: "h1" }],
     });
 
@@ -384,6 +384,43 @@ describe("netlify", () => {
     expect(result.findings.some((f) => f.category === "risk")).toBe(true);
     expect(result.findings.some((f) => f.category === "cost")).toBe(true);
     expect(result.estimatedMonthlyCostCents).toBeNull();
+  });
+
+  // #153 finding 3: there is no account-wide GET /forms; forms are per site.
+  it("reads forms per site, never at /forms, at most NETLIFY_FORMS_CONCURRENCY at a time", async () => {
+    const sites = Array.from({ length: 9 }, (_, i) => ({ id: `s${i}`, name: `site-${i}` }));
+    let inFlight = 0;
+    let peak = 0;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/sites?")) return ok(sites);
+      const m = url.match(/\/sites\/(s\d)\/forms$/);
+      if (m) {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 2));
+        inFlight--;
+        if (m[1] === "s3") return fail(500);
+        return ok([{ id: `f-${m[1]}`, site_id: m[1], name: "contact", submission_count: 1 }]);
+      }
+      return ok([]);
+    });
+    const result = await netlifyConnector.assess("tok");
+    const urls = fetchMock.mock.calls.map(([u]) => String(u));
+    expect(urls.filter((u) => /\/forms/.test(u) && !/\/sites\/s\d\/forms$/.test(u))).toEqual([]);
+    expect(urls.filter((u) => /\/forms$/.test(u))).toHaveLength(9);
+    expect(peak).toBe(NETLIFY_FORMS_CONCURRENCY);
+    const forms = result.inventory.filter((i) => i.type === "netlify:form");
+    expect(forms.map((f) => f.externalId).sort()).toEqual(["f-s0", "f-s1", "f-s2", "f-s4", "f-s5", "f-s6", "f-s7", "f-s8"]);
+    expect(forms.find((f) => f.externalId === "f-s0")).toMatchObject({ name: "site-0: contact", metadata: { siteId: "s0", submissionCount: 1 } });
+    // The site whose forms list failed is said, not silently left out.
+    expect(result.findings).toContainEqual(expect.objectContaining({ category: "inventory", title: "Forms not read for 1 site(s)" }));
+  });
+
+  it("says nothing about forms for an account with no sites", async () => {
+    mockRoute({ "/sites?": [] });
+    const result = await netlifyConnector.assess("tok");
+    expect(fetchMock.mock.calls.map(([u]) => String(u)).filter((u) => u.includes("/forms"))).toEqual([]);
+    expect(result.findings.filter((f) => /form/i.test(f.title))).toEqual([]);
   });
 });
 

@@ -75,6 +75,25 @@ function ListSkeleton() {
   );
 }
 
+/** What the connection's credential could not list at all (a DigitalOcean
+ *  token cannot list Spaces), so an empty or short list is not read as the
+ *  whole account. Nothing when the API left nothing out. */
+function NotInventoriedNote({ page }: { page: Omit<UnmanagedPage, "resources"> }) {
+  const missing = page.notInventoried ?? [];
+  if (missing.length === 0) return null;
+  return (
+    <div className="mb-4">
+      <Note tone="emphasis">
+        {missing.map((m) => (
+          <p key={m.type}>
+            <span className="font-semibold">Not listed: {m.label}.</span> {m.reason}
+          </p>
+        ))}
+      </Note>
+    </div>
+  );
+}
+
 function BackLink() {
   return (
     <a className={`${TEXT_BTN} ${FOCUS} -ml-1 mb-2 gap-1`} href={BACK_HREF}>
@@ -305,6 +324,7 @@ function AdoptWorkspace({
           Everything infralift can read in this account is already managed by an infralift project, or the account has
           nothing infralift can read yet. {fetchedAtText(page.fetchedAt)}
         </p>
+        <NotInventoriedNote page={page} />
         <div className="flex flex-wrap gap-2">
           <button type="button" className={`${SMALL_BTN_STRONG} ${FOCUS}`} onClick={() => void loadFirst(true)}>
             Read the account again
@@ -337,6 +357,7 @@ function AdoptWorkspace({
             Refresh
           </button>
         </div>
+        <NotInventoriedNote page={page} />
         <div className="mb-4">
           <Note>
             This list leaves out only what infralift has adopted from this account. Resources managed by a stack, a

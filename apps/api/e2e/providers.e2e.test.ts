@@ -151,15 +151,19 @@ describe("Heroku (Prism, heroku/heroku-go schema.json)", () => {
 
 describe("Netlify (Prism, netlify/open-api swagger.yml)", () => {
   const s = connectAndList("netlify", () => "e2e-netlify-token");
-  it("lists the site, its DNS zone and its build hooks", () => {
+  // #153 finding 3: forms were read at GET /forms, which Netlify does not
+  // have, and never listed. They are read per site now.
+  it("lists the site, its DNS zone, its build hooks and its form", () => {
     expect(s.status, JSON.stringify(s.body)).toBe(200);
     expect(keysOf(s.rows)).toEqual(
-      [`netlify:site ${NETLIFY_SEED.site.id}`, `netlify:dns_zone ${NETLIFY_SEED.zone.id}`, `netlify:build_hook ${NETLIFY_SEED.site.id}:hooks`].sort()
+      [
+        `netlify:site ${NETLIFY_SEED.site.id}`,
+        `netlify:dns_zone ${NETLIFY_SEED.zone.id}`,
+        `netlify:build_hook ${NETLIFY_SEED.site.id}:hooks`,
+        `netlify:form ${NETLIFY_SEED.form.id}`,
+      ].sort()
     );
-  });
-  it("finding: no forms, because GET /forms is not in Netlify's API (forms are per site)", async () => {
-    expect([...s.rows!.keys()].some((k) => k.startsWith("netlify:form"))).toBe(false);
-    expect((await fetch(`${STACK.mocks.netlify}/forms?per_page=100`, { headers: { authorization: "Bearer h" } })).status).toBe(404);
+    expect(s.rows!.get(`netlify:form ${NETLIFY_SEED.form.id}`)).toMatchObject({ name: `${NETLIFY_SEED.site.name}: ${NETLIFY_SEED.form.name}` });
   });
 });
 

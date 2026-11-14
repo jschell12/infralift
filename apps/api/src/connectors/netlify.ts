@@ -2,6 +2,12 @@ import type { ResourceInventoryItem } from "@infralift/shared";
 import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 import { httpFetch } from "../lib/http.js";
 import { DEFAULT_ENDPOINTS, type Endpoints } from "../lib/endpoints.js";
+import { settleBounded } from "../lib/bounded.js";
+
+/** Sites whose forms are read at once. Forms are listed per site
+ *  (GET /sites/{site_id}/forms), so an account with 100 sites is 100 calls;
+ *  each keeps httpFetch's deadline (lib/http.ts). */
+export const NETLIFY_FORMS_CONCURRENCY = 4;
 
 /** `api` is the base URL, DEFAULT_ENDPOINTS.netlifyApi unless overridden
  *  (lib/endpoints.ts). */
@@ -75,29 +81,46 @@ export function createNetlifyConnector(endpoints: Pick<Endpoints, "netlifyApi"> 
         // DNS scope may not be available; skip.
       }
 
-      // Forms
-      try {
-        const forms: any[] = await nfFetch(api, token, "/forms?per_page=100");
-        if (forms.length > 0) {
-          findings.push({
-            category: "risk",
-            severity: "low",
-            title: `${forms.length} Netlify Form(s) — platform-specific feature`,
-            detail:
-              "Netlify Forms is a platform lock-in point. Migration replaces them with a serverless form handler (Workers or a simple POST endpoint on VPS) backed by a database or email service.",
-          });
-          for (const f of forms) {
-            inventory.push({
-              provider: "netlify",
-              type: "netlify:form",
-              externalId: f.id,
-              name: f.name ?? f.id,
-              metadata: { submissionCount: f.submission_count ?? 0 },
-            });
-          }
+      // Forms. Netlify lists them per site; there is no account-wide
+      // GET /forms (#153 finding 3: the connector called it, the 404 was
+      // swallowed, and forms were never listed).
+      const formReads = await settleBounded(sites, NETLIFY_FORMS_CONCURRENCY, (site) =>
+        nfFetch(api, token, `/sites/${encodeURIComponent(site.id)}/forms`) as Promise<any[]>
+      );
+      const forms: any[] = [];
+      let sitesWithoutForms = 0;
+      formReads.forEach((read, i) => {
+        if (!read.ok) {
+          sitesWithoutForms++;
+          return;
         }
-      } catch {
-        // Forms API may 404 if none exist; skip.
+        for (const f of read.value ?? []) forms.push({ ...f, siteName: sites[i].name });
+      });
+      for (const f of forms) {
+        inventory.push({
+          provider: "netlify",
+          type: "netlify:form",
+          externalId: f.id,
+          name: f.name ? `${f.siteName}: ${f.name}` : f.id,
+          metadata: { siteId: f.site_id ?? null, submissionCount: f.submission_count ?? 0 },
+        });
+      }
+      if (forms.length > 0) {
+        findings.push({
+          category: "risk",
+          severity: "low",
+          title: `${forms.length} Netlify Form(s) — platform-specific feature`,
+          detail:
+            "Netlify Forms is a platform lock-in point. Migration replaces them with a serverless form handler (Workers or a simple POST endpoint on VPS) backed by a database or email service.",
+        });
+      }
+      if (sitesWithoutForms > 0) {
+        findings.push({
+          category: "inventory",
+          severity: "low",
+          title: `Forms not read for ${sitesWithoutForms} site(s)`,
+          detail: `Netlify did not answer the forms list for ${sitesWithoutForms} of ${sites.length} site(s), so any forms on them are missing from this inventory.`,
+        });
       }
 
       // Build hooks (indicates CI/CD integration)

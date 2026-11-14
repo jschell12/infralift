@@ -324,13 +324,9 @@ export const SOURCES: SpecSource[] = [
     out: "netlify.openapi.json",
     repo: "netlify/open-api",
     commit: "96b688490fa406c71e4453e041ec5a0587d35f0b",
-    roots: [{ path: "swagger.yml", operations: ["/user", "/sites", "/dns_zones", "/sites/{site_id}/build_hooks"].map(get) }],
-    undocumented: [
-      {
-        ...get("/forms"),
-        note: "connectors/netlify.ts lists forms here; the API lists them per site (/sites/{site_id}/forms), so the call fails and the connector reports no forms",
-      },
-    ],
+    // Forms per site: the API has no account-wide GET /forms, which the
+    // connector called until #153 finding 3.
+    roots: [{ path: "swagger.yml", operations: ["/user", "/sites", "/dns_zones", "/sites/{site_id}/build_hooks", "/sites/{site_id}/forms"].map(get) }],
   },
   {
     name: "flyio-machines",
