@@ -16,3 +16,10 @@ build-admin:
 		--build-arg API_BACKEND_URL=$(API_BACKEND_URL) -f apps/admin/Dockerfile .
 
 build: build-api build-dashboard build-admin
+
+# The end-to-end suite against a local stack: Postgres, moto (AWS), a GitHub
+# fake, Prism (Cloudflare) and OpenTofu. No cloud account, no spend. Needs
+# Docker. See README, "Testing without cloud accounts".
+.PHONY: e2e
+e2e:
+	bash scripts/e2e.sh
