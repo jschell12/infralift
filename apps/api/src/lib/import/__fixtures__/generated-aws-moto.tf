@@ -1,6 +1,6 @@
 # Captured 2026-11-14 from a `make e2e` run (adopt-aws.e2e.test.ts), not from
 # real AWS: the check's Generate step, `plan -generate-config-out` in the
-# OpenTofu 1.12.6 container with hashicorp/aws 6.73.0 (adoption's ~> 6.73),
+# OpenTofu 1.12.6 container with hashicorp/aws 6.73.0 (adoption pins ~> 6.73.0),
 # against moto 5.2.5, for the resources apps/api/e2e/aws-seed/main.tf creates
 # plus the SQS queue the suite creates through moto's API.
 # Below this header, byte for byte what OpenTofu wrote, before the cleanup.

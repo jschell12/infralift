@@ -7,7 +7,7 @@ import type { Step } from "./check.js";
 // read back, including ones that hold the provider's "not set" value. Some
 // providers then reject their own output. Measured 2026-11-14 with OpenTofu
 // 1.12.6 against moto, first on hashicorp/aws 5.100.0 and again on 6.73.0
-// (what adoption's `~> 6.73` resolves to): every one of nine AWS kinds failed
+// (adoption pins `~> 6.73.0`): every one of nine AWS kinds failed
 // `validate` on both, e.g.
 // `bucket_prefix = ""` beside `bucket` (conflicts) and
 // `fifo_throughput_scope = ""` (not one of the allowed values). So every AWS

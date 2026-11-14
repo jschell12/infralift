@@ -8,6 +8,7 @@ import { CLEANUP_STEP_NAME, GENERATED_CLEANUP_RULES, cleanupAwk, cleanupStep } f
 import { renderImportCheck } from "./check.js";
 import { renderAdoption, planAdoption } from "./adopt.js";
 import { scanRepo } from "./scan.js";
+import { providerSource } from "../tf/codegen.js";
 
 // The fixtures are real `plan -generate-config-out` output from the e2e stack
 // (moto 5.2.5, OpenTofu 1.12.6, hashicorp/aws 6.73.0) on 2026-11-14: one from
@@ -89,6 +90,18 @@ describe("cleaning generated AWS code (hashicorp/aws 6.73.0, captured on moto)",
     // The availability zone id is a real value; the log must not carry it.
     expect(r.stdout).not.toContain("use1-az6");
     expect(r.stdout).not.toContain("e2e-handmade");
+  });
+
+  it("was captured on the provider version adoption pins, so the pin cannot move without new fixtures", () => {
+    // The table is only as good as the version it was measured on. Adoption
+    // allows patch releases of that minor and nothing newer.
+    const pin = providerSource("aws")!.version;
+    expect(pin).toMatch(/^~> \d+\.\d+\.\d+$/);
+    const minor = pin.replace(/^~> (\d+\.\d+)\.\d+$/, "$1");
+    for (const [name, fixture] of [["generated-aws-moto.tf", MOTO], ["generated-aws-moto-api-created.tf", API_CREATED]]) {
+      const captured = /hashicorp\/aws (\d+\.\d+)\.\d+/.exec(fixture.split("# __generated__")[0])?.[1];
+      expect(captured, name).toBe(minor);
+    }
   });
 
   it("every rule in the table is exercised by a captured snippet", () => {
