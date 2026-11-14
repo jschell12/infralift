@@ -10,7 +10,7 @@ import {
   type ProviderConfig,
 } from "./render.js";
 import { deliverChangeRequest } from "../git/deliver.js";
-import { deliveryFor, getStack, renderStack } from "../stacks/index.js";
+import { deliveryFor, getStack, renderStack, type StackManifest } from "../stacks/index.js";
 import { gitHostClient, type GitHostClient, type HostFile } from "../git/hosts.js";
 import { isGitHost, PROVIDER_LABELS, type GitHost } from "@infralift/shared";
 import { tfcAdapterFor } from "./tfc-connection.js";
@@ -342,6 +342,28 @@ export function isStackBranch(projectName: string, ref: string): boolean {
   return ref.startsWith(prefix) && /^[a-z0-9]{8}$/.test(ref.slice(prefix.length));
 }
 
+/** The pull request body for a stack job, from the stack's own manifest: its
+ *  seed file (the one the customer owns, if it has one) and its README. */
+export function stackChangeRequestBody(stack: StackManifest, fileCount: number, seedsKept: number): string {
+  const seed = stack.seed?.[0];
+  const readme = stack.rendered.find((r) => r.path.endsWith("README.md"))?.path;
+  const lines = [`Rendered by infralift from the \`${stack.slug}\` stack.`, ""];
+  if (seed) {
+    lines.push(
+      `- ${fileCount} files written; everything except \`${seed}\` is managed by infralift and rewritten on every change.`,
+      seedsKept
+        ? `- ${seedsKept} file(s) you own (such as \`${seed}\`) already existed and were left alone.`
+        : `- \`${seed}\` is yours from here on; infralift never rewrites it.`
+    );
+  } else {
+    lines.push(
+      `- ${fileCount} files written, all managed by infralift and rewritten on every change. Resources of your own go in files of your own beside them.`
+    );
+  }
+  if (readme) lines.push("", `See \`${readme}\` for the credentials and first apply.`);
+  return lines.join("\n");
+}
+
 /** Renders a stack into the customer's app repository as a pull request.
  *
  * Unlike codegen, the destination is a repository the customer works in, so
@@ -416,6 +438,10 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
     let createdRepoNote = "";
     if (project.createRepo) {
       await run.start("repo");
+      if (!stack.template) {
+        await run.fail(`${stack.name} has no app template to create a repository from`, "repo");
+        return;
+      }
       if (!(await client.repoExists(project.destRepo))) {
         const created = await client.createFromTemplate({
           template: stack.template.repo,
@@ -480,19 +506,11 @@ async function runStackJob(jobId: string, job: CodegenJob): Promise<void> {
       },
       message:
         `infralift: ${stack.slug} for ${project.name}\n\n` +
-        `Rendered from stack ${stack.slug} (source ${stack.source.repo}@${stack.source.commit.slice(0, 7)}).`,
+        (stack.source
+          ? `Rendered from stack ${stack.slug} (source ${stack.source.repo}@${stack.source.commit.slice(0, 7)}).`
+          : `Rendered from stack ${stack.slug}.`),
       title: `infralift: ${stack.name} for ${project.name}`,
-      body: () =>
-        [
-          `Rendered by infralift from the \`${stack.slug}\` stack.`,
-          "",
-          `- ${fileCount} files written; files under \`deploy/infra/generated/\` and the CI files are managed by infralift and rewritten on every change.`,
-          seedsKept
-            ? `- ${seedsKept} file(s) you own (such as \`deploy/infra/overrides.tf\`) already existed and were left alone.`
-            : "- `deploy/infra/overrides.tf` is yours from here on; infralift never rewrites it.",
-          "",
-          "See `deploy/README.md` for the credentials and first apply.",
-        ].join("\n"),
+      body: () => stackChangeRequestBody(stack, fileCount, seedsKept),
     });
     const files = landed.files;
     if (landed.outcome === "unchanged") {

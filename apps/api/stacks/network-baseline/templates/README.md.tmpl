@@ -1,0 +1,53 @@
+# {{name}}: network baseline
+
+Rendered by infralift from the `network-baseline` stack into one AWS account,
+region `{{region}}`. State: {{state_tool}}.
+
+## What it creates
+
+- `modules/vpc`: a VPC on `{{cidr}}` with a public and a private subnet in
+  each of {{az_count}} availability zones, an internet gateway, NAT for the
+  private subnets (`single_nat = {{single_nat}}`: one shared gateway when
+  true, one per zone when false), and the default security group emptied of
+  every rule. Subnets are tagged `Tier = public` or `Tier = private`.
+- `modules/flow-logs`: VPC flow logs (all traffic) into the CloudWatch log
+  group `/vpc/{{name}}/flow-logs`, kept {{flow_log_retention_days}} days, with
+  an IAM role that can write to that group only.
+
+`private_subnet_ids_csv` in the outputs is the value the `postgres-with-backups`
+stack's `subnet_ids` setting takes.
+
+## Cost
+
+An estimate at list prices in us-east-1, checked 2026-11-14, not a quote:
+each NAT gateway is about $33/month plus $0.045 per GB it processes, and its
+public IPv4 address about $3.65/month. With one NAT that is roughly $37/month
+before traffic; one per zone multiplies it by the zone count. Flow logs cost
+$0.50 per GB ingested plus storage for the retention period. The VPC,
+subnets, route tables and internet gateway are free.
+
+## Credentials
+
+{{#if backend_r2}}| Variable | Where | What |
+|---|---|---|
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | repository secrets (read-only key), `production` environment secrets (write key) | The AWS account this project manages |
+| `TFSTATE_R2_ACCESS_KEY_ID`, `TFSTATE_R2_SECRET_ACCESS_KEY` | repository secrets | An R2 API token's S3 credentials, object read and write on the state bucket |
+| `TF_STATE_PASSPHRASE` | repository secret | Encrypts state and saved plans. Keep a copy: without it the state is unreadable |
+| `CLOUDFLARE_ACCOUNT_ID` | repository variable | The Cloudflare account that holds the state bucket |
+{{/if}}{{#if backend_tfc}}| Variable | Where | What |
+|---|---|---|
+| `TF_API_TOKEN` | repository secret | A Terraform Cloud token that can plan and apply in workspace `{{tfc_workspace}}` |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | workspace environment variables (sensitive) | The AWS account this project manages |
+{{/if}}
+## First apply
+
+{{#if backend_r2}}1. Create the state bucket once, from `bootstrap/`:
+   `CLOUDFLARE_API_TOKEN=... tofu init && tofu apply -var cloudflare_account_id=...`
+2. Set the credentials above, then merge this {{change_request}}. The push to
+   main plans, and the `production` environment applies that saved plan.
+{{/if}}{{#if backend_tfc}}1. Set the credentials above on the repository and the workspace, then merge
+   this {{change_request}}. The push to main plans in Terraform Cloud, and the
+   `production` environment confirms that run.
+{{/if}}
+A daily `infra drift` job plans main against what is running and fails if
+anything changed outside Terraform.

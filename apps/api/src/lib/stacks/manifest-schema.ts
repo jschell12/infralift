@@ -18,19 +18,9 @@ const named = {
 export const STACK_MANIFEST_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
-  required: [
-    "slug",
-    "name",
-    "description",
-    "template",
-    "target",
-    "runtime",
-    "deliveries",
-    "source",
-    "inputSchema",
-    "example",
-    "rendered",
-  ],
+  // template, runtime and source describe an app and where its deploy setup
+  // came from. An infrastructure stack (ADR 0010) has none of them.
+  required: ["slug", "name", "description", "target", "deliveries", "inputSchema", "example", "rendered"],
   properties: {
     slug,
     name: text,

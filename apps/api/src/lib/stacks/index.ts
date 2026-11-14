@@ -42,16 +42,20 @@ export interface StackManifest {
   slug: string;
   name: string;
   description: string;
-  /** The app this stack deploys, and the GitHub template a new repo comes from. */
-  template: { slug: string; name: string; description: string; repo: string };
-  /** Where it runs. The dashboard pairs a template with a target to pick a stack. */
+  /** The app this stack deploys, and the GitHub template a new repo comes
+   *  from. Only app stacks have one; infrastructure stacks (ADR 0010) do not,
+   *  and the dashboard keeps stacks that have one out of new projects. */
+  template?: { slug: string; name: string; description: string; repo: string };
+  /** Where it runs: the cloud account's provider. */
   target: { slug: string; name: string };
-  /** How the app runs on the target. One per stack for now. */
-  runtime: { slug: string; name: string };
+  /** How the app runs on the target. App stacks only. */
+  runtime?: { slug: string; name: string };
   /** What builds and deploys it. Each delivery runs on one git host, which
    *  is the compatibility rule the API and the dashboard enforce. */
   deliveries: StackDelivery[];
-  source: { repo: string; commit: string };
+  /** The repository and commit a vendored stack was copied from. Stacks
+   *  written here have none. */
+  source?: { repo: string; commit: string };
   inputSchema: Record<string, unknown>;
   /** Inputs that reproduce the source repo's own deploy/; CI renders with these. */
   example: TfArguments;

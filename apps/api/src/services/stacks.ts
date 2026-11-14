@@ -42,6 +42,12 @@ export function listStackSummaries() {
   }));
 }
 
+/** True when the stack's input schema declares this setting. */
+function hasSetting(stack: StackManifest, key: string): boolean {
+  const properties = (stack.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+  return Object.hasOwn(properties, key);
+}
+
 function stackOrNotFound(slug: string): StackManifest {
   const stack = getStack(slug);
   if (!stack) throw new NotFound("stack not found");
@@ -134,10 +140,15 @@ export async function createStackProject(orgId: string, slug: string, input: Sta
   const delivery = deliveryFor(stack, input.gitHost, input.arguments.delivery);
   if (!delivery) throw deliveryMismatch(stack, input.gitHost, input.arguments.delivery);
   // The repository the delivery wires up is the project's own, so it is
-  // taken from destRepo rather than asked for twice.
+  // taken from destRepo rather than asked for twice. Only for a stack that
+  // has the setting: an infrastructure stack's CI needs no repository name,
+  // and its schema refuses keys it does not declare.
   const derived: TfArguments = { delivery: delivery.slug };
-  if (delivery.gitHost === "gitlab") derived.gitlab_project = input.destRepo;
-  else if (input.arguments.github_repository === undefined) derived.github_repository = input.destRepo.split("/").pop() ?? "";
+  if (delivery.gitHost === "gitlab") {
+    if (hasSetting(stack, "gitlab_project")) derived.gitlab_project = input.destRepo;
+  } else if (input.arguments.github_repository === undefined && hasSetting(stack, "github_repository")) {
+    derived.github_repository = input.destRepo.split("/").pop() ?? "";
+  }
   const tfc = await withTfcConnection(orgId, { ...input.arguments, ...derived }, input.tfcConnectionId);
 
   const connection = await prisma.providerConnection.findFirst({
@@ -214,7 +225,7 @@ export async function updateStackSettings(
   const args: TfArguments = {
     ...input.arguments,
     delivery: delivery.slug,
-    ...(host === "gitlab" ? { gitlab_project: project.destRepo } : {}),
+    ...(host === "gitlab" && hasSetting(stack, "gitlab_project") ? { gitlab_project: project.destRepo } : {}),
   };
   const tfc = await withTfcConnection(
     orgId,
