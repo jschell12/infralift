@@ -1,0 +1,192 @@
+{
+  "slug": "static-site-cdn",
+  "name": "Static site behind a CDN (AWS)",
+  "description": "A private S3 bucket served by CloudFront on your domain: origin access control, an ACM certificate validated in your Route 53 zone, HTTPS only, DNS alias records, and index.html for directory paths. Estimated cost for a small site: under $1/month within CloudFront's free tier (list prices, 2026-11-14).",
+  "target": {
+    "slug": "aws",
+    "name": "AWS"
+  },
+  "deliveries": [
+    {
+      "slug": "github-actions",
+      "name": "GitHub Actions",
+      "gitHost": "github"
+    }
+  ],
+  "modules": [
+    {
+      "name": "site-bucket",
+      "path": "infra/static-site-cdn/modules/site-bucket",
+      "description": "The private S3 bucket the site's files live in, with encryption, versioning and lifecycle.",
+      "anchor": "aws_s3_bucket",
+      "inputs": [
+        "name"
+      ],
+      "outputs": [
+        "bucket",
+        "arn",
+        "regional_domain_name"
+      ]
+    },
+    {
+      "name": "cdn",
+      "path": "infra/static-site-cdn/modules/cdn",
+      "description": "The CloudFront distribution, its certificate and validation records, origin access control, index rewrite function, the bucket policy that admits it, and the DNS alias records.",
+      "anchor": "aws_cloudfront_distribution",
+      "inputs": [
+        "name",
+        "domain",
+        "zone_name",
+        "price_class",
+        "bucket",
+        "bucket_arn",
+        "bucket_regional_domain_name"
+      ],
+      "outputs": [
+        "distribution_id",
+        "distribution_domain_name",
+        "url"
+      ]
+    }
+  ],
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "name",
+      "domain",
+      "zone"
+    ],
+    "properties": {
+      "name": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{2,30}$",
+        "description": "Prefix for the bucket and the distribution's helpers. Lowercase letters, digits and hyphens."
+      },
+      "domain": {
+        "type": "string",
+        "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,}$",
+        "description": "The site's host name, such as www.example.com. The zone itself works too."
+      },
+      "zone": {
+        "type": "string",
+        "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,}$",
+        "description": "The public Route 53 hosted zone the domain is in, such as example.com. It must already exist in this account."
+      },
+      "region": {
+        "type": "string",
+        "enum": [
+          "us-east-1",
+          "us-east-2",
+          "us-west-2",
+          "ca-central-1",
+          "eu-west-1",
+          "eu-west-2",
+          "eu-central-1",
+          "ap-southeast-1",
+          "ap-southeast-2",
+          "ap-northeast-1"
+        ],
+        "default": "us-east-1",
+        "description": "Where the bucket is. The certificate is always in us-east-1."
+      },
+      "price_class": {
+        "type": "string",
+        "enum": [
+          "PriceClass_100",
+          "PriceClass_200",
+          "PriceClass_All"
+        ],
+        "default": "PriceClass_100",
+        "description": "Edge locations: 100 is North America and Europe (cheapest), 200 adds most of Asia, All is everywhere."
+      },
+      "delivery": {
+        "type": "string",
+        "enum": [
+          "github-actions"
+        ],
+        "default": "github-actions",
+        "description": "What plans and applies the project. Must match the repository's host."
+      },
+      "backend": {
+        "type": "string",
+        "enum": [
+          "r2",
+          "tfc"
+        ],
+        "default": "r2"
+      },
+      "tfc_organization": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{1,90}$"
+      },
+      "tfc_workspace": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{1,90}$"
+      }
+    },
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "backend": {
+              "const": "tfc"
+            }
+          },
+          "required": [
+            "backend"
+          ]
+        },
+        "then": {
+          "required": [
+            "tfc_organization"
+          ]
+        }
+      }
+    ]
+  },
+  "example": {
+    "name": "acme-site",
+    "domain": "www.example.com",
+    "zone": "example.com"
+  },
+  "rendered": [
+    {
+      "path": "infra/static-site-cdn/main.tf",
+      "template": "main.tf.tmpl"
+    },
+    {
+      "path": "infra/static-site-cdn/backend.tf",
+      "template": "backend-r2.tf.tmpl",
+      "when": {
+        "backend": "r2"
+      }
+    },
+    {
+      "path": "infra/static-site-cdn/backend.tf",
+      "template": "backend-tfc.tf.tmpl",
+      "when": {
+        "backend": "tfc"
+      }
+    },
+    {
+      "path": "infra/static-site-cdn/backend.r2.hcl.example",
+      "template": "backend.r2.hcl.example.tmpl",
+      "when": {
+        "backend": "r2"
+      }
+    },
+    {
+      "path": "infra/static-site-cdn/bootstrap/main.tf",
+      "template": "bootstrap-main.tf.tmpl",
+      "when": {
+        "backend": "r2"
+      }
+    },
+    {
+      "path": "infra/static-site-cdn/README.md",
+      "template": "README.md.tmpl"
+    }
+  ]
+}

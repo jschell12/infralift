@@ -1,0 +1,246 @@
+{
+  "slug": "postgres-with-backups",
+  "name": "PostgreSQL with backups (AWS)",
+  "description": "RDS PostgreSQL in private subnets: encrypted, deletion protection on, automated backups with retention, TLS required, reachable only from one CIDR or security group, password kept by RDS in Secrets Manager. Plus an encrypted S3 bucket with lifecycle rules for exported snapshots. Estimated cost at the defaults: about $16/month (db.t4g.micro, us-east-1 list prices, 2026-11-14).",
+  "target": {
+    "slug": "aws",
+    "name": "AWS"
+  },
+  "deliveries": [
+    {
+      "slug": "github-actions",
+      "name": "GitHub Actions",
+      "gitHost": "github"
+    }
+  ],
+  "modules": [
+    {
+      "name": "database",
+      "path": "infra/postgres-with-backups/modules/database",
+      "description": "The RDS instance, its subnet group, parameter group and security group.",
+      "anchor": "aws_db_instance",
+      "inputs": [
+        "name",
+        "vpc_id",
+        "subnet_ids",
+        "allowed_cidr",
+        "allowed_security_group_id",
+        "instance_class",
+        "allocated_storage_gb",
+        "engine_version",
+        "backup_retention_days"
+      ],
+      "outputs": [
+        "identifier",
+        "address",
+        "port",
+        "arn",
+        "security_group_id",
+        "master_user_secret_arn"
+      ]
+    },
+    {
+      "name": "snapshot-exports",
+      "path": "infra/postgres-with-backups/modules/snapshot-exports",
+      "description": "The S3 bucket exported snapshots go to, its KMS key and lifecycle, and the role RDS assumes to write it.",
+      "anchor": "aws_s3_bucket",
+      "inputs": [
+        "name",
+        "transition_days",
+        "retention_days"
+      ],
+      "outputs": [
+        "bucket",
+        "kms_key_arn",
+        "export_role_arn"
+      ]
+    }
+  ],
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "name",
+      "vpc_id",
+      "subnet_ids"
+    ],
+    "properties": {
+      "name": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{2,30}$",
+        "description": "The database's identifier and the prefix of everything that serves it. Lowercase letters, digits and hyphens."
+      },
+      "region": {
+        "type": "string",
+        "enum": [
+          "us-east-1",
+          "us-east-2",
+          "us-west-2",
+          "ca-central-1",
+          "eu-west-1",
+          "eu-west-2",
+          "eu-central-1",
+          "ap-southeast-1",
+          "ap-southeast-2",
+          "ap-northeast-1"
+        ],
+        "default": "us-east-1",
+        "description": "The AWS region the database is built in. It must be the VPC's region."
+      },
+      "vpc_id": {
+        "type": "string",
+        "pattern": "^vpc-[0-9a-f]{8,17}$",
+        "description": "The VPC the database lives in, such as the network-baseline stack's vpc_id."
+      },
+      "subnet_ids": {
+        "type": "string",
+        "pattern": "^subnet-[0-9a-f]{8,17}( *, *subnet-[0-9a-f]{8,17})+$",
+        "description": "Private subnets in at least two zones, comma-separated. The network-baseline stack's private_subnet_ids_csv output is this value."
+      },
+      "allowed_cidr": {
+        "type": "string",
+        "pattern": "^(|([0-9]{1,3}\\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2]))$",
+        "default": "",
+        "description": "The one CIDR allowed to connect on port 5432. Leave blank for the VPC's own range."
+      },
+      "allowed_security_group_id": {
+        "type": "string",
+        "pattern": "^(|sg-[0-9a-f]{8,17})$",
+        "default": "",
+        "description": "A security group whose members may also connect, such as your app servers'. Leave blank for none."
+      },
+      "instance_class": {
+        "type": "string",
+        "enum": [
+          "db.t4g.micro",
+          "db.t4g.small",
+          "db.t4g.medium",
+          "db.t4g.large",
+          "db.m7g.large",
+          "db.m7g.xlarge",
+          "db.r7g.large"
+        ],
+        "default": "db.t4g.micro",
+        "description": "The instance size. db.t4g classes are burstable and cheapest."
+      },
+      "allocated_storage_gb": {
+        "type": "integer",
+        "minimum": 20,
+        "maximum": 2000,
+        "default": 20,
+        "description": "gp3 storage in GB."
+      },
+      "engine_version": {
+        "type": "string",
+        "enum": [
+          "17",
+          "16",
+          "15"
+        ],
+        "default": "17",
+        "description": "PostgreSQL major version. RDS picks the minor version and applies minor upgrades in the maintenance window."
+      },
+      "backup_retention_days": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 35,
+        "default": 7,
+        "description": "Days of automated backups kept for point-in-time restore."
+      },
+      "export_retention_days": {
+        "type": "integer",
+        "minimum": 31,
+        "maximum": 3650,
+        "default": 365,
+        "description": "Days an exported snapshot is kept in S3. Exports move to Glacier Instant Retrieval after 30 days."
+      },
+      "delivery": {
+        "type": "string",
+        "enum": [
+          "github-actions"
+        ],
+        "default": "github-actions",
+        "description": "What plans and applies the project. Must match the repository's host."
+      },
+      "backend": {
+        "type": "string",
+        "enum": [
+          "r2",
+          "tfc"
+        ],
+        "default": "r2"
+      },
+      "tfc_organization": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{1,90}$"
+      },
+      "tfc_workspace": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{1,90}$"
+      }
+    },
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "backend": {
+              "const": "tfc"
+            }
+          },
+          "required": [
+            "backend"
+          ]
+        },
+        "then": {
+          "required": [
+            "tfc_organization"
+          ]
+        }
+      }
+    ]
+  },
+  "example": {
+    "name": "acme-db",
+    "vpc_id": "vpc-0a1b2c3d4e5f60718",
+    "subnet_ids": "subnet-0a1b2c3d4e5f60718,subnet-0f1e2d3c4b5a69788"
+  },
+  "rendered": [
+    {
+      "path": "infra/postgres-with-backups/main.tf",
+      "template": "main.tf.tmpl"
+    },
+    {
+      "path": "infra/postgres-with-backups/backend.tf",
+      "template": "backend-r2.tf.tmpl",
+      "when": {
+        "backend": "r2"
+      }
+    },
+    {
+      "path": "infra/postgres-with-backups/backend.tf",
+      "template": "backend-tfc.tf.tmpl",
+      "when": {
+        "backend": "tfc"
+      }
+    },
+    {
+      "path": "infra/postgres-with-backups/backend.r2.hcl.example",
+      "template": "backend.r2.hcl.example.tmpl",
+      "when": {
+        "backend": "r2"
+      }
+    },
+    {
+      "path": "infra/postgres-with-backups/bootstrap/main.tf",
+      "template": "bootstrap-main.tf.tmpl",
+      "when": {
+        "backend": "r2"
+      }
+    },
+    {
+      "path": "infra/postgres-with-backups/README.md",
+      "template": "README.md.tmpl"
+    }
+  ]
+}

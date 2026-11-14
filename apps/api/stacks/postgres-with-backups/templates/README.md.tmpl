@@ -1,0 +1,73 @@
+# {{name}}: PostgreSQL with backups
+
+Rendered by infralift from the `postgres-with-backups` stack into one AWS
+account, region `{{region}}`. State: {{state_tool}}.
+
+## What it creates
+
+- `modules/database`: RDS PostgreSQL {{engine_version}} (`{{instance_class}}`,
+  {{allocated_storage_gb}} GB gp3, encrypted) in the private subnets
+  `{{subnet_ids}}` of `{{vpc_id}}`. Not publicly accessible. Its security
+  group admits 5432 from one CIDR (the VPC's own range unless `allowed_cidr`
+  says otherwise) and, when set, one security group. A parameter group
+  requires TLS and logs statements slower than one second. Automated backups
+  are kept {{backup_retention_days}} days for point-in-time restore. Deletion
+  protection is on, and a deletion takes a final snapshot first.
+- `modules/snapshot-exports`: an S3 bucket for snapshots exported out of RDS,
+  encrypted with its own KMS key, with public access blocked, TLS required,
+  versioning on, objects moved to Glacier Instant Retrieval after 30 days and
+  deleted after {{export_retention_days}} days. Plus the IAM role RDS assumes
+  to write an export there.
+
+The master user is `dbadmin`. Its password is generated and rotated by RDS
+in Secrets Manager; read it with
+`aws secretsmanager get-secret-value --secret-id <db_master_user_secret_arn>`.
+It is never in this code or in state.
+
+## Exporting a snapshot
+
+Nothing exports automatically. To copy a snapshot out of RDS, as Parquet:
+
+```sh
+aws rds start-export-task \
+  --export-task-identifier {{name}}-$(date +%Y%m%d) \
+  --source-arn <snapshot arn> \
+  --s3-bucket-name <export_bucket> \
+  --iam-role-arn <export_role_arn> \
+  --kms-key-id <export_kms_key_arn>
+```
+
+## Cost
+
+An estimate at list prices in us-east-1, checked 2026-11-14, not a quote. At
+the defaults: db.t4g.micro single-AZ about $12/month, 20 GB of gp3 about
+$2.30, the Secrets Manager secret $0.40 and the KMS key $1. About $16/month
+before traffic. Automated backup storage up to the database's size is free;
+exports cost per GB exported and stored. Larger instance classes cost much
+more: db.m7g.large is roughly $120/month.
+
+## Credentials
+
+{{#if backend_r2}}| Variable | Where | What |
+|---|---|---|
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | repository secrets (read-only key), `production` environment secrets (write key) | The AWS account this project manages |
+| `TFSTATE_R2_ACCESS_KEY_ID`, `TFSTATE_R2_SECRET_ACCESS_KEY` | repository secrets | An R2 API token's S3 credentials, object read and write on the state bucket |
+| `TF_STATE_PASSPHRASE` | repository secret | Encrypts state and saved plans. Keep a copy: without it the state is unreadable |
+| `CLOUDFLARE_ACCOUNT_ID` | repository variable | The Cloudflare account that holds the state bucket |
+{{/if}}{{#if backend_tfc}}| Variable | Where | What |
+|---|---|---|
+| `TF_API_TOKEN` | repository secret | A Terraform Cloud token that can plan and apply in workspace `{{tfc_workspace}}` |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | workspace environment variables (sensitive) | The AWS account this project manages |
+{{/if}}
+## First apply
+
+{{#if backend_r2}}1. Create the state bucket once, from `bootstrap/`:
+   `CLOUDFLARE_API_TOKEN=... tofu init && tofu apply -var cloudflare_account_id=...`
+2. Set the credentials above, then merge this {{change_request}}. The push to
+   main plans, and the `production` environment applies that saved plan.
+{{/if}}{{#if backend_tfc}}1. Set the credentials above on the repository and the workspace, then merge
+   this {{change_request}}. The push to main plans in Terraform Cloud, and the
+   `production` environment confirms that run.
+{{/if}}
+A daily `infra drift` job plans main against what is running and fails if
+anything changed outside Terraform.

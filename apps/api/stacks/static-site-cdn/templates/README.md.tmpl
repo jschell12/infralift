@@ -1,0 +1,67 @@
+# {{name}}: static site on {{domain}}
+
+Rendered by infralift from the `static-site-cdn` stack into one AWS account.
+The bucket is in `{{region}}`; the certificate is in us-east-1, the only
+region CloudFront takes certificates from. State: {{state_tool}}.
+
+## What it creates
+
+- `modules/site-bucket`: a private S3 bucket for the site's files. Public
+  access blocked, encrypted, versioned (old versions kept 30 days).
+- `modules/cdn`: a CloudFront distribution ({{price_class}}) on
+  `https://{{domain}}`. It reads the bucket through origin access control, so
+  the bucket policy admits this distribution and nothing else. An ACM
+  certificate validated by DNS in the Route 53 zone `{{zone}}`, TLS 1.2 or
+  later, HTTP redirected to HTTPS, HTTP/2 and HTTP/3, compression, AWS's
+  managed security headers, and a CloudFront Function that serves
+  `index.html` for directory paths. A missing file answers 404 with your
+  `/404.html`. A and AAAA alias records point the domain at the
+  distribution.
+
+The zone `{{zone}}` must already exist as a public hosted zone in this
+account, and `{{domain}}` must be the zone or a name inside it.
+
+## Publishing the site
+
+infralift builds where the site is served from, not the site. From your
+build output:
+
+```sh
+aws s3 sync ./dist s3://<bucket> --delete
+aws cloudfront create-invalidation --distribution-id <distribution_id> --paths '/*'
+```
+
+## Cost
+
+An estimate at list prices, checked 2026-11-14, not a quote. CloudFront's
+always-free tier covers 1 TB of transfer, 10 million requests and 2 million
+function invocations a month; S3 storage is about $0.023 per GB-month; the
+certificate is free, and alias queries to CloudFront are free. A small site
+costs well under $1/month. The hosted zone ($0.50/month) is not created
+here.
+
+## Credentials
+
+{{#if backend_r2}}| Variable | Where | What |
+|---|---|---|
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | repository secrets (read-only key), `production` environment secrets (write key) | The AWS account this project manages |
+| `TFSTATE_R2_ACCESS_KEY_ID`, `TFSTATE_R2_SECRET_ACCESS_KEY` | repository secrets | An R2 API token's S3 credentials, object read and write on the state bucket |
+| `TF_STATE_PASSPHRASE` | repository secret | Encrypts state and saved plans. Keep a copy: without it the state is unreadable |
+| `CLOUDFLARE_ACCOUNT_ID` | repository variable | The Cloudflare account that holds the state bucket |
+{{/if}}{{#if backend_tfc}}| Variable | Where | What |
+|---|---|---|
+| `TF_API_TOKEN` | repository secret | A Terraform Cloud token that can plan and apply in workspace `{{tfc_workspace}}` |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | workspace environment variables (sensitive) | The AWS account this project manages |
+{{/if}}
+## First apply
+
+{{#if backend_r2}}1. Create the state bucket once, from `bootstrap/`:
+   `CLOUDFLARE_API_TOKEN=... tofu init && tofu apply -var cloudflare_account_id=...`
+2. Set the credentials above, then merge this {{change_request}}. The push to
+   main plans, and the `production` environment applies that saved plan.
+{{/if}}{{#if backend_tfc}}1. Set the credentials above on the repository and the workspace, then merge
+   this {{change_request}}. The push to main plans in Terraform Cloud, and the
+   `production` environment confirms that run.
+{{/if}}
+A daily `infra drift` job plans main against what is running and fails if
+anything changed outside Terraform.

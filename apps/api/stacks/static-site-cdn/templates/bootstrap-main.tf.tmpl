@@ -1,0 +1,39 @@
+# Creates the R2 bucket that holds this project's state. There is nowhere to
+# keep this module's own state until the bucket exists, so it stays local:
+#
+#   tofu init && tofu apply -var cloudflare_account_id=...
+#
+# Its state holds one bucket and no secrets. If it is lost, `tofu import` the
+# bucket rather than applying again.
+
+terraform {
+  required_version = ">= 1.6"
+
+  required_providers {
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.28"
+    }
+  }
+}
+
+# CLOUDFLARE_API_TOKEN, with R2 edit permission on the account.
+provider "cloudflare" {}
+
+variable "cloudflare_account_id" {
+  type = string
+}
+
+variable "bucket_name" {
+  type    = string
+  default = "{{name}}-tfstate"
+}
+
+resource "cloudflare_r2_bucket" "state" {
+  account_id = var.cloudflare_account_id
+  name       = var.bucket_name
+}
+
+output "bucket" {
+  value = cloudflare_r2_bucket.state.name
+}
