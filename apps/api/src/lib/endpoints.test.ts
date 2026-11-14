@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_ENDPOINTS,
-  E2E_FLAG,
   ENDPOINT_SPECS,
   EndpointOverrideRefused,
   InvalidEndpoint,
@@ -58,11 +57,11 @@ describe("resolveEndpoints", () => {
     expect(resolveEndpoints({ NODE_ENV: "production" }).endpoints).toEqual(DEFAULT_ENDPOINTS);
   });
 
-  it("allows an override in production only with the e2e flag set to exactly 1", () => {
+  it("has no bypass: production refuses an override whatever else is set", () => {
     const env = { NODE_ENV: "production", INFRALIFT_ENDPOINT_GITHUB_API: "http://localhost:4010" };
-    expect(resolveEndpoints({ ...env, [E2E_FLAG]: "1" }).endpoints.githubApi).toBe("http://localhost:4010");
-    expect(() => resolveEndpoints({ ...env, [E2E_FLAG]: "true" })).toThrow(EndpointOverrideRefused);
-    expect(() => resolveEndpoints({ ...env, [E2E_FLAG]: "0" })).toThrow(EndpointOverrideRefused);
+    for (const extra of [{ INFRALIFT_E2E: "1" }, { E2E: "1" }, { CI: "true" }]) {
+      expect(() => resolveEndpoints({ ...env, ...extra })).toThrow(EndpointOverrideRefused);
+    }
   });
 
   it("allows overrides outside production", () => {

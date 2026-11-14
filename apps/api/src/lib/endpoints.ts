@@ -10,9 +10,10 @@
 // description. See README "Testing without cloud accounts".
 //
 // An override sends customer credentials to whatever host it names, so a
-// production server refuses to start with one set (EndpointOverrideRefused),
-// unless INFRALIFT_E2E=1 says this "production" process is an e2e run (the
-// API image always runs with NODE_ENV=production).
+// production process refuses to start with one set (EndpointOverrideRefused),
+// with no bypass. The e2e suite runs the API from source with
+// NODE_ENV=development; an e2e run against the built image (which sets
+// NODE_ENV=production) would need a deliberate, tested way in, not a flag.
 //
 // Dependency injection: connectors and git clients take an Endpoints value
 // (or the one URL they need) as a parameter. runtimeEndpoints() below is the
@@ -65,16 +66,13 @@ export const DEFAULT_ENDPOINTS: Endpoints = Object.freeze(
   Object.fromEntries(Object.entries(ENDPOINT_SPECS).map(([name, spec]) => [name, spec.default]))
 ) as Endpoints;
 
-/** The env var that turns a production process into an allowed e2e run. */
-export const E2E_FLAG = "INFRALIFT_E2E";
-
 /** A production process was started with an endpoint override. */
 export class EndpointOverrideRefused extends Error {
   constructor(readonly variables: string[]) {
     super(
       `refusing to start: ${variables.join(", ")} ${variables.length === 1 ? "is" : "are"} set while NODE_ENV=production. ` +
         `Endpoint overrides send customer credentials to another host; they are for local and CI e2e runs only. ` +
-        `Unset them, or set ${E2E_FLAG}=1 if this really is an e2e run.`
+        `Unset them.`
     );
     this.name = "EndpointOverrideRefused";
   }
@@ -108,7 +106,7 @@ export interface ResolvedEndpoints {
 /** Endpoints from an environment. Pure: takes the env, reads nothing else.
  *  Empty variables count as unset. Throws InvalidEndpoint for a value that is
  *  not an http(s) URL, and EndpointOverrideRefused for any override in
- *  production without the e2e flag. */
+ *  production. */
 export function resolveEndpoints(env: Record<string, string | undefined>): ResolvedEndpoints {
   const resolved: Record<string, string | null> = {};
   const overridden: string[] = [];
@@ -121,7 +119,7 @@ export function resolveEndpoints(env: Record<string, string | undefined>): Resol
       resolved[name] = spec.default;
     }
   }
-  if (overridden.length && env.NODE_ENV === "production" && env[E2E_FLAG] !== "1") {
+  if (overridden.length && env.NODE_ENV === "production") {
     throw new EndpointOverrideRefused(overridden);
   }
   return { endpoints: Object.freeze(resolved) as Endpoints, overridden };

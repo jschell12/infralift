@@ -7,4 +7,7 @@ FROM ghcr.io/opentofu/opentofu:1.12.6-minimal AS tofu
 FROM alpine:3.22
 RUN apk add --no-cache bash jq ca-certificates
 COPY --from=tofu /usr/local/bin/tofu /usr/local/bin/tofu
+# The provider cache volume is created from this directory, so it is
+# writable by the non-root host user the suite runs the container as.
+RUN mkdir -m 1777 /plugin-cache
 ENTRYPOINT []
