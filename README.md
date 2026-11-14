@@ -34,9 +34,32 @@ pnpm db:generate
 pnpm dev                              # web :3000, dashboard :3001, api :4000
 pnpm --filter @infralift/api test
 pnpm --filter @infralift/api validate:stacks
+make e2e                              # end to end, no cloud accounts (Docker)
 ```
 
 `apps/api` needs a Postgres `DATABASE_URL` (see `apps/api/.env.example`). Credentials for local work come from scredmgr, never from files in the repository.
+
+## Testing without cloud accounts
+
+`make e2e` (or `pnpm e2e`) runs the adopt path end to end on your machine with no cloud account, no git host and no spend. It needs Docker. It brings up `docker-compose.e2e.yml`, runs `apps/api/e2e`, and tears the stack down; a run takes about a minute once the images and providers are cached. `E2E_KEEP=1 make e2e` leaves the stack up.
+
+The API runs from source with every provider endpoint pointed at the stack through `INFRALIFT_ENDPOINT_*` variables (`apps/api/src/lib/endpoints.ts`, one per API; the defaults are the real endpoints). A server with `NODE_ENV=production` refuses to start with any of them set, because an override sends customer credentials to another host. The suite runs the API with `NODE_ENV=development`.
+
+What is real and what stands in for it:
+
+| Part | In the e2e stack | How far it is trusted |
+| --- | --- | --- |
+| infralift API, job worker, Postgres | Real, from source, on a throwaway Postgres 16 | The code under test |
+| AWS | [moto](https://github.com/getmoto/moto) 5.2.5 server: STS, S3, DynamoDB, SNS, the Tagging API | An emulator. LocalStack's current images need an account and auth token, and its last free 4.x image lists only some services through the Tagging API, so it is not used |
+| GitHub | A stateful fake (`apps/api/e2e/github-fake/`) implementing the 24 REST calls infralift and the harness make | Every request is checked against the operation's schema in GitHub's own OpenAPI description at a pinned commit and refused with 422 if GitHub would refuse it; every response is filled out to and checked against the documented schema. The suite fails on any mismatch. `fake.test.ts` runs the fake under infralift's GitHub client in the ordinary `pnpm test` |
+| Cloudflare | [Prism](https://github.com/stoplight/prism) 5.15.10 serving the 7 Cloudflare operations the connector calls, from Cloudflare's own OpenAPI description at a pinned commit, with a seeded account (`apps/api/e2e/specs/cloudflare-seed.ts`) | Requests are validated by Prism (`--errors`); the seed is checked against the response schemas when it is written. Stateless, so OpenTofu is not run against it |
+| The customer's CI | The import check and apply workflows infralift commits, their `run:` steps executed verbatim in an OpenTofu 1.12.6 container against moto | `uses:` steps are stood in for (checkout is a mounted directory, setup-opentofu is the container), `${{ }}` expressions are passed as the values they resolve to, and the gitleaks step is not run |
+
+What the AWS run proves: the connection verifies by assuming a role, the unmanaged view lists the account's tagged resources, adopting three reserves them in the ledger (`pending`) and opens one pull request with import blocks, a provider, a backend and both workflows, the check generates code and its plan imports 3 resources and changes nothing (ADR 0002), the ledger rows become `managed`, merging runs the apply by saved plan into state in an S3 bucket (ADR 0008), and the drift job then reports no drift. On the way it records that `hashicorp/aws ~> 5.0` generates attributes it then rejects (`bucket_prefix = ""` beside `bucket` and similar), so the first plan fails until those empty values are deleted, which the suite does as a customer would, from `tofu validate`'s errors.
+
+Not covered: GitLab (GitLab CE runs in Docker but is heavy; nothing in the adopt path calls GitLab yet), Terraform Cloud, the dashboard, and the other providers (Vercel, Netlify, Render, Fly.io, DigitalOcean, Heroku, Railway, Azure, Google Cloud, Firebase), whose connectors are still tested with recorded fixtures in `apps/api/src/connectors/*.test.ts`. Their endpoints can already be overridden.
+
+`pnpm --filter @infralift/api e2e:specs` re-extracts the OpenAPI subsets from the pinned commits (`--check` fails if the committed files differ). Bumping a pin and re-running shows, as a diff, what changed in the vendor's contract for exactly the calls infralift makes.
 
 ## Deploying
 

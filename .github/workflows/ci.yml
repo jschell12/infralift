@@ -88,6 +88,52 @@ jobs:
 
       - run: pnpm --filter @infralift/api validate:stacks
 
+  e2e:
+    name: End to end (local stack, non-blocking)
+    # The adopt path against docker-compose.e2e.yml: moto for AWS, the GitHub
+    # fake, Prism for Cloudflare, OpenTofu in a container. No cloud account
+    # and no secret: nothing here can spend money or reach production.
+    #
+    # Non-blocking until it has proven stable: continue-on-error keeps a
+    # failure from failing the workflow, and deploy-web/trigger-deploy do not
+    # need it. Make it blocking by removing continue-on-error (and adding it
+    # to a required check) once it has a clean record.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build shared packages
+        run: pnpm --filter './packages/*' build
+
+      - name: Typecheck the e2e suite
+        run: pnpm --filter @infralift/api lint:e2e
+
+      # The committed OpenAPI subsets must match the vendors' descriptions at
+      # the pinned commits, so the fake and Prism cannot drift from them.
+      - name: Check the OpenAPI subsets against their pins
+        run: pnpm --filter @infralift/api e2e:specs --check
+
+      - name: Run the e2e suite
+        run: pnpm e2e
+
+      - name: API log
+        if: failure()
+        run: cat apps/api/e2e/.api.log || true
+
   deploy-web:
     name: Deploy marketing site
     needs: [check, stacks]

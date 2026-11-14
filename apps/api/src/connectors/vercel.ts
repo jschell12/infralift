@@ -5,8 +5,7 @@ import {
 } from "@infralift/collectors/vercel";
 import type { Connector, ConnectorAssessment } from "./types.js";
 import { httpFetch } from "../lib/http.js";
-
-const API = "https://api.vercel.com";
+import { DEFAULT_ENDPOINTS, rebasedFetch, type Endpoints } from "../lib/endpoints.js";
 
 // Collection lives in @infralift/collectors — the same dependency-free file a
 // customer runs themselves when they would rather not hand over a token (see
@@ -106,17 +105,24 @@ export function analyzeVercel(snapshot: VercelSnapshot): ConnectorAssessment {
   };
 }
 
-export const vercelConnector: Connector = {
-  provider: "vercel",
+/** The Vercel connector, calling endpoints.vercelApi (lib/endpoints.ts). */
+export function createVercelConnector(endpoints: Pick<Endpoints, "vercelApi"> = DEFAULT_ENDPOINTS): Connector {
+  const api = endpoints.vercelApi;
+  const connector: Connector = {
+    provider: "vercel",
 
-  async verify(token) {
-    const res = await httpFetch(`${API}/v2/user`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return res.ok;
-  },
+    async verify(token) {
+      const res = await httpFetch(`${api}/v2/user`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.ok;
+    },
 
-  async assess(token): Promise<ConnectorAssessment> {
-    return analyzeVercel(await collectVercel({ token, fetchImpl: httpFetch }));
-  },
-};
+    async assess(token): Promise<ConnectorAssessment> {
+      return analyzeVercel(await collectVercel({ token, fetchImpl: rebasedFetch(DEFAULT_ENDPOINTS.vercelApi, api, httpFetch) }));
+    },
+  };
+  return connector;
+}
+
+export const vercelConnector: Connector = createVercelConnector();

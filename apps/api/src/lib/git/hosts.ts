@@ -10,9 +10,9 @@ import {
   GitCommitError,
   openPullRequest,
 } from "./github.js";
-import { GITLAB_API } from "../../connectors/gitlab.js";
 import { GitFileTooLarge } from "./errors.js";
 import { HTTP_TIMEOUTS_MS, httpFetch } from "../http.js";
+import { runtimeEndpoints, type Endpoints } from "../endpoints.js";
 
 const gitTimeout = { timeoutMs: HTTP_TIMEOUTS_MS.gitHost };
 
@@ -131,8 +131,14 @@ export interface GitHostClient {
   }): Promise<{ url: string }>;
 }
 
-export function gitHostClient(host: GitHost, token: string): GitHostClient {
-  return host === "gitlab" ? gitlabClient(token) : githubClient(token);
+/** A client for `host`, calling the API base in `endpoints` (lib/endpoints.ts):
+ *  this process's runtime endpoints unless a caller passes its own. */
+export function gitHostClient(
+  host: GitHost,
+  token: string,
+  endpoints: Pick<Endpoints, "githubApi" | "gitlabApi"> = runtimeEndpoints()
+): GitHostClient {
+  return host === "gitlab" ? gitlabClient(token, endpoints.gitlabApi) : githubClient(token, endpoints.githubApi);
 }
 
 /** A response body as text, abandoned as soon as it passes maxBytes, so a
@@ -184,10 +190,11 @@ export async function githubError(res: Response, message: string): Promise<GitCo
   return new GitCommitError(message, res.status, { rateLimited: limited });
 }
 
-function githubClient(token: string): GitHostClient {
+function githubClient(token: string, apiBase: string): GitHostClient {
+  const auth = { token, apiBase };
   const gh = (method: string, path: string, body?: object) =>
     httpFetch(
-      `https://api.github.com${path}`,
+      `${apiBase}${path}`,
       {
         method,
         headers: {
@@ -250,7 +257,7 @@ function githubClient(token: string): GitHostClient {
 
     async readFile({ repo, path, ref, maxBytes }) {
       const res = await httpFetch(
-        `https://api.github.com/repos/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`,
+        `${apiBase}/repos/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -372,19 +379,19 @@ function githubClient(token: string): GitHostClient {
       throw new GitCommitError(`${created.full_name} was created but its first commit never appeared`);
     },
 
-    ensureRepo: (o) => githubEnsureRepo({ token, ...o }),
-    fileExists: (o) => githubFileExists({ token, ...o }),
+    ensureRepo: (o) => githubEnsureRepo({ ...auth, ...o }),
+    fileExists: (o) => githubFileExists({ ...auth, ...o }),
     createBranch: async (o) => {
-      await githubCreateBranch({ token, ...o });
+      await githubCreateBranch({ ...auth, ...o });
     },
-    deleteBranch: (o) => githubDeleteBranch({ token, ...o }),
-    commitFiles: (o) => githubCommitFiles({ token, ...o }),
+    deleteBranch: (o) => githubDeleteBranch({ ...auth, ...o }),
+    commitFiles: (o) => githubCommitFiles({ ...auth, ...o }),
     findOpenChangeRequest: async ({ repo, base, isMine }) => {
-      const pr = await findOpenPullRequest({ token, repo, base, isMine });
+      const pr = await findOpenPullRequest({ ...auth, repo, base, isMine });
       return pr ? { url: pr.url, branch: pr.branch } : null;
     },
     openChangeRequest: async (o) => {
-      const pr = await openPullRequest({ token, ...o });
+      const pr = await openPullRequest({ ...auth, ...o });
       return { url: pr.url };
     },
   };
@@ -405,10 +412,10 @@ export function gitBlobSha(content: string): string {
 /** Pages of 100 tree entries read before a GitLab listing counts as truncated. */
 export const GITLAB_TREE_PAGES = 99;
 
-function gitlabClient(token: string): GitHostClient {
+function gitlabClient(token: string, apiBase: string): GitHostClient {
   const gl = (method: string, path: string, body?: object) =>
     httpFetch(
-      `${GITLAB_API}${path}`,
+      `${apiBase}${path}`,
       {
         method,
         headers: {

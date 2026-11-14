@@ -16,3 +16,4 @@ out/
 
 # Session log: kept locally, not published (this repository is public).
 STATUS.md
+apps/api/e2e/.api.log

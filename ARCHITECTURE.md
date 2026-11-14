@@ -24,7 +24,8 @@ packages/
   shared/      types shared by the API and the apps
   collectors/  scripts a customer runs to snapshot a provider (Vercel, Heroku)
 docs/          customer-facing documentation, and docs/adr/ decision records
-e2e/           end-to-end runbooks and a reference app
+e2e/           end-to-end runbooks against real accounts, and a reference app
+               (the zero-cost local suite is apps/api/e2e, run by `make e2e`)
 ```
 
 The API is where the logic is. Inside `apps/api/src` (the schema is beside it, in `apps/api/prisma`):
@@ -207,9 +208,12 @@ pnpm install
 pnpm db:generate
 pnpm dev            # web :3000, dashboard :3001, api :4000
 pnpm --filter @infralift/api test
+make e2e            # the adopt path end to end against a local stack (Docker)
 ```
 
 The API needs `DATABASE_URL` (see `apps/api/.env.example`).
+
+Every provider connector and git host client takes its base URL from in `lib/endpoints.ts`, overridden by an `INFRALIFT_ENDPOINT_*` variable; the defaults are the real endpoints and production refuses an override. Connectors are factories taking the endpoints they call (`createConnectorRegistry` in `connectors/index.ts`), and `gitHostClient` takes them too. The e2e stack (`docker-compose.e2e.yml`, `apps/api/e2e/`) uses this to point the API at moto, a GitHub fake checked against GitHub's OpenAPI description, and Prism serving Cloudflare's; README, "Testing without cloud accounts", says what each stands in for.
 
 A merge to `main` runs CI on GitHub-hosted runners. The marketing site (`apps/web`) deploys to Cloudflare from that CI run. The API, dashboard and admin are not deployed from this repository: it is public, and a public repository must not have a self-hosted runner. A workflow in a private repository deploys `main`: it confirms this repository's CI passed on the commit, builds the `infralift-{api,dashboard,admin}:local` images on the production host and restarts the `infralift` Nomad job ([ADR 0007](docs/adr/0007-public-repo-private-deploy.md)). This repository's CI starts it as soon as CI passes on `main` (the `trigger-deploy` job, with a token scoped to that repository's Actions; ADR 0007 lists what it can do); the private workflow also checks every 10 minutes in case a trigger is missed. The API applies pending Prisma migrations when it starts (`prisma migrate deploy` in its Dockerfile), then starts the job worker.
 

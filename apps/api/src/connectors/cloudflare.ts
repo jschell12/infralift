@@ -1,11 +1,12 @@
 import type { ResourceInventoryItem } from "@infralift/shared";
 import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 import { httpFetch } from "../lib/http.js";
+import { DEFAULT_ENDPOINTS, type Endpoints } from "../lib/endpoints.js";
 
-const API = "https://api.cloudflare.com/client/v4";
-
-async function cfFetch(token: string, path: string): Promise<any> {
-  const res = await httpFetch(`${API}${path}`, {
+/** `api` is the base URL, DEFAULT_ENDPOINTS.cloudflareApi unless overridden
+ *  (lib/endpoints.ts). */
+async function cfFetch(api: string, token: string, path: string): Promise<any> {
+  const res = await httpFetch(`${api}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
@@ -28,11 +29,11 @@ export const DNS_RECORD_CAP = 2000;
 
 /** Every page of a paged list, following result_info.total_pages. A response
  *  without result_info is one page, and an empty page ends the walk. */
-async function cfPaged(token: string, path: string, perPage: number, maxPages = MAX_PAGES): Promise<{ items: any[]; capped: boolean }> {
+async function cfPaged(api: string, token: string, path: string, perPage: number, maxPages = MAX_PAGES): Promise<{ items: any[]; capped: boolean }> {
   const items: any[] = [];
   const sep = path.includes("?") ? "&" : "?";
   for (let page = 1; page <= maxPages; page++) {
-    const body = await cfFetch(token, `${path}${sep}per_page=${perPage}&page=${page}`);
+    const body = await cfFetch(api, token, `${path}${sep}per_page=${perPage}&page=${page}`);
     const result: any[] = Array.isArray(body.result) ? body.result : [];
     items.push(...result);
     const total = Number(body.result_info?.total_pages ?? 1);
@@ -41,186 +42,196 @@ async function cfPaged(token: string, path: string, perPage: number, maxPages = 
   return { items, capped: true };
 }
 
-export const cloudflareConnector: Connector = {
-  provider: "cloudflare",
+/** The Cloudflare connector, calling endpoints.cloudflareApi (lib/endpoints.ts). */
+export function createCloudflareConnector(endpoints: Pick<Endpoints, "cloudflareApi"> = DEFAULT_ENDPOINTS): Connector {
+  const api = endpoints.cloudflareApi;
+  const connector: Connector = {
+    provider: "cloudflare",
 
-  async verify(token) {
-    return (await cloudflareConnector.check!(token)).valid;
-  },
+    async verify(token) {
+      return (await connector.check!(token)).valid;
+    },
 
-  // /user/tokens/verify answers {result: {id, status, expires_on?}}, status
-  // one of active | disabled | expired; expires_on is absent for a token
-  // without an expiry. A refused token is a 401 whose errors[] says why.
-  async check(token) {
-    const res = await httpFetch(`${API}/user/tokens/verify`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const body: any = await res.json().catch(() => null);
-    if (!res.ok) {
-      const why = typeof body?.errors?.[0]?.message === "string" ? `: ${body.errors[0].message.slice(0, 120)}` : "";
-      return { valid: false, reason: `Cloudflare answered ${res.status}${why}`, expiresAt: null };
-    }
-    const status = body?.result?.status;
-    const expires = typeof body?.result?.expires_on === "string" ? new Date(body.result.expires_on) : null;
-    const expiresAt = expires && !Number.isNaN(expires.getTime()) ? expires : null;
-    if (status !== "active") {
-      return { valid: false, reason: `Cloudflare reports this token as ${String(status ?? "unknown")}`, expiresAt };
-    }
-    return { valid: true, reason: null, expiresAt };
-  },
+    // /user/tokens/verify answers {result: {id, status, expires_on?}}, status
+    // one of active | disabled | expired; expires_on is absent for a token
+    // without an expiry. A refused token is a 401 whose errors[] says why.
+    async check(token) {
+      const res = await httpFetch(`${api}/user/tokens/verify`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body: any = await res.json().catch(() => null);
+      if (!res.ok) {
+        const why = typeof body?.errors?.[0]?.message === "string" ? `: ${body.errors[0].message.slice(0, 120)}` : "";
+        return { valid: false, reason: `Cloudflare answered ${res.status}${why}`, expiresAt: null };
+      }
+      const status = body?.result?.status;
+      const expires = typeof body?.result?.expires_on === "string" ? new Date(body.result.expires_on) : null;
+      const expiresAt = expires && !Number.isNaN(expires.getTime()) ? expires : null;
+      if (status !== "active") {
+        return { valid: false, reason: `Cloudflare reports this token as ${String(status ?? "unknown")}`, expiresAt };
+      }
+      return { valid: true, reason: null, expiresAt };
+    },
 
-  async assess(token): Promise<ConnectorAssessment> {
-    const inventory: ResourceInventoryItem[] = [];
-    const findings: ConnectorAssessment["findings"] = [];
+    async assess(token): Promise<ConnectorAssessment> {
+      const inventory: ResourceInventoryItem[] = [];
+      const findings: ConnectorAssessment["findings"] = [];
 
-    const capped: string[] = [];
+      const capped: string[] = [];
 
-    // Accounts. Account-scoped resources import as "<account_id>/<name>", so
-    // each item records its account, and the account's name for the adopt
-    // form's R2 account choice (backendDefaultsOf in services/unmanaged.ts).
-    const { items: accounts, capped: accountsCapped } = await cfPaged(token, "/accounts", 50);
-    if (accountsCapped) capped.push(`accounts (first ${accounts.length})`);
+      // Accounts. Account-scoped resources import as "<account_id>/<name>", so
+      // each item records its account, and the account's name for the adopt
+      // form's R2 account choice (backendDefaultsOf in services/unmanaged.ts).
+      const { items: accounts, capped: accountsCapped } = await cfPaged(api, token, "/accounts", 50);
+      if (accountsCapped) capped.push(`accounts (first ${accounts.length})`);
 
-    for (const account of accounts) {
-      // Workers scripts
+      for (const account of accounts) {
+        // Workers scripts
+        try {
+          const scriptsBody = await cfFetch(
+            api,
+            token,
+            `/accounts/${account.id}/workers/scripts`
+          );
+          for (const s of scriptsBody.result ?? []) {
+            inventory.push({
+              provider: "cloudflare",
+              type: "cloudflare:worker",
+              externalId: s.id,
+              name: s.id,
+              metadata: { accountId: account.id, accountName: account.name ?? null, modifiedOn: s.modified_on ?? null },
+            });
+          }
+        } catch {
+          // Token may not include Workers scope.
+        }
+
+        // Pages projects
+        try {
+          const pagesBody = await cfFetch(
+            api,
+            token,
+            `/accounts/${account.id}/pages/projects`
+          );
+          for (const p of pagesBody.result ?? []) {
+            inventory.push({
+              provider: "cloudflare",
+              type: "cloudflare:pages_project",
+              externalId: p.name,
+              name: p.name,
+              metadata: {
+                accountId: account.id,
+                accountName: account.name ?? null,
+                productionBranch: p.production_branch ?? null,
+                framework: p.build_config?.framework ?? null,
+              },
+            });
+            findings.push({
+              category: "recommendation",
+              severity: "low",
+              title: `${p.name}: Pages project — consider Workers`,
+              detail:
+                "Cloudflare is converging Pages onto Workers (static assets on Workers). New investment should target Workers; existing Pages projects keep working.",
+              resourceRef: p.name,
+            });
+          }
+        } catch {
+          // Pages scope missing; skip.
+        }
+
+        // R2 buckets
+        try {
+          const r2Body = await cfFetch(
+            api,
+            token,
+            `/accounts/${account.id}/r2/buckets`
+          );
+          for (const b of r2Body.result?.buckets ?? []) {
+            inventory.push({
+              provider: "cloudflare",
+              type: "cloudflare:r2_bucket",
+              externalId: b.name,
+              name: b.name,
+              metadata: { accountId: account.id, accountName: account.name ?? null, jurisdiction: b.jurisdiction ?? "default", creationDate: b.creation_date ?? null },
+            });
+          }
+        } catch {
+          // R2 scope missing; skip.
+        }
+      }
+
+      // DNS zones, then the records in each.
+      let zones: any[] = [];
       try {
-        const scriptsBody = await cfFetch(
-          token,
-          `/accounts/${account.id}/workers/scripts`
-        );
-        for (const s of scriptsBody.result ?? []) {
+        const listed = await cfPaged(api, token, "/zones", 50);
+        zones = listed.items;
+        if (listed.capped) capped.push(`zones (first ${zones.length})`);
+        for (const z of zones) {
           inventory.push({
             provider: "cloudflare",
-            type: "cloudflare:worker",
-            externalId: s.id,
-            name: s.id,
-            metadata: { accountId: account.id, accountName: account.name ?? null, modifiedOn: s.modified_on ?? null },
+            type: "cloudflare:zone",
+            externalId: z.id,
+            name: z.name,
+            metadata: { accountId: z.account?.id ?? null, accountName: z.account?.name ?? null, status: z.status, plan: z.plan?.name ?? null },
           });
         }
       } catch {
-        // Token may not include Workers scope.
+        // Zone scope missing; skip.
       }
 
-      // Pages projects
-      try {
-        const pagesBody = await cfFetch(
-          token,
-          `/accounts/${account.id}/pages/projects`
-        );
-        for (const p of pagesBody.result ?? []) {
-          inventory.push({
-            provider: "cloudflare",
-            type: "cloudflare:pages_project",
-            externalId: p.name,
-            name: p.name,
-            metadata: {
-              accountId: account.id,
-              accountName: account.name ?? null,
-              productionBranch: p.production_branch ?? null,
-              framework: p.build_config?.framework ?? null,
-            },
-          });
-          findings.push({
-            category: "recommendation",
-            severity: "low",
-            title: `${p.name}: Pages project — consider Workers`,
-            detail:
-              "Cloudflare is converging Pages onto Workers (static assets on Workers). New investment should target Workers; existing Pages projects keep working.",
-            resourceRef: p.name,
-          });
+      let records = 0;
+      for (const [n, z] of zones.entries()) {
+        if (records >= DNS_RECORD_CAP) {
+          capped.push(`DNS records (first ${DNS_RECORD_CAP}, from ${n} of ${zones.length} zones)`);
+          break;
         }
-      } catch {
-        // Pages scope missing; skip.
-      }
-
-      // R2 buckets
-      try {
-        const r2Body = await cfFetch(
-          token,
-          `/accounts/${account.id}/r2/buckets`
-        );
-        for (const b of r2Body.result?.buckets ?? []) {
-          inventory.push({
-            provider: "cloudflare",
-            type: "cloudflare:r2_bucket",
-            externalId: b.name,
-            name: b.name,
-            metadata: { accountId: account.id, accountName: account.name ?? null, jurisdiction: b.jurisdiction ?? "default", creationDate: b.creation_date ?? null },
-          });
+        try {
+          const listed = await cfPaged(api, token, `/zones/${z.id}/dns_records`, 100);
+          const kept = listed.items.slice(0, DNS_RECORD_CAP - records);
+          if (listed.capped || kept.length < listed.items.length) capped.push(`DNS records in ${z.name} (first ${kept.length})`);
+          for (const r of kept) {
+            inventory.push({
+              provider: "cloudflare",
+              type: "cloudflare:dns_record",
+              externalId: r.id,
+              name: r.name,
+              metadata: { zoneId: z.id, recordType: r.type ?? null, proxied: r.proxied ?? null },
+            });
+          }
+          records += kept.length;
+        } catch {
+          // DNS read scope missing for this zone; skip.
         }
-      } catch {
-        // R2 scope missing; skip.
       }
-    }
 
-    // DNS zones, then the records in each.
-    let zones: any[] = [];
-    try {
-      const listed = await cfPaged(token, "/zones", 50);
-      zones = listed.items;
-      if (listed.capped) capped.push(`zones (first ${zones.length})`);
-      for (const z of zones) {
-        inventory.push({
-          provider: "cloudflare",
-          type: "cloudflare:zone",
-          externalId: z.id,
-          name: z.name,
-          metadata: { accountId: z.account?.id ?? null, accountName: z.account?.name ?? null, status: z.status, plan: z.plan?.name ?? null },
+      if (capped.length) {
+        findings.push({
+          category: "inventory",
+          severity: "info",
+          title: "Cloudflare inventory was cut off",
+          detail: `infralift stopped listing at its bound for: ${capped.join("; ")}. Resources past it were not assessed.`,
         });
       }
-    } catch {
-      // Zone scope missing; skip.
-    }
 
-    let records = 0;
-    for (const [n, z] of zones.entries()) {
-      if (records >= DNS_RECORD_CAP) {
-        capped.push(`DNS records (first ${DNS_RECORD_CAP}, from ${n} of ${zones.length} zones)`);
-        break;
+      const unmanagedCount = inventory.length;
+      if (unmanagedCount > 0) {
+        findings.push({
+          category: "iac_standard",
+          severity: "medium",
+          title: `${unmanagedCount} Cloudflare resources to bring under Terraform`,
+          detail:
+            "Resources found via API are candidates for `terraform import` into a Cloudflare provider workspace so drift is visible and changes go through code review.",
+        });
       }
-      try {
-        const listed = await cfPaged(token, `/zones/${z.id}/dns_records`, 100);
-        const kept = listed.items.slice(0, DNS_RECORD_CAP - records);
-        if (listed.capped || kept.length < listed.items.length) capped.push(`DNS records in ${z.name} (first ${kept.length})`);
-        for (const r of kept) {
-          inventory.push({
-            provider: "cloudflare",
-            type: "cloudflare:dns_record",
-            externalId: r.id,
-            name: r.name,
-            metadata: { zoneId: z.id, recordType: r.type ?? null, proxied: r.proxied ?? null },
-          });
-        }
-        records += kept.length;
-      } catch {
-        // DNS read scope missing for this zone; skip.
-      }
-    }
 
-    if (capped.length) {
-      findings.push({
-        category: "inventory",
-        severity: "info",
-        title: "Cloudflare inventory was cut off",
-        detail: `infralift stopped listing at its bound for: ${capped.join("; ")}. Resources past it were not assessed.`,
-      });
-    }
+      return {
+        inventory,
+        findings,
+        estimatedMonthlyCostCents: null,
+      };
+    },
+  };
+  return connector;
+}
 
-    const unmanagedCount = inventory.length;
-    if (unmanagedCount > 0) {
-      findings.push({
-        category: "iac_standard",
-        severity: "medium",
-        title: `${unmanagedCount} Cloudflare resources to bring under Terraform`,
-        detail:
-          "Resources found via API are candidates for `terraform import` into a Cloudflare provider workspace so drift is visible and changes go through code review.",
-      });
-    }
-
-    return {
-      inventory,
-      findings,
-      estimatedMonthlyCostCents: null,
-    };
-  },
-};
+export const cloudflareConnector: Connector = createCloudflareConnector();

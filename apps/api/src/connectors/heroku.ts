@@ -5,8 +5,7 @@ import {
 } from "@infralift/collectors/heroku";
 import type { Connector, ConnectorAssessment } from "./types.js";
 import { httpFetch } from "../lib/http.js";
-
-const API = "https://api.heroku.com";
+import { DEFAULT_ENDPOINTS, rebasedFetch, type Endpoints } from "../lib/endpoints.js";
 
 // See the note in vercel.ts: collection is the shared, published half; the
 // cost model and findings below stay here.
@@ -105,20 +104,27 @@ export function analyzeHeroku(snapshot: HerokuSnapshot): ConnectorAssessment {
   };
 }
 
-export const herokuConnector: Connector = {
-  provider: "heroku",
+/** The Heroku connector, calling endpoints.herokuApi (lib/endpoints.ts). */
+export function createHerokuConnector(endpoints: Pick<Endpoints, "herokuApi"> = DEFAULT_ENDPOINTS): Connector {
+  const api = endpoints.herokuApi;
+  const connector: Connector = {
+    provider: "heroku",
 
-  async verify(token) {
-    const res = await httpFetch(`${API}/account`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.heroku+json; version=3",
-      },
-    });
-    return res.ok;
-  },
+    async verify(token) {
+      const res = await httpFetch(`${api}/account`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.heroku+json; version=3",
+        },
+      });
+      return res.ok;
+    },
 
-  async assess(token): Promise<ConnectorAssessment> {
-    return analyzeHeroku(await collectHeroku({ token, fetchImpl: httpFetch }));
-  },
-};
+    async assess(token): Promise<ConnectorAssessment> {
+      return analyzeHeroku(await collectHeroku({ token, fetchImpl: rebasedFetch(DEFAULT_ENDPOINTS.herokuApi, api, httpFetch) }));
+    },
+  };
+  return connector;
+}
+
+export const herokuConnector: Connector = createHerokuConnector();

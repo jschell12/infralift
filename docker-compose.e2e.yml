@@ -1,0 +1,78 @@
+# The zero-cost local stack the e2e suite runs against (apps/api/e2e,
+# `make e2e`). Nothing here talks to a real cloud account or a real git host.
+# See README, "Testing without cloud accounts".
+#
+#   postgres    the API's database, thrown away on `down -v`
+#   moto        AWS (STS, IAM, S3, DynamoDB, SNS, SQS, EC2, Lambda, Tagging API).
+#               LocalStack's current images need an account and auth token;
+#               moto is Apache-2.0 and needs neither.
+#   cloudflare  Prism serving Cloudflare's own OpenAPI description (the subset
+#               infralift calls, at a pinned commit) with a seeded account
+#   tofu        OpenTofu with bash and jq, run per step by the suite (profile
+#               "tools", so `up` does not start it)
+#
+# The GitHub fake and the API run on the host from source, started by the
+# suite, so tests can read their state directly.
+#
+# Ports bind to 127.0.0.1 only.
+
+name: infralift-e2e
+
+services:
+  postgres:
+    image: postgres:16.16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: infralift_e2e
+    ports: ["127.0.0.1:55432:5432"]
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "infralift_e2e"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  moto:
+    image: motoserver/moto:5.2.5
+    ports: ["127.0.0.1:55000:5000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/moto-api/data.json')"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  cloudflare:
+    image: stoplight/prism:5.15.10
+    # Prism publishes amd64 only; Docker on Apple silicon emulates it.
+    platform: linux/amd64
+    # --errors: a request the description would reject is answered with an
+    # error, so the connector cannot pass by sending something Cloudflare
+    # would refuse. Single process: the image's multiprocess mode crashes.
+    command: ["mock", "/spec/cloudflare.openapi.json", "--host", "0.0.0.0", "--errors", "--multiprocess=false"]
+    volumes: ["./apps/api/e2e/specs:/spec:ro"]
+    ports: ["127.0.0.1:54010:4010"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4010/user/tokens/verify',{headers:{authorization:'Bearer h'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  tofu:
+    build: ./apps/api/e2e/tofu
+    image: infralift-e2e-tofu:local
+    profiles: ["tools"]
+    environment:
+      # moto's fixed test credentials; every AWS call goes to moto.
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://moto:5000
+      TF_PLUGIN_CACHE_DIR: /plugin-cache
+    volumes: ["tofu-plugins:/plugin-cache"]
+    depends_on:
+      moto:
+        condition: service_healthy
+
+volumes:
+  tofu-plugins:
