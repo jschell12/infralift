@@ -157,7 +157,7 @@ assessmentsRouter.post("/run", rateLimit(RATE_LIMITS.assessmentRun), handle(asyn
     // quote a response body, and the dashboard shows a sentence instead. The
     // request id ties the two together when a customer reports it.
     const requestId = req.id ?? currentRequestId();
-    log.error({ err, assessmentId: assessment.id, provider: connection.provider }, "assessment failed");
+    log.error({ err, requestId, assessmentId: assessment.id, provider: connection.provider }, "assessment failed");
     throw new Upstream("Assessment failed", { assessmentId: assessment.id, requestId });
   }
 
@@ -214,7 +214,7 @@ assessmentsRouter.post("/from-bundle", handle(async (req, res) => {
     // and the body carries the assessment id the dashboard links to. The
     // analyzer's message is logged under a request id, not sent.
     const requestId = req.id ?? currentRequestId();
-    log.error({ err, assessmentId: assessment.id }, "bundle assessment failed");
+    log.error({ err, requestId, assessmentId: assessment.id }, "bundle assessment failed");
     return res.status(500).json({
       error: "Could not read that snapshot",
       assessmentId: assessment.id,

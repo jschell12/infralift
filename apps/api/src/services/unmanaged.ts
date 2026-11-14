@@ -142,7 +142,7 @@ async function readInventory(connection: ProviderConnection): Promise<ResourceIn
       await markInvalidOnAuthFailure(connection, err, "connector", "an inventory of the account");
     }
     const requestId = currentRequestId();
-    log.error({ err, connectionId: connection.id, provider: connection.provider }, "inventory of connection failed");
+    log.error({ err, requestId, connectionId: connection.id, provider: connection.provider }, "inventory of connection failed");
     throw inventoryFailure(connection, err, requestId);
   }
 }

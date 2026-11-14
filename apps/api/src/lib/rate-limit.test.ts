@@ -44,6 +44,16 @@ describe("the in-memory store, a sliding window", () => {
     expect((await store.consume("k", rule, T0 + 10 * MINUTE)).allowed).toBe(true);
   });
 
+  it("sweeps each key by its own window, so a short policy cannot cut a long one's count", async () => {
+    const hour = { max: 1, windowMs: 60 * MINUTE };
+    const short = { max: 100, windowMs: 10 * MINUTE };
+    await store.consume("lead:ip:a", hour, T0);
+    // Past the sweep threshold, then a sweep triggered by the short policy 11 minutes on.
+    for (let i = 0; i < 5001; i++) await store.consume(`lead:ip:${i}`, hour, T0);
+    await store.consume("inventory:org:x", short, T0 + 11 * MINUTE);
+    expect((await store.consume("lead:ip:a", hour, T0 + 11 * MINUTE)).allowed).toBe(false);
+  });
+
   it("keeps keys apart, and forgets everything on reset", async () => {
     await store.consume("a", rule, T0);
     await store.consume("a", rule, T0);

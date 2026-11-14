@@ -54,27 +54,30 @@ const SWEEP_AT_KEYS = 5000;
 /** Sliding window in this process's memory: each key keeps the timestamps of
  *  its recent calls. See the header for what "in this process" costs. */
 export function createMemoryRateLimitStore(): RateLimitStore {
-  const hits = new Map<string, number[]>();
+  // Each key keeps its own window beside its timestamps: one store serves
+  // policies with different windows, and a sweep triggered by a 10-minute
+  // policy must not cut an hour-long policy's counts short.
+  const hits = new Map<string, { windowMs: number; times: number[] }>();
 
-  function sweep(now: number, windowMs: number) {
-    for (const [key, times] of hits) {
-      const live = times.filter((t) => now - t < windowMs);
+  function sweep(now: number) {
+    for (const [key, entry] of hits) {
+      const live = entry.times.filter((t) => now - t < entry.windowMs);
       if (live.length === 0) hits.delete(key);
-      else hits.set(key, live);
+      else entry.times = live;
     }
   }
 
   return {
     async consume(key, rule, now) {
-      const recent = (hits.get(key) ?? []).filter((t) => now - t < rule.windowMs);
+      const recent = (hits.get(key)?.times ?? []).filter((t) => now - t < rule.windowMs);
       if (recent.length >= rule.max) {
-        hits.set(key, recent);
+        hits.set(key, { windowMs: rule.windowMs, times: recent });
         // The oldest call in the window is the next to leave it.
         return { allowed: false, retryAfterMs: Math.max(1, recent[0] + rule.windowMs - now) };
       }
       recent.push(now);
-      hits.set(key, recent);
-      if (hits.size > SWEEP_AT_KEYS) sweep(now, rule.windowMs);
+      hits.set(key, { windowMs: rule.windowMs, times: recent });
+      if (hits.size > SWEEP_AT_KEYS) sweep(now);
       return { allowed: true, retryAfterMs: 0 };
     },
     async reset() {

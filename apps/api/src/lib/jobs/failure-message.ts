@@ -1,14 +1,4 @@
 import { AppError } from "../errors.js";
-import { HttpTimeoutError } from "../http.js";
-import { CredentialFormatError, ProviderHttpError } from "../../connectors/types.js";
-import { TfCloudError } from "../tf/workspace.js";
-import { TfcClientError } from "../tf/tfc-client.js";
-import { TfcConnectionError } from "../tf/tfc-connection.js";
-import { TfInputValidationError } from "../tf/render.js";
-import { StackFetchError } from "../stacks/team.js";
-import { AdoptInputError } from "../import/adopt.js";
-import { HclParseError } from "../import/hcl.js";
-import { DependencyGraphError, NotTemplatizableError, UnsafeHostError, WiringError } from "../tf/extensions.js";
 
 // ---------------------------------------------------------------------------
 // What a failed job says to the customer.
@@ -27,24 +17,30 @@ import { DependencyGraphError, NotTemplatizableError, UnsafeHostError, WiringErr
 // SHOWN_AS_WRITTEN, whose messages name the customer's own repository, stack
 // or workspace. Terraform Cloud's client error carries the response body, so
 // it is shown as its status only. Anything else gets the generic sentence.
+//
+// The domain errors are matched by class name rather than instanceof, so this
+// module imports none of them: the job state machine depends on it, and the
+// pipeline tests mock several of the modules those classes live in.
 // ---------------------------------------------------------------------------
 
 /** Error classes whose messages are written for the customer. */
-const SHOWN_AS_WRITTEN: (abstract new (...args: never[]) => Error)[] = [
-  AppError,
-  HttpTimeoutError,
-  ProviderHttpError,
-  TfCloudError,
-  TfcConnectionError,
-  TfInputValidationError,
-  StackFetchError,
-  AdoptInputError,
-  HclParseError,
-  DependencyGraphError,
-  NotTemplatizableError,
-  UnsafeHostError,
-  WiringError,
-];
+const SHOWN_AS_WRITTEN = new Set([
+  "HttpTimeoutError", // lib/http.ts
+  "ProviderHttpError", // connectors/types.ts
+  "TfCloudError", // lib/tf/workspace.ts
+  "TfcConnectionError", // lib/tf/tfc-connection.ts
+  "TfInputValidationError", // lib/tf/render.ts
+  "StackFetchError", // lib/stacks/team.ts
+  "AdoptInputError", // lib/import/adopt.ts
+  "HclParseError", // lib/import/hcl.ts
+  "DependencyGraphError", // lib/tf/extensions.ts
+  "DependencyCycleError",
+  "NotTemplatizableError",
+  "UnsafeHostError",
+  "WiringError",
+]);
+
+const className = (err: Error) => err.constructor?.name ?? err.name;
 
 function terraformCloudMessage(status: number): string {
   if (status === 401 || status === 403) {
@@ -58,10 +54,18 @@ function terraformCloudMessage(status: number): string {
 
 /** The sentence stored on a job that failed with `err` at `stage`. */
 export function jobFailureMessage(err: unknown, ctx: { jobId: string; stage: string }): string {
-  if (err instanceof TfcClientError) return terraformCloudMessage(err.statusCode);
-  if (err instanceof CredentialFormatError) {
-    return `The stored credential is not ${err.expected}. Replace it under Connections, then start the job again.`;
+  if (!(err instanceof Error)) return genericMessage(ctx);
+  const name = className(err);
+  // lib/tf/tfc-client.ts: its message quotes the response body.
+  if (name === "TfcClientError") return terraformCloudMessage(Number((err as { statusCode?: unknown }).statusCode));
+  // connectors/types.ts: `expected` is written for the customer, the message is not.
+  if (name === "CredentialFormatError") {
+    return `The stored credential is not ${String((err as { expected?: unknown }).expected)}. Replace it under Connections, then start the job again.`;
   }
-  if (err instanceof Error && SHOWN_AS_WRITTEN.some((cls) => err instanceof cls) && err.message) return err.message;
+  if ((err instanceof AppError || SHOWN_AS_WRITTEN.has(name)) && err.message) return err.message;
+  return genericMessage(ctx);
+}
+
+function genericMessage(ctx: { jobId: string; stage: string }): string {
   return `Something went wrong at the ${ctx.stage} step. Start the job again; if it fails the same way, contact support and quote job ${ctx.jobId}.`;
 }

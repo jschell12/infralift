@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { captureLogs } from "../lib/log.js";
 import { Prisma } from "@prisma/client";
 import type { ResourceInventoryItem } from "@infralift/shared";
 
@@ -481,9 +482,9 @@ describe("GET /connections/:id/unmanaged", () => {
 
   it("answers 409 with our sentence and the replace code on a 401, never the provider's text, and marks the connection invalid", async () => {
     cloudflareStatus = 401;
-    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const err = captureLogs();
     const out = await list();
-    err.mockRestore();
+    err.restore();
     expect(out.status).toBe(409);
     expect(out.body).toEqual({
       error: "infralift couldn't read this account: Cloudflare refused the saved credential. Replace it on Connections.",
@@ -494,10 +495,10 @@ describe("GET /connections/:id/unmanaged", () => {
   });
 
   it("answers 409 naming the kind of key expected when the stored credential is not one, without calling Google", async () => {
-    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const err = captureLogs();
     const out = await list({}, { id: "fb-conn" });
-    const logged = err.mock.calls.map((c) => c.join(" ")).join("\n");
-    err.mockRestore();
+    const logged = err.raw.join("\n");
+    err.restore();
     expect(out.status).toBe(409);
     expect(out.body).toEqual({
       error: "infralift couldn't read this account: the saved credential isn't a service account key. Replace it on Connections.",
@@ -518,9 +519,9 @@ describe("GET /connections/:id/unmanaged", () => {
 
   it("does not mark the connection on a 5xx, and caches no failure", async () => {
     cloudflareStatus = 503;
-    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const err = captureLogs();
     expect((await list()).status).toBe(502);
-    err.mockRestore();
+    err.restore();
     expect(h.connUpdateMany).not.toHaveBeenCalled();
     cloudflareStatus = 200;
     expect((await list()).status).toBe(200);

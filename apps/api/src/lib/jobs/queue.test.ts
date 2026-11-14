@@ -88,7 +88,7 @@ describe("job queue", () => {
     h.rows.push(row({ id: "j1" }));
     h.runJob.mockRejectedValueOnce(new Error("job row vanished"));
     await expect(claimAndRun("j1")).rejects.toThrow("job row vanished");
-    expect(h.rows[0]).toMatchObject({ status: "errored", statusMessage: "could not start: job row vanished" });
+    expect(h.rows[0]).toMatchObject({ status: "errored", statusMessage: expect.stringMatching(/^could not start: Something went wrong at the queued step\..*quote job j1\.$/) });
   });
 
   it("recovers jobs from before the queue existed (the migration claims them as pre-0017)", async () => {

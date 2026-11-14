@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { captureLogs } from "../log.js";
 import { INITIAL, IllegalTransitionError, JobRun, transition, type JobState } from "./state.js";
 
 describe("transition", () => {
@@ -79,10 +80,10 @@ describe("JobRun", () => {
     const run = new JobRun("j1", async () => {
       throw new Error("db down");
     });
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = captureLogs();
     await expect(run.failSafely(new Error("x"))).resolves.toBeUndefined();
-    expect(log).toHaveBeenCalled();
-    log.mockRestore();
+    expect(log.lines.some((l) => l.level === "error")).toBe(true);
+    log.restore();
   });
 
   it("failSafely records an error once and never throws after the end", async () => {
@@ -90,9 +91,9 @@ describe("JobRun", () => {
     const run = new JobRun("j1", write);
     await run.start("render");
     await run.succeed("ok");
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = captureLogs();
     await expect(run.failSafely(new Error("late"))).resolves.toBeUndefined();
     expect(write).toHaveBeenCalledTimes(2);
-    log.mockRestore();
+    log.restore();
   });
 });

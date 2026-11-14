@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { captureLogs } from "../lib/log.js";
 import { Prisma } from "@prisma/client";
 
 // The import routes against a fake GitHub repository, with Prisma and the job
@@ -290,12 +291,12 @@ describe("GET /tf/imports/:projectId/check", () => {
     it("still answers with the check when the ledger write fails", async () => {
       h.projectFindFirst.mockResolvedValue(adoption);
       h.ledgerUpdateMany.mockRejectedValue(new Error("db down"));
-      const err = vi.spyOn(console, "error").mockImplementation(() => {});
+      const err = captureLogs();
       fakeChecks(passed);
       const out = await call("/:projectId/check", {}, "get", { projectId: "p1" });
       expect(out.body).toMatchObject({ state: "passed" });
-      expect(err).toHaveBeenCalled();
-      err.mockRestore();
+      expect(err.lines.some((l) => l.level === "error")).toBe(true);
+      err.restore();
     });
   });
 

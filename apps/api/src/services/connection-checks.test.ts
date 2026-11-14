@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { captureLogs } from "../lib/log.js";
 
 // The automatic checks' scheduling: which connections a sweep picks, how many
 // provider calls run at once, and what an on-demand request claims. The check
@@ -146,10 +147,10 @@ describe("sweepConnectionChecks", () => {
       if (c.id === "a") throw new Error("AWS is not enabled on this server");
       return c;
     });
-    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const err = captureLogs();
     expect(await checks.sweepConnectionChecks(NOW)).toBe(1);
-    expect(err).toHaveBeenCalledWith("connection check a failed: AWS is not enabled on this server");
-    err.mockRestore();
+    expect(err.lines).toContainEqual(expect.objectContaining({ msg: "connection check failed", connectionId: "a", err: { message: "AWS is not enabled on this server" } }));
+    err.restore();
   });
 
   it("does nothing when every connection was checked in the last day", async () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { captureLogs } from "../lib/log.js";
 
 // The drift sweep against a stubbed Prisma and a stubbed fetch, through the
 // real GitHub client, so the GitHub bodies are parsed as in production. Their
@@ -263,9 +264,9 @@ describe("dueForDrift", () => {
     projectFindMany.mockResolvedValue([{ ...PROJECT }, { ...PROJECT, id: "proj_2" }]);
     connFindFirst.mockRejectedValueOnce(new Error("db down")).mockResolvedValue({ ...CONN });
     vi.stubGlobal("fetch", github({ total_count: 0, check_runs: [] }, []));
-    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const err = captureLogs();
     expect(await svc.sweepDrift(NOW)).toBe(1);
-    expect(err).toHaveBeenCalled();
-    err.mockRestore();
+    expect(err.lines.some((l) => l.level === "error")).toBe(true);
+    err.restore();
   });
 });
