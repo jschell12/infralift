@@ -501,63 +501,41 @@ describe("railway", () => {
     expect(await railwayConnector.verify("bad")).toBe(false);
   });
 
-  it("assess inventories projects, services, plugins, environments", async () => {
-    // Railway uses two GraphQL calls: projects listing, then me.projects for usage
-    let callCount = 0;
-    fetchMock.mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) {
-        return ok({
-          data: {
-            projects: {
-              edges: [
-                {
-                  node: {
-                    id: "proj1",
-                    name: "my-project",
-                    description: "test project",
-                    services: {
-                      edges: [{ node: { id: "svc1", name: "web", icon: null } }],
-                    },
-                    plugins: {
-                      edges: [
-                        { node: { id: "pg1", name: "postgresql", friendlyName: "PostgreSQL" } },
-                      ],
-                    },
-                    environments: {
-                      edges: [{ node: { id: "env1", name: "production" } }],
-                    },
-                  },
-                },
-              ],
-            },
-          },
-        });
-      }
-      // Second call: me.projects for usage/plan
-      return ok({
+  // #153 finding 4: a second "plan" query selected Project.subscription,
+  // which Railway's schema does not have, so it always failed and the cost
+  // read $0; and `plugins` is deprecated ("Plugins have been removed").
+  it("assess makes one query, without plugins or subscription, and reports the cost as unknown", async () => {
+    fetchMock.mockImplementation(() =>
+      ok({
         data: {
-          me: {
-            id: "u1",
-            projects: {
-              edges: [
-                { node: { id: "proj1", name: "my-project", subscription: { plan: "hobby" } } },
-              ],
-            },
+          projects: {
+            edges: [
+              {
+                node: {
+                  id: "proj1",
+                  name: "my-project",
+                  description: "test project",
+                  services: { edges: [{ node: { id: "svc1", name: "web", icon: null } }] },
+                  environments: { edges: [{ node: { id: "env1", name: "production" } }] },
+                },
+              },
+            ],
           },
         },
-      });
-    });
+      })
+    );
 
     const result = await railwayConnector.assess("tok");
-    const types = result.inventory.map((i) => i.type);
-    expect(types).toContain("railway:project");
-    expect(types).toContain("railway:service");
-    expect(types).toContain("railway:plugin");
-    expect(types).toContain("railway:environment");
-    expect(result.findings.some((f) => f.title.includes("Railway Postgres"))).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const { query } = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(query).not.toMatch(/plugins|subscription/);
+    expect(result.inventory.map((i) => `${i.type} ${i.externalId}`)).toEqual([
+      "railway:project proj1",
+      "railway:service svc1",
+      "railway:environment env1",
+    ]);
     expect(result.findings.some((f) => f.category === "cost")).toBe(true);
-    expect(result.estimatedMonthlyCostCents).toBe(500);
+    expect(result.estimatedMonthlyCostCents).toBeNull();
   });
 });
 

@@ -104,9 +104,21 @@ describe("DigitalOcean (Prism, digitalocean/openapi)", () => {
     expect(status, JSON.stringify(body)).toBe(409);
     expect(body.error).toBe(`You already have a DigitalOcean connection called "e2e digitalocean ${RUN}". Pick another name, or replace that connection's credential instead.`);
   });
-  it("finding: no Spaces, because GET /v2/spaces is not in DigitalOcean's API", async () => {
+  // #153 finding 2: the connector called GET /v2/spaces, which is not in
+  // DigitalOcean's API, and left Spaces out without a word. A DO connection
+  // holds an API token, not Spaces keys, so it says Spaces were not listed.
+  it("says Spaces were not inventoried, and why, beside the unmanaged list", async () => {
     expect([...s.rows!.keys()].some((k) => k.startsWith("digitalocean:space"))).toBe(false);
+    expect(s.body.notInventoried).toEqual([expect.objectContaining({ type: "digitalocean:space", label: "Spaces buckets" })]);
+    expect(s.body.notInventoried[0].reason).toMatch(/Spaces access key/);
     expect((await fetch(`${STACK.mocks.digitalocean}/v2/spaces`, { headers: { authorization: "Bearer h" } })).status).toBe(404);
+  });
+  it("says it in the assessment's findings too", async () => {
+    const run = await s.call("POST", "/assessments/run", { connectionId: s.id });
+    expect(run.status, JSON.stringify(run.body)).toBe(201);
+    const { status, body } = await s.call("GET", `/assessments/${run.body.id}`);
+    expect(status, JSON.stringify(body)).toBe(200);
+    expect(body.findings).toContainEqual(expect.objectContaining({ category: "inventory", title: "Spaces not inventoried" }));
   });
 });
 
@@ -187,15 +199,17 @@ describe("Railway (provider fake GraphQL, railwayapp/cli schema.json)", () => {
       [`railway:project ${RAILWAY_SEED.project.id}`, `railway:service ${RAILWAY_SEED.service.id}`, `railway:environment ${RAILWAY_SEED.environment.id}`].sort()
     );
   });
-  it("finding: the plan query is refused, because Project has no `subscription` field", async () => {
-    // The fake holds only the subset the valid queries use, so its message
-    // names the first missing field it meets. The vendor's own refusal
-    // ('Cannot query field "subscription" on type "Project"') is checked
-    // against the full schema by extract.ts (sources.ts rejectedQueries).
-    const railway = (await fakeViolations()).filter((v) => v.endpoint === "/railway/graphql");
-    expect(railway).toHaveLength(1);
-    expect(railway[0].query).toContain("subscription");
-    expect(railway[0].errors.join(" ")).toMatch(/^Cannot query field/);
+  // #153 finding 4: the plan query selected Project.subscription, which the
+  // schema does not have, and this test pinned the refusal. The query is
+  // gone, so the cost is unknown rather than $0.
+  it("sent only GraphQL the schema accepts", async () => {
+    expect((await fakeViolations()).filter((v) => v.endpoint === "/railway/graphql")).toEqual([]);
+  });
+  it("reports the cost as unknown in the assessment, never $0", async () => {
+    const { status, body } = await s.call("POST", "/assessments/run", { connectionId: s.id });
+    expect(status, JSON.stringify(body)).toBe(201);
+    expect(body).toMatchObject({ status: "completed", estimatedMonthlyCostCents: null });
+    expect(body.resourceCount).toBe(3);
   });
 });
 

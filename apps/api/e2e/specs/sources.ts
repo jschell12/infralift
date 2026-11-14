@@ -189,38 +189,11 @@ export const RAILWAY_QUERIES = [
                   }
                 }
               }
-              plugins {
-                edges {
-                  node {
-                    id
-                    name
-                    friendlyName
-                  }
-                }
-              }
             }
           }
         }
       }`,
 ];
-
-/** connectors/railway.ts, the plan query for the cost estimate. */
-export const RAILWAY_PLAN_QUERY = `{
-          me {
-            id
-            projects {
-              edges {
-                node {
-                  id
-                  name
-                  subscription {
-                    plan
-                  }
-                }
-              }
-            }
-          }
-        }`;
 
 // -- the manifest -------------------------------------------------------------------
 
@@ -354,13 +327,9 @@ export const SOURCES: SpecSource[] = [
     // Railway's CLI commits the introspection result of backboard.railway.com/graphql/v2.
     pin: { repo: "railwayapp/cli", commit: "7da7f0d4dd6061656ed0b001c193945887ee645a", path: "src/gql/schema.json" },
     schema: "introspection",
+    // The plan query that selected Project.subscription (not in the schema)
+    // and the deprecated `plugins` were removed (#153 finding 4).
     queries: RAILWAY_QUERIES,
-    rejectedQueries: [
-      {
-        query: RAILWAY_PLAN_QUERY,
-        note: "connectors/railway.ts asks for Project.subscription { plan }, which the schema does not have (it has subscriptionType), so the plan query always fails and the cost estimate is always $0",
-      },
-    ],
   },
   {
     name: "azure",

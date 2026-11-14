@@ -49,9 +49,10 @@ export function createRailwayConnector(endpoints: Pick<Endpoints, "railwayApi"> 
     async assess(token): Promise<ConnectorAssessment> {
       const inventory: ResourceInventoryItem[] = [];
       const findings: ConnectorAssessment["findings"] = [];
-      let totalCostCents = 0;
 
-      // Fetch projects with services and environments
+      // Projects with their services and environments. No `plugins`: Railway's
+      // schema marks it deprecated ("Plugins have been removed"); databases
+      // are services now, so they are listed with the rest.
       const data = await gql(
         api,
         token,
@@ -76,15 +77,6 @@ export function createRailwayConnector(endpoints: Pick<Endpoints, "railwayApi"> 
                     id
                     name
                     icon
-                  }
-                }
-              }
-              plugins {
-                edges {
-                  node {
-                    id
-                    name
-                    friendlyName
                   }
                 }
               }
@@ -116,31 +108,6 @@ export function createRailwayConnector(endpoints: Pick<Endpoints, "railwayApi"> 
           });
         }
 
-        // Plugins (databases: Postgres, Redis, MongoDB, MySQL)
-        for (const { node: plugin } of project.plugins?.edges ?? []) {
-          const pluginName = String(
-            plugin.friendlyName ?? plugin.name ?? ""
-          ).toLowerCase();
-          inventory.push({
-            provider: "railway",
-            type: "railway:plugin",
-            externalId: plugin.id,
-            name: `${project.name}/${plugin.friendlyName ?? plugin.name}`,
-            metadata: { pluginType: plugin.name ?? null },
-          });
-
-          if (pluginName.includes("postgres")) {
-            findings.push({
-              category: "recommendation",
-              severity: "info",
-              title: `${project.name}: Railway Postgres plugin`,
-              detail:
-                "Railway Postgres migrates via pg_dump/pg_restore to Neon, a VPS Postgres, or any managed provider. Connection strings move to Terraform-managed env vars.",
-              resourceRef: plugin.id,
-            });
-          }
-        }
-
         // Environments
         for (const { node: env } of project.environments?.edges ?? []) {
           inventory.push({
@@ -150,40 +117,6 @@ export function createRailwayConnector(endpoints: Pick<Endpoints, "railwayApi"> 
             name: `${project.name}/${env.name}`,
           });
         }
-      }
-
-      // Estimate cost from usage (Railway uses per-second billing)
-      try {
-        const usageData = await gql(
-          api,
-          token,
-          `{
-          me {
-            id
-            projects {
-              edges {
-                node {
-                  id
-                  name
-                  subscription {
-                    plan
-                  }
-                }
-              }
-            }
-          }
-        }`
-        );
-        const userProjects = usageData?.me?.projects?.edges ?? [];
-        for (const { node: p } of userProjects) {
-          const plan = String(
-            p.subscription?.plan ?? ""
-          ).toLowerCase();
-          if (plan === "pro") totalCostCents += 2000; // $20/mo base
-          else if (plan === "hobby") totalCostCents += 500; // $5/mo base
-        }
-      } catch {
-        // Usage query may fail with limited scopes; skip.
       }
 
       if (projects.length > 0) {
@@ -206,7 +139,12 @@ export function createRailwayConnector(endpoints: Pick<Endpoints, "railwayApi"> 
       return {
         inventory,
         findings,
-        estimatedMonthlyCostCents: totalCostCents || null,
+        // Unknown, never $0. The plan query this used to make selected
+        // Project.subscription, which Railway's schema does not have (#153
+        // finding 4), so it always failed and the estimate read $0. Usage
+        // (estimatedUsage) comes back as resource measurements, not dollars,
+        // and turning it into a bill would need Railway's unit prices.
+        estimatedMonthlyCostCents: null,
       };
     },
   };
