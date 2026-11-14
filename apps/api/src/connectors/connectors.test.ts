@@ -6,7 +6,7 @@ import { firebaseConnector } from "./firebase.js";
 import { githubConnector, parseGithubExpiration } from "./github.js";
 import { readFileSync } from "node:fs";
 import { netlifyConnector, NETLIFY_FORMS_CONCURRENCY } from "./netlify.js";
-import { renderConnector } from "./render.js";
+import { PLAN_COST_CENTS, renderConnector } from "./render.js";
 import { railwayConnector } from "./railway.js";
 import { flyioConnector } from "./flyio.js";
 import { digitaloceanConnector, DO_SPACES_NOT_INVENTORIED } from "./digitalocean.js";
@@ -18,6 +18,7 @@ const cfVerify = JSON.parse(
   readFileSync(new URL("./__fixtures__/cloudflare-token-verify.json", import.meta.url), "utf8")
 );
 const cfApi = JSON.parse(readFileSync(new URL("./__fixtures__/cloudflare-api.json", import.meta.url), "utf8"));
+const renderApi = JSON.parse(readFileSync(new URL("./__fixtures__/render-api.json", import.meta.url), "utf8"));
 
 // ---------------------------------------------------------------------------
 // Shared fetch mock helpers
@@ -434,37 +435,54 @@ describe("render", () => {
     expect(await renderConnector.verify("tok")).toBe(true);
   });
 
-  it("assess inventories services, postgres, redis, env groups with cost", async () => {
+  // __fixtures__/render-api.json follows Render's description (checked by
+  // e2e/specs/fixtures-match-specs.test.ts). The inline fixtures it replaced
+  // put plan and region on the service, where the API never sends them
+  // (#153 finding 5), so these tests priced services the real API could not.
+  it("assess inventories services, postgres, redis and env groups, priced and placed from serviceDetails", async () => {
     mockRoute({
-      "/services?": [
-        { service: { id: "svc1", name: "api", type: "web_service", plan: "starter", region: "oregon" } },
-      ],
-      "/postgres?": [
-        { postgres: { id: "db1", name: "main-db", plan: "starter", version: "16", region: "oregon" } },
-      ],
-      "/redis?": [
-        { redis: { id: "r1", name: "cache", plan: "free", region: "oregon" } },
-      ],
-      "/env-groups?": [
-        { envGroup: { id: "eg1", name: "shared", envVars: [{ key: "A" }, { key: "B" }] } },
-      ],
+      "/services?": renderApi["/services"],
+      "/postgres?": renderApi["/postgres"],
+      "/redis?": renderApi["/redis"],
+      "/env-groups?": renderApi["/env-groups"],
     });
 
     const result = await renderConnector.assess("tok");
-    const types = result.inventory.map((i) => i.type);
-    expect(types).toContain("render:web_service");
-    expect(types).toContain("render:postgres");
-    expect(types).toContain("render:redis");
-    expect(types).toContain("render:env_group");
-    expect(result.estimatedMonthlyCostCents).toBe(700);
+    const byId = new Map(result.inventory.map((i) => [i.externalId, i]));
+    expect([...byId.values()].map((i) => i.type).sort()).toEqual(
+      ["render:background_worker", "render:env_group", "render:postgres", "render:redis", "render:static_site", "render:web_service"]
+    );
+    expect(byId.get("srv-api0000000000000001")).toMatchObject({
+      region: "frankfurt",
+      monthlyCostCents: PLAN_COST_CENTS.pro_plus,
+      metadata: { plan: "pro_plus", runtime: "node", repo: "https://github.com/acme/api", autoDeploy: "yes" },
+    });
+    expect(byId.get("srv-wrk0000000000000002")).toMatchObject({ region: "oregon", monthlyCostCents: 700, metadata: { plan: "starter", runtime: "docker" } });
+    // A static site's details carry no plan or region: unpriced, not guessed.
+    expect(byId.get("srv-web0000000000000003")).toMatchObject({ region: null, monthlyCostCents: undefined, metadata: { plan: null, runtime: null } });
+    expect(byId.get("dpg-main000000000000001")).toMatchObject({ name: "main-db", region: "oregon", metadata: { plan: "basic_1gb" } });
+    expect(byId.get("evg-shared0000000000001")).toMatchObject({ name: "shared" });
+    expect(result.estimatedMonthlyCostCents).toBe(17500 + 700);
     expect(result.findings.some((f) => f.title.includes("Render Postgres"))).toBe(true);
+  });
+
+  it("prices underscore plan names, and ignores a plan the API puts nowhere but serviceDetails", async () => {
+    mockRoute({
+      "/services?": [
+        { cursor: "c1", service: { id: "a", name: "a", type: "web_service", serviceDetails: { plan: "starter_plus", region: "ohio", runtime: "go" } } },
+        { cursor: "c2", service: { id: "b", name: "b", type: "web_service", plan: "pro", region: "virginia", serviceDetails: {} } },
+      ],
+    });
+    const result = await renderConnector.assess("tok");
+    expect(result.inventory.find((i) => i.externalId === "a")).toMatchObject({ region: "ohio", monthlyCostCents: 1500 });
+    expect(result.inventory.find((i) => i.externalId === "b")).toMatchObject({ region: null, monthlyCostCents: undefined });
   });
 
   it("assess prices the services and makes no savings claim of its own", async () => {
     mockRoute({
       "/services?": [
-        { service: { id: "svc1", name: "api", type: "web_service", plan: "standard" } },
-        { service: { id: "svc2", name: "worker", type: "worker", plan: "standard" } },
+        { cursor: "c1", service: { id: "svc1", name: "api", type: "web_service", serviceDetails: { plan: "standard", region: "oregon", runtime: "node" } } },
+        { cursor: "c2", service: { id: "svc2", name: "worker", type: "background_worker", serviceDetails: { plan: "standard", region: "oregon", runtime: "node" } } },
       ],
       "/postgres?": [],
       "/redis?": [],

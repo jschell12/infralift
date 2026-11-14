@@ -5,7 +5,10 @@ import { defineConfig } from "vitest/config";
 // a time, because the files share one API, one fake and one database.
 export default defineConfig({
   test: {
-    include: ["e2e/**/*.e2e.test.ts"],
+    // fixtures-match-specs.test.ts runs here too, because Render's subset
+    // exists only once setup has written it (it is not committed).
+    include: ["e2e/**/*.e2e.test.ts", "e2e/specs/fixtures-match-specs.test.ts"],
+    env: { E2E_REQUIRE_RENDER_SPEC: "1" },
     globalSetup: ["e2e/global-setup.ts"],
     fileParallelism: false,
     testTimeout: 600_000,

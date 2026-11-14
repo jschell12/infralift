@@ -19,7 +19,7 @@
 // case is listed in KNOWN with the reason.
 // ---------------------------------------------------------------------------
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { fillRequired, responseSchema, SpecValidator, undeclaredFields, type OpenApiDocument } from "./openapi.js";
 
@@ -65,6 +65,21 @@ const CASES: Case[] = [
   { name: "tfc workspaces-page.json", spec: "tfc", path: "/organizations/{organization_name}/workspaces", body: tfc("workspaces-page") },
 ];
 
+// Render's description has no licence, so its subset is not committed: it is
+// written from the pin at setup (scripts/e2e.sh, and CI's e2e job, via
+// `e2e:specs`). The ordinary `pnpm test` skips these cases when it is absent;
+// the e2e suite runs this file too (vitest.e2e.config.ts) with
+// E2E_REQUIRE_RENDER_SPEC=1, where an absent subset fails instead of skipping.
+const RENDER_SPEC_PRESENT = existsSync(new URL("./render.openapi.json", import.meta.url));
+const RENDER_REQUIRED = process.env.E2E_REQUIRE_RENDER_SPEC === "1";
+const renderApi = fixture("connectors/__fixtures__/render-api.json");
+const RENDER_CASES: Case[] = ["/services", "/postgres", "/redis", "/env-groups"].map((path) => ({
+  name: `render-api.json ${path}`,
+  spec: "render",
+  path,
+  body: renderApi[path],
+}));
+
 /** Fixtures that differ from the description for a reason the description
  *  is wrong about, by case name: the fields allowed and why. Empty is the
  *  goal; each entry is a finding against the vendor, not against us. */
@@ -94,15 +109,24 @@ function load(name: string) {
   return entry;
 }
 
+function checkCase({ name, spec: specName, path, body }: Case): void {
+  const { doc, validator } = load(specName);
+  const schema = responseSchema(doc, { method: "get", path }, 200);
+  expect(schema, `${path} has no JSON 200 response in ${specName}`).toBeTruthy();
+  expect(validator.check(schema!, fillRequired(doc, schema!, body)), "schema").toBeNull();
+  const allowed = new Set(KNOWN[name]?.fields ?? []);
+  expect(undeclaredFields(doc, schema!, body).filter((f) => !allowed.has(f)), "fields the description does not declare").toEqual([]);
+}
+
 describe("recorded fixtures follow the vendors' descriptions", () => {
-  it.each(CASES)("$name matches $spec GET $path", ({ name, spec: specName, path, body }) => {
-    const { doc, validator } = load(specName);
-    const schema = responseSchema(doc, { method: "get", path }, 200);
-    expect(schema, `${path} has no JSON 200 response in ${specName}`).toBeTruthy();
-    expect(validator.check(schema!, fillRequired(doc, schema!, body)), "schema").toBeNull();
-    const allowed = new Set(KNOWN[name]?.fields ?? []);
-    expect(undeclaredFields(doc, schema!, body).filter((f) => !allowed.has(f)), "fields the description does not declare").toEqual([]);
+  it.each(CASES)("$name matches $spec GET $path", checkCase);
+});
+
+describe.skipIf(!RENDER_SPEC_PRESENT && !RENDER_REQUIRED)("Render fixtures follow Render's description (render.openapi.json, written at setup)", () => {
+  it("is checked against a subset that exists", () => {
+    expect(RENDER_SPEC_PRESENT, "render.openapi.json is missing: run pnpm --filter @infralift/api e2e:specs render").toBe(true);
   });
+  it.each(RENDER_CASES)("$name matches $spec GET $path", checkCase);
 });
 
 // vercel-api.json's projects were recorded live at GET /v9/projects

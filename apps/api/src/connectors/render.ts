@@ -15,16 +15,17 @@ async function rFetch(api: string, token: string, path: string): Promise<any> {
   return res.json();
 }
 
-// Rough monthly cost for Render service plans, USD cents.
-const PLAN_COST_CENTS: Record<string, number> = {
+// Rough monthly cost for Render service plans, USD cents, keyed by the plan
+// enum Render's API returns (`starter_plus`, `pro_plus`: underscores).
+export const PLAN_COST_CENTS: Record<string, number> = {
   free: 0,
   starter: 700,
-  "starter plus": 1500,
+  starter_plus: 1500,
   standard: 2500,
   pro: 8500,
-  "pro plus": 17500,
-  "pro max": 35000,
-  "pro ultra": 70000,
+  pro_plus: 17500,
+  pro_max: 35000,
+  pro_ultra: 70000,
 };
 
 /** The Render connector, calling endpoints.renderApi (lib/endpoints.ts). */
@@ -50,8 +51,13 @@ export function createRenderConnector(endpoints: Pick<Endpoints, "renderApi"> = 
 
       for (const entry of servicesRes) {
         const s = entry.service ?? entry;
-        const plan = String(s.servicePlan?.name ?? s.plan ?? "").toLowerCase();
-        const cost = PLAN_COST_CENTS[plan] ?? 0;
+        // Plan, region and runtime are in serviceDetails, not on the service
+        // (#153 finding 5: reading them from the service found nothing, so
+        // every service priced at $0 with no region). A static site's details
+        // have no plan or region.
+        const details = s.serviceDetails ?? {};
+        const plan = typeof details.plan === "string" ? details.plan : null;
+        const cost = plan ? (PLAN_COST_CENTS[plan] ?? 0) : 0;
         totalCostCents += cost;
 
         inventory.push({
@@ -59,12 +65,12 @@ export function createRenderConnector(endpoints: Pick<Endpoints, "renderApi"> = 
           type: `render:${s.type ?? "service"}`,
           externalId: s.id,
           name: s.name,
-          region: s.region ?? null,
+          region: details.region ?? null,
           monthlyCostCents: cost || undefined,
           metadata: {
             type: s.type ?? null,
-            plan: s.plan ?? s.servicePlan?.name ?? null,
-            runtime: s.env ?? s.runtime ?? null,
+            plan,
+            runtime: details.runtime ?? null,
             repo: s.repo ?? null,
             autoDeploy: s.autoDeploy ?? null,
           },

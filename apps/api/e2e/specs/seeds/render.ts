@@ -17,7 +17,16 @@ export const RENDER_EXAMPLES: Record<string, unknown> = {
   "/services": [
     {
       cursor: "c1",
-      service: { id: RENDER_SEED.service.id, name: RENDER_SEED.service.name, type: "web_service", ownerId: RENDER_SEED.owner.id, repo: "https://github.com/infralift-e2e/web", autoDeploy: "yes" },
+      service: {
+        id: RENDER_SEED.service.id,
+        name: RENDER_SEED.service.name,
+        type: "web_service",
+        ownerId: RENDER_SEED.owner.id,
+        repo: "https://github.com/infralift-e2e/web",
+        autoDeploy: "yes",
+        // Plan, region and runtime live here, not on the service.
+        serviceDetails: { plan: "pro_plus", region: "frankfurt", runtime: "node" },
+      },
     },
   ],
   "/postgres": [

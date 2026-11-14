@@ -135,6 +135,9 @@ describe("Render (Prism, api-docs.render.com archived)", () => {
       ].sort()
     );
     expect(s.rows!.get(`render:postgres ${RENDER_SEED.postgres.id}`)).toMatchObject({ name: RENDER_SEED.postgres.name, region: "oregon" });
+    // #153 finding 5: region was read off the service, where Render never
+    // sends it. It is in serviceDetails.
+    expect(s.rows!.get(`render:web_service ${RENDER_SEED.service.id}`)).toMatchObject({ name: RENDER_SEED.service.name, region: "frankfurt" });
   });
 });
 
