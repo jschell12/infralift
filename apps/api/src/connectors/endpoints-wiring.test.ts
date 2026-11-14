@@ -17,7 +17,7 @@ const OVERRIDE_ENV = Object.fromEntries(
     .filter(([name]) => name !== "aws")
     .map(([name, spec]) => [spec.env, `http://${name.toLowerCase()}.override.test/base`])
 );
-const overridden: Endpoints = resolveEndpoints(OVERRIDE_ENV).endpoints;
+const overridden: Endpoints = resolveEndpoints({ ...OVERRIDE_ENV, NODE_ENV: "test" }).endpoints;
 const overrideOrigins = Object.values(OVERRIDE_ENV);
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });

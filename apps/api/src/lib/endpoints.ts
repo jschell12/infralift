@@ -9,9 +9,11 @@
 // and mocks: moto for AWS, a GitHub fake, Prism serving Cloudflare's OpenAPI
 // description. See README "Testing without cloud accounts".
 //
-// An override sends customer credentials to whatever host it names, so a
-// production process refuses to start with one set (EndpointOverrideRefused),
-// with no bypass. The e2e suite runs the API from source with
+// An override sends customer credentials to whatever host it names, so it is
+// accepted only when NODE_ENV is exactly "development" or "test", and any
+// other value, unset included, refuses to start (EndpointOverrideRefused),
+// with no bypass. Deny by default: a deploy that sets NODE_ENV to "prod", or
+// forgets it, fails closed. The e2e suite runs the API from source with
 // NODE_ENV=development; an e2e run against the built image (which sets
 // NODE_ENV=production) would need a deliberate, tested way in, not a flag.
 //
@@ -66,11 +68,15 @@ export const DEFAULT_ENDPOINTS: Endpoints = Object.freeze(
   Object.fromEntries(Object.entries(ENDPOINT_SPECS).map(([name, spec]) => [name, spec.default]))
 ) as Endpoints;
 
-/** A production process was started with an endpoint override. */
+/** NODE_ENV values under which an endpoint override is accepted. */
+export const OVERRIDE_NODE_ENVS: readonly string[] = ["development", "test"];
+
+/** A process outside development and test was started with an endpoint override. */
 export class EndpointOverrideRefused extends Error {
-  constructor(readonly variables: string[]) {
+  constructor(readonly variables: string[], nodeEnv: string | undefined) {
     super(
-      `refusing to start: ${variables.join(", ")} ${variables.length === 1 ? "is" : "are"} set while NODE_ENV=production. ` +
+      `refusing to start: ${variables.join(", ")} ${variables.length === 1 ? "is" : "are"} set while NODE_ENV is ` +
+        `${nodeEnv === undefined ? "unset" : JSON.stringify(nodeEnv)}; overrides are accepted only when it is "development" or "test". ` +
         `Endpoint overrides send customer credentials to another host; they are for local and CI e2e runs only. ` +
         `Unset them.`
     );
@@ -105,8 +111,8 @@ export interface ResolvedEndpoints {
 
 /** Endpoints from an environment. Pure: takes the env, reads nothing else.
  *  Empty variables count as unset. Throws InvalidEndpoint for a value that is
- *  not an http(s) URL, and EndpointOverrideRefused for any override in
- *  production. */
+ *  not an http(s) URL, and EndpointOverrideRefused for any override unless
+ *  NODE_ENV is exactly "development" or "test". */
 export function resolveEndpoints(env: Record<string, string | undefined>): ResolvedEndpoints {
   const resolved: Record<string, string | null> = {};
   const overridden: string[] = [];
@@ -119,8 +125,8 @@ export function resolveEndpoints(env: Record<string, string | undefined>): Resol
       resolved[name] = spec.default;
     }
   }
-  if (overridden.length && env.NODE_ENV === "production") {
-    throw new EndpointOverrideRefused(overridden);
+  if (overridden.length && !OVERRIDE_NODE_ENVS.includes(env.NODE_ENV ?? "")) {
+    throw new EndpointOverrideRefused(overridden, env.NODE_ENV);
   }
   return { endpoints: Object.freeze(resolved) as Endpoints, overridden };
 }

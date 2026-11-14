@@ -43,7 +43,7 @@ make e2e                              # end to end, no cloud accounts (Docker)
 
 `make e2e` (or `pnpm e2e`) runs the adopt path end to end on your machine with no cloud account, no git host and no spend. It needs Docker. It brings up `docker-compose.e2e.yml`, runs `apps/api/e2e`, and tears the stack down; a run takes about a minute once the images and providers are cached. `E2E_KEEP=1 make e2e` leaves the stack up.
 
-The API runs from source with every provider endpoint pointed at the stack through `INFRALIFT_ENDPOINT_*` variables (`apps/api/src/lib/endpoints.ts`, one per API; the defaults are the real endpoints). A server with `NODE_ENV=production` refuses to start with any of them set, because an override sends customer credentials to another host. The suite runs the API with `NODE_ENV=development`.
+The API runs from source with every provider endpoint pointed at the stack through `INFRALIFT_ENDPOINT_*` variables (`apps/api/src/lib/endpoints.ts`, one per API; the defaults are the real endpoints). A server refuses to start with any of them set unless `NODE_ENV` is exactly `development` or `test` (unset or any other value refuses), because an override sends customer credentials to another host. The suite runs the API with `NODE_ENV=development`.
 
 What is real and what stands in for it:
 

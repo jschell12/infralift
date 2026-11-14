@@ -20,6 +20,7 @@ describe("resolveEndpoints", () => {
 
   it("takes an override from its variable and drops a trailing slash", () => {
     const { endpoints, overridden } = resolveEndpoints({
+      NODE_ENV: "test",
       INFRALIFT_ENDPOINT_GITHUB_API: "http://127.0.0.1:4010/",
       INFRALIFT_ENDPOINT_AWS: "http://localhost:5000",
     });
@@ -64,11 +65,32 @@ describe("resolveEndpoints", () => {
     }
   });
 
-  it("allows overrides outside production", () => {
-    for (const NODE_ENV of [undefined, "development", "test"]) {
+  it("allows overrides only when NODE_ENV is exactly development or test", () => {
+    for (const NODE_ENV of ["development", "test"]) {
       expect(resolveEndpoints({ NODE_ENV, INFRALIFT_ENDPOINT_VERCEL_API: "http://localhost:1" }).endpoints.vercelApi).toBe(
         "http://localhost:1"
       );
+    }
+  });
+
+  it("denies by default: unset, empty or any other NODE_ENV refuses an override", () => {
+    for (const NODE_ENV of [undefined, "", "prod", "staging", "Development", "TEST", " development", "development "]) {
+      expect(() => resolveEndpoints({ NODE_ENV, INFRALIFT_ENDPOINT_VERCEL_API: "http://localhost:1" }), String(NODE_ENV)).toThrow(
+        EndpointOverrideRefused
+      );
+    }
+  });
+
+  it("says which NODE_ENV it saw and which it accepts", () => {
+    expect(() => resolveEndpoints({ NODE_ENV: "prod", INFRALIFT_ENDPOINT_GITHUB_API: "http://localhost:1" })).toThrow(
+      /NODE_ENV is "prod"; overrides are accepted only when it is "development" or "test"/
+    );
+    expect(() => resolveEndpoints({ INFRALIFT_ENDPOINT_GITHUB_API: "http://localhost:1" })).toThrow(/NODE_ENV is unset/);
+  });
+
+  it("needs no NODE_ENV when nothing is overridden", () => {
+    for (const NODE_ENV of [undefined, "production", "prod"]) {
+      expect(resolveEndpoints({ NODE_ENV }).endpoints).toEqual(DEFAULT_ENDPOINTS);
     }
   });
 
