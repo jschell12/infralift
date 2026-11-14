@@ -18,6 +18,7 @@
     "e2e:specs": "tsx e2e/specs/extract.ts",
     "lint:e2e": "tsc -p e2e/tsconfig.json",
     "validate:stacks": "tsx scripts/validate-stacks.mts",
+    "plan:stacks": "tsx scripts/plan-stacks-moto.mts",
     "test:watch": "vitest"
   },
   "prisma": {

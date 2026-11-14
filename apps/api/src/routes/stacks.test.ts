@@ -331,3 +331,59 @@ describe("POST /tf/jobs", () => {
     expect(h.runJob).toHaveBeenCalledWith("job1");
   });
 });
+
+describe("infrastructure stacks (ADR 0010)", () => {
+  const network = getStack("network-baseline")!;
+
+  it("creates a project from one with only its own settings: no repository name is added", async () => {
+    // The dashboard sends settings the stack's schema declares; the API used
+    // to add github_repository for every stack, which this schema refuses.
+    const out = await call("post", "/stacks/:slug/projects", {
+      params: { slug: "network-baseline" },
+      body: { name: "aws-prod", destRepo: "acme/infra", arguments: { ...network.example, single_nat: false } },
+    });
+    expect(out.status).toBe(202);
+    const data = h.projectCreate.mock.calls[0][0].data;
+    expect(data).toMatchObject({ source: "stack", stackSlug: "network-baseline", createRepo: false });
+    expect(data.providerConfig).toEqual({
+      ...network.example,
+      single_nat: false,
+      region: "us-east-1",
+      cidr: "10.0.0.0/16",
+      az_count: 2,
+      flow_log_retention_days: 30,
+      delivery: "github-actions",
+      backend: "r2",
+    });
+    expect(h.jobCreate.mock.calls[0][0].data.kind).toBe("stack");
+  });
+
+  it("refuses a GitLab repository, which none of them has a delivery for", async () => {
+    const out = await call("post", "/stacks/:slug/projects", {
+      params: { slug: "network-baseline" },
+      body: { name: "aws-prod", destRepo: "acme/infra", gitHost: "gitlab", arguments: network.example },
+    });
+    expect(out.status).toBe(400);
+    expect(h.projectCreate).not.toHaveBeenCalled();
+  });
+
+  it("re-renders a project's changed settings without adding repository settings", async () => {
+    h.findFirst.mockResolvedValueOnce({
+      id: "p1",
+      orgId: "org-a",
+      source: "stack",
+      stackSlug: "network-baseline",
+      gitHost: "github",
+      destRepo: "acme/infra",
+      tfcConnectionId: null,
+      providerConfig: { ...network.example, delivery: "github-actions", backend: "r2" },
+    });
+    const out = await call("put", "/stacks/projects/:id/settings", {
+      params: { id: "p1" },
+      body: { arguments: { ...network.example, az_count: 3 } },
+    });
+    expect(out.status).toBe(202);
+    expect(h.projectUpdate.mock.calls[0][0].data.providerConfig).toMatchObject({ az_count: 3, delivery: "github-actions" });
+    expect(h.projectUpdate.mock.calls[0][0].data.providerConfig).not.toHaveProperty("github_repository");
+  });
+});
