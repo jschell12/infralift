@@ -22,6 +22,19 @@ export interface UnmanagedResource {
   terraformType: string | null;
 }
 
+/** A kind of resource the connector could not list with this connection's
+ *  credential at all, said rather than left out, so an empty list is never
+ *  read as "the account has none". A DigitalOcean connection holds one API
+ *  token, and Spaces are listed with separate Spaces keys over the S3 API. */
+export interface NotInventoried {
+  /** The inventory type it would have had, e.g. "digitalocean:space". */
+  type: string;
+  /** Plural, for a person: "Spaces buckets". */
+  label: string;
+  /** Why, in a sentence a customer reads. Never quotes a credential. */
+  reason: string;
+}
+
 /** GET /connections/:id/unmanaged. The next page's cursor is in the
  *  X-Next-Cursor header, absent on the last page; send it back as ?cursor=.
  *  ?refresh=1 reads the account again instead of the cached inventory. */
@@ -38,6 +51,9 @@ export interface UnmanagedPage {
   /** What the inventory already says about the state backend, so the adopt
    *  form can fill it in rather than ask. Absent from older API versions. */
   backendDefaults?: AdoptBackendDefaults;
+  /** What this connection's inventory could not include at all, and why.
+   *  Absent from older API versions; empty when nothing was left out. */
+  notInventoried?: NotInventoried[];
 }
 
 /** A Cloudflare account the connection's token can see, as the inventory

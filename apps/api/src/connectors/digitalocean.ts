@@ -1,4 +1,4 @@
-import type { ResourceInventoryItem } from "@infralift/shared";
+import type { NotInventoried, ResourceInventoryItem } from "@infralift/shared";
 import { ProviderHttpError, type Connector, type ConnectorAssessment } from "./types.js";
 import { httpFetch } from "../lib/http.js";
 import { DEFAULT_ENDPOINTS, type Endpoints } from "../lib/endpoints.js";
@@ -17,6 +17,19 @@ async function doFetch(api: string, token: string, path: string): Promise<any> {
   }
   return res.json();
 }
+
+/** Spaces are not in the DigitalOcean API this connection's token reads.
+ *  They are listed over the S3 API (ListBuckets at
+ *  <region>.digitaloceanspaces.com), signed with a Spaces access key and
+ *  secret, which a DigitalOcean connection does not hold. The connector used
+ *  to call GET /v2/spaces, which does not exist (#153 finding 2), and left
+ *  Spaces out without saying so. */
+export const DO_SPACES_NOT_INVENTORIED: NotInventoried = {
+  type: "digitalocean:space",
+  label: "Spaces buckets",
+  reason:
+    "Spaces were not inventoried. DigitalOcean lists them only through its S3-compatible API with a Spaces access key, and a DigitalOcean connection holds an API token, not Spaces keys. Count your Spaces in the control panel if you plan to move them.",
+};
 
 // Rough monthly cost for common Droplet slugs, USD cents.
 const DROPLET_COST_CENTS: Record<string, number> = {
@@ -150,27 +163,6 @@ export function createDigitaloceanConnector(endpoints: Pick<Endpoints, "digitalo
         // Databases may not be accessible; skip.
       }
 
-      // Spaces (S3-compatible object storage)
-      try {
-        const body = await doFetch(api, token, "/spaces?per_page=200");
-        // Spaces API may return under different keys
-        const spaces: any[] = body.spaces ?? [];
-        for (const s of spaces) {
-          totalCostCents += 500; // $5/mo per Space
-          inventory.push({
-            provider: "digitalocean",
-            type: "digitalocean:space",
-            externalId: s.name,
-            name: s.name,
-            region: s.region?.slug ?? null,
-            monthlyCostCents: 500,
-            metadata: {},
-          });
-        }
-      } catch {
-        // Spaces API may not be accessible or may 404; skip.
-      }
-
       // Domains
       try {
         const body = await doFetch(api, token, "/domains?per_page=200");
@@ -222,6 +214,14 @@ export function createDigitaloceanConnector(endpoints: Pick<Endpoints, "digitalo
         // K8s may not be accessible; skip.
       }
 
+      findings.push({
+        category: "inventory",
+        severity: "low",
+        title: "Spaces not inventoried",
+        detail: DO_SPACES_NOT_INVENTORIED.reason,
+      });
+      const notInventoried = [DO_SPACES_NOT_INVENTORIED];
+
       if (totalCostCents > 0) {
         findings.push({
           category: "cost",
@@ -233,6 +233,7 @@ export function createDigitaloceanConnector(endpoints: Pick<Endpoints, "digitalo
           inventory,
           findings,
           estimatedMonthlyCostCents: totalCostCents,
+          notInventoried,
         };
       }
 
@@ -240,6 +241,7 @@ export function createDigitaloceanConnector(endpoints: Pick<Endpoints, "digitalo
         inventory,
         findings,
         estimatedMonthlyCostCents: totalCostCents || null,
+        notInventoried,
       };
     },
   };

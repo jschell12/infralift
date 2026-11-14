@@ -9,7 +9,7 @@ import { netlifyConnector } from "./netlify.js";
 import { renderConnector } from "./render.js";
 import { railwayConnector } from "./railway.js";
 import { flyioConnector } from "./flyio.js";
-import { digitaloceanConnector } from "./digitalocean.js";
+import { digitaloceanConnector, DO_SPACES_NOT_INVENTORIED } from "./digitalocean.js";
 import { gcpConnector } from "./gcp.js";
 import { azureConnector } from "./azure.js";
 import { getConnector } from "./index.js";
@@ -644,7 +644,6 @@ describe("digitalocean", () => {
           },
         ],
       },
-      "/spaces?": { spaces: [] },
       "/domains?": {
         domains: [{ name: "example.com", ttl: 1800 }],
       },
@@ -660,6 +659,22 @@ describe("digitalocean", () => {
     expect(types).toContain("digitalocean:domain");
     expect(result.estimatedMonthlyCostCents).toBeGreaterThan(0);
     expect(result.findings.some((f) => f.title.includes("DO Managed Postgres"))).toBe(true);
+  });
+
+  // #153 finding 2: the connector called GET /v2/spaces, which is not in
+  // DigitalOcean's API, and the 404 left Spaces out without a word.
+  it("never calls a Spaces endpoint, and says Spaces were not inventoried and why", async () => {
+    mockRoute({ "/droplets?": { droplets: [] } });
+    const result = await digitaloceanConnector.assess("tok");
+    const urls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(urls.length).toBeGreaterThan(0);
+    expect(urls.filter((u) => /spaces/i.test(u))).toEqual([]);
+    expect(result.inventory.some((i) => i.type === "digitalocean:space")).toBe(false);
+    expect(result.notInventoried).toEqual([DO_SPACES_NOT_INVENTORIED]);
+    expect(DO_SPACES_NOT_INVENTORIED.reason).toMatch(/Spaces access key/);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({ category: "inventory", title: "Spaces not inventoried", detail: DO_SPACES_NOT_INVENTORIED.reason })
+    );
   });
 });
 

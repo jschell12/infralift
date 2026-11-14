@@ -3,6 +3,7 @@ import type {
   AdoptBackendDefaults,
   AdoptSelectedResult,
   CloudflareAccountRef,
+  NotInventoried,
   Provider,
   ResourceInventoryItem,
   UnmanagedPage,
@@ -63,6 +64,8 @@ interface CachedInventory {
   orgId: string;
   fetchedAt: number;
   items: ResourceInventoryItem[];
+  /** What the connector could not list at all (ConnectorAssessment). */
+  notInventoried: NotInventoried[];
 }
 
 const cache = new Map<string, CachedInventory>();
@@ -126,13 +129,13 @@ export function inventoryFailure(connection: Pick<ProviderConnection, "id" | "pr
  *  provider refused (401/403), or one that is not the kind it takes, marks
  *  the connection invalid, and the provider's own message goes to the log,
  *  never the response. */
-async function readInventory(connection: ProviderConnection): Promise<ResourceInventoryItem[]> {
+async function readInventory(connection: ProviderConnection): Promise<Pick<CachedInventory, "items" | "notInventoried">> {
   // AWS: the org's external id; 422 when AWS is off on this server.
   const secret = await connectionSecret(connection.orgId, connection.provider, decryptToken(connection.encryptedToken));
   try {
     // Inventory only: no cost calls, which on AWS are billed per request.
-    const { inventory } = await getConnector(connection.provider as Provider).assess(secret, { costs: false });
-    return inventory;
+    const { inventory, notInventoried } = await getConnector(connection.provider as Provider).assess(secret, { costs: false });
+    return { items: inventory, notInventoried: notInventoried ?? [] };
   } catch (err) {
     if (err instanceof CredentialFormatError) {
       await markInvalid(connection.id, `the saved credential isn't ${err.expected}; replace it`).catch((markErr) =>
@@ -166,8 +169,8 @@ export async function accountInventory(
   const read = cloudReads
     .check({ orgId: connection.orgId }, now)
     .then(() => readInventory(connection))
-    .then((items) => {
-      const entry = { orgId: connection.orgId, fetchedAt: now, items };
+    .then(({ items, notInventoried }) => {
+      const entry = { orgId: connection.orgId, fetchedAt: now, items, notInventoried };
       remember(key, entry, now);
       return entry;
     })
@@ -313,6 +316,7 @@ export async function listUnmanaged(
     adoptable: rows.filter((r) => r.adoptable).length,
     resources: page,
     backendDefaults: backendDefaultsOf(connection.provider as Provider, inventory.items),
+    notInventoried: inventory.notInventoried,
     nextCursor,
   };
 }
