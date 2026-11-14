@@ -10,7 +10,7 @@ export interface SchemaProperty {
   pattern?: string;
   minimum?: number;
   maximum?: number;
-  default?: string | number;
+  default?: string | number | boolean;
   description?: string;
 }
 
@@ -26,10 +26,11 @@ export interface Stack {
   name: string;
   description: string;
   /** The app this stack deploys and the repository template a new repo was
-   *  created from. Every catalog stack has one today; see isAppStack. */
+   *  created from. App stacks only; see isAppStack. */
   template?: { slug: string; name: string; description: string; repo: string };
   target: { slug: string; name: string };
-  runtime: { slug: string; name: string };
+  /** How an app stack's app runs. Infrastructure stacks have none. */
+  runtime?: { slug: string; name: string };
   deliveries: { slug: string; name: string; gitHost: GitHost }[];
   gitHosts: GitHost[];
   inputSchema: InputSchema;
@@ -76,7 +77,9 @@ export function toSettings(schema: InputSchema, values: Record<string, string>):
   for (const [key, prop] of Object.entries(schema.properties ?? {})) {
     const raw = values[key];
     if (raw === undefined || raw === "") continue;
-    out[key] = prop.type === "integer" || prop.type === "number" ? Number(raw) : raw;
+    if (prop.type === "integer" || prop.type === "number") out[key] = Number(raw);
+    else if (prop.type === "boolean") out[key] = raw === "true";
+    else out[key] = raw;
   }
   return out;
 }

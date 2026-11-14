@@ -46,14 +46,14 @@ export function SettingsFields({
               {label(key)}
               {required.has(key) ? " *" : ""}
             </label>
-            {prop.enum ? (
+            {prop.enum || prop.type === "boolean" ? (
               <select
                 id={`setting-${key}`}
                 className={INPUT}
                 value={values[key] ?? String(prop.default ?? "")}
                 onChange={(e) => set(key, e.target.value)}
               >
-                {prop.enum.map((v) => (
+                {(prop.enum ?? ["true", "false"]).map((v) => (
                   <option key={String(v)} value={String(v)}>
                     {String(v)}
                   </option>

@@ -169,7 +169,7 @@ try {
       mkdirSync(zoneDir, { recursive: true });
       writeFileSync(
         join(zoneDir, "main.tf"),
-        `terraform {\n  required_providers {\n    aws = { source = "hashicorp/aws", version = "~> 5.0" }\n  }\n}\n` +
+        `terraform {\n  required_providers {\n    aws = { source = "hashicorp/aws", version = "~> 6.73.0" }\n  }\n}\n` +
           `provider "aws" {\n  region = "us-east-1"\n}\nresource "aws_route53_zone" "site" {\n  name = "${zone}"\n}\n`
       );
       writeFileSync(join(zoneDir, "moto_override.tf"), providerOverride());

@@ -1,32 +1,31 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isAppStack, newProjectStacks, type Stack } from "./stacks";
+import { isAppStack, newProjectStacks, toSettings, type Stack } from "./stacks";
 
-// The catalog stack as GET /tf/stacks sends it: the real stack.json, mapped
+// Catalog stacks as GET /tf/stacks sends them: the real stack.json, mapped
 // field for field the way listStackSummaries() in
 // apps/api/src/services/stacks.ts does (gitHosts comes from the deliveries).
-const manifest = JSON.parse(
-  readFileSync(join(process.cwd(), "../api/stacks/app-foundry-hetzner/stack.json"), "utf8")
-) as Stack & { deliveries: Stack["deliveries"] };
-const appFoundry: Stack = {
-  slug: manifest.slug,
-  name: manifest.name,
-  description: manifest.description,
-  template: manifest.template,
-  target: manifest.target,
-  runtime: manifest.runtime,
-  deliveries: manifest.deliveries,
-  gitHosts: [...new Set(manifest.deliveries.map((d) => d.gitHost))],
-  inputSchema: manifest.inputSchema,
-  example: manifest.example,
-};
-
-// No catalog stack is infrastructure-only yet (ADR 0010), so this one is made
-// up: the real stack with its app template removed and a new slug. It is the
-// shape a team stack's summary already has (summary() in
-// apps/api/src/services/team-stacks.ts carries no template).
-const infraOnly: Stack = { ...appFoundry, slug: "postgres-backups", name: "Postgres with backups", template: undefined };
+function catalogStack(slug: string): Stack {
+  const manifest = JSON.parse(
+    readFileSync(join(process.cwd(), `../api/stacks/${slug}/stack.json`), "utf8")
+  ) as Stack & { deliveries: Stack["deliveries"] };
+  return {
+    slug: manifest.slug,
+    name: manifest.name,
+    description: manifest.description,
+    template: manifest.template,
+    target: manifest.target,
+    runtime: manifest.runtime,
+    deliveries: manifest.deliveries,
+    gitHosts: [...new Set(manifest.deliveries.map((d) => d.gitHost))],
+    inputSchema: manifest.inputSchema,
+    example: manifest.example,
+  };
+}
+const appFoundry = catalogStack("app-foundry-hetzner");
+const infraStacks = ["network-baseline", "postgres-with-backups", "static-site-cdn"].map(catalogStack);
+const infraOnly = infraStacks[1];
 
 describe("new projects do not offer app stacks (ADR 0010)", () => {
   it("reads the real catalog stack, so the test fails if its shape moves", () => {
@@ -52,7 +51,29 @@ describe("new projects do not offer app stacks (ADR 0010)", () => {
     expect(newProjectStacks([appFoundry, infraOnly])).toEqual([infraOnly]);
   });
 
+  it("offers every infrastructure stack in the catalog, and only those", () => {
+    for (const s of infraStacks) expect(isAppStack(s), s.slug).toBe(false);
+    expect(newProjectStacks([appFoundry, ...infraStacks]).map((s) => s.slug)).toEqual([
+      "network-baseline",
+      "postgres-with-backups",
+      "static-site-cdn",
+    ]);
+  });
+
   it("offers nothing for an empty catalog", () => {
     expect(newProjectStacks([])).toEqual([]);
+  });
+});
+
+describe("toSettings", () => {
+  it("sends a boolean setting as a boolean, which the schema requires", () => {
+    const network = infraStacks[0];
+    expect(toSettings(network.inputSchema, { single_nat: "false", az_count: "3", name: "aws-prod" })).toEqual({
+      single_nat: false,
+      az_count: 3,
+      name: "aws-prod",
+    });
+    expect(toSettings(network.inputSchema, { single_nat: "true" })).toEqual({ single_nat: true });
+    expect(toSettings(network.inputSchema, { single_nat: "" })).toEqual({});
   });
 });

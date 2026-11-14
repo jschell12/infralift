@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { TfInputValidationError, type TfArguments } from "../tf/render.js";
@@ -77,11 +78,16 @@ describe("infrastructure catalog stacks", () => {
     }
   });
 
-  it.each(INFRA)("%s: pins hashicorp/aws as adoption does, in the root and every module", (slug) => {
+  it.each(INFRA)("%s: pins hashicorp/aws as adoption does (lib/tf/codegen.ts), in the root and every module", (slug) => {
     const files = render(slug);
     const versionFiles = [...files].filter(([p, c]) => p.endsWith(".tf") && c.includes('source  = "hashicorp/aws"'));
     expect(versionFiles.length).toBe((stack(slug).modules ?? []).length + 1);
-    for (const [path, content] of versionFiles) expect(content, path).toMatch(/version\s+= "~> 5\.0"/);
+    // Read from codegen's own table, so moving adoption's pin fails here
+    // until the stacks move with it.
+    const codegen = readFileSync(new URL("../tf/codegen.ts", import.meta.url), "utf8");
+    const pin = codegen.match(/aws: \{ name: "aws", source: "hashicorp\/aws", version: "([^"]+)" \}/)?.[1];
+    expect(pin).toBeTruthy();
+    for (const [path, content] of versionFiles) expect(content, path).toContain(`version = "${pin}"`);
   });
 
   it.each(INFRA)("%s: r2 encrypts state and keeps its bucket credentials apart from AWS's", (slug) => {
@@ -133,7 +139,7 @@ describe("network-baseline", () => {
 
   it("refuses a public range, a /24, four zones and a retention CloudWatch does not offer", () => {
     const s = stack("network-baseline");
-    for (const bad of [{ cidr: "8.8.0.0/16" }, { cidr: "10.0.0.0/24" }, { az_count: 4 }, { flow_log_retention_days: 10 }]) {
+    for (const bad of <TfArguments[]>[{ cidr: "8.8.0.0/16" }, { cidr: "10.0.0.0/24" }, { az_count: 4 }, { flow_log_retention_days: 10 }]) {
       expect(() => renderStack(s, { ...s.example, ...bad }), JSON.stringify(bad)).toThrow(TfInputValidationError);
     }
   });
@@ -171,7 +177,7 @@ describe("postgres-with-backups", () => {
 
   it("refuses one subnet, a malformed VPC id, a CIDR with no prefix and 36 days of backups", () => {
     const s = stack("postgres-with-backups");
-    for (const bad of [
+    for (const bad of <TfArguments[]>[
       { subnet_ids: "subnet-0a1b2c3d4e5f60718" },
       { vpc_id: "vpc-xyz" },
       { allowed_cidr: "10.0.0.0" },
@@ -223,7 +229,7 @@ describe("static-site-cdn", () => {
 
   it("refuses a domain that is not a host name", () => {
     const s = stack("static-site-cdn");
-    for (const bad of [{ domain: "https://www.example.com" }, { zone: "example" }, { price_class: "PriceClass_50" }]) {
+    for (const bad of <TfArguments[]>[{ domain: "https://www.example.com" }, { zone: "example" }, { price_class: "PriceClass_50" }]) {
       expect(() => renderStack(s, { ...s.example, ...bad }), JSON.stringify(bad)).toThrow(TfInputValidationError);
     }
   });

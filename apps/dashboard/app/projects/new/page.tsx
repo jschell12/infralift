@@ -158,8 +158,8 @@ function StackStart({ onCreated }: { onCreated: () => void }) {
     return (
       <>
         <Note>
-          The catalog has no infrastructure stacks yet. Stacks that deploy an app are no longer offered for new projects;
-          projects already made from one keep working.
+          No stacks are available. Stacks that deploy an app are no longer offered for new projects; projects already
+          made from one keep working.
         </Note>
         <div className="mt-4 flex flex-wrap gap-2">
           <Link className={`${SMALL_BTN} ${FOCUS}`} href="/projects/new?start=adopt">
