@@ -1,14 +1,34 @@
 # Captured 2026-11-14 from a `make e2e` run (adopt-aws.e2e.test.ts), not from
 # real AWS: the check's Generate step, `plan -generate-config-out` in the
-# OpenTofu 1.12.6 container with hashicorp/aws 5.100.0 (adoption's ~> 5.0),
-# against moto 5.2.5, for the resources apps/api/e2e/aws-seed/main.tf creates.
+# OpenTofu 1.12.6 container with hashicorp/aws 6.73.0 (adoption's ~> 6.73),
+# against moto 5.2.5, for the resources apps/api/e2e/aws-seed/main.tf creates
+# plus the SQS queue the suite creates through moto's API.
 # Below this header, byte for byte what OpenTofu wrote, before the cleanup.
 # Used by cleanup.test.ts.
 # __generated__ by OpenTofu
 # Please review these resources and move them into your main configuration files.
 
 # __generated__ by OpenTofu
-resource "aws_subnet" "subnet_861fd13d2d1f8ee16" {
+resource "aws_security_group" "sg_eeb19063d0c840723" {
+  provider               = aws.us_east_1
+  description            = "hand made"
+  egress                 = []
+  ingress                = []
+  name                   = "e2e-handmade-web"
+  name_prefix            = ""
+  region                 = "us-east-1"
+  revoke_rules_on_delete = null
+  tags = {
+    env = "e2e"
+  }
+  tags_all = {
+    env = "e2e"
+  }
+  vpc_id = "vpc-809bb4fec0f1accd1"
+}
+
+# __generated__ by OpenTofu
+resource "aws_subnet" "subnet_b7c5058c94995b63a" {
   provider                                       = aws.us_east_1
   assign_ipv6_address_on_creation                = false
   availability_zone                              = "us-east-1a"
@@ -19,54 +39,72 @@ resource "aws_subnet" "subnet_861fd13d2d1f8ee16" {
   enable_lni_at_device_index                     = 0
   enable_resource_name_dns_a_record_on_launch    = false
   enable_resource_name_dns_aaaa_record_on_launch = false
+  ipv4_ipam_pool_id                              = null
+  ipv4_netmask_length                            = null
   ipv6_cidr_block                                = ""
+  ipv6_ipam_pool_id                              = null
   ipv6_native                                    = false
+  ipv6_netmask_length                            = null
   map_customer_owned_ip_on_launch                = false
   map_public_ip_on_launch                        = false
   outpost_arn                                    = ""
   private_dns_hostname_type_on_launch            = "ip-name"
+  region                                         = "us-east-1"
   tags = {
     env = "e2e"
   }
   tags_all = {
     env = "e2e"
   }
-  vpc_id = "vpc-06ecc563645a822ca"
-}
-
-# __generated__ by OpenTofu
-resource "aws_security_group" "sg_7ee5f2cef1cb7bffc" {
-  provider               = aws.us_east_1
-  description            = "hand made"
-  egress                 = []
-  ingress                = []
-  name                   = "e2e-handmade-web"
-  name_prefix            = ""
-  revoke_rules_on_delete = null
-  tags = {
-    env = "e2e"
-  }
-  tags_all = {
-    env = "e2e"
-  }
-  vpc_id = "vpc-06ecc563645a822ca"
+  vpc_id = "vpc-809bb4fec0f1accd1"
 }
 
 # __generated__ by OpenTofu
 resource "aws_cloudwatch_log_group" "_e2e_handmade_app" {
-  provider          = aws.us_east_1
-  kms_key_id        = ""
-  log_group_class   = ""
-  name              = "/e2e/handmade/app"
-  name_prefix       = ""
-  retention_in_days = 0
-  skip_destroy      = false
+  provider                    = aws.us_east_1
+  deletion_protection_enabled = false
+  kms_key_id                  = ""
+  log_group_class             = ""
+  name                        = "/e2e/handmade/app"
+  name_prefix                 = ""
+  region                      = "us-east-1"
+  retention_in_days           = 0
+  skip_destroy                = false
   tags = {
     env = "e2e"
   }
   tags_all = {
     env = "e2e"
   }
+}
+
+# __generated__ by OpenTofu
+resource "aws_sqs_queue" "e2e_handmade_jobs" {
+  provider                          = aws.us_east_1
+  content_based_deduplication       = false
+  deduplication_scope               = ""
+  delay_seconds                     = 0
+  fifo_queue                        = false
+  fifo_throughput_limit             = ""
+  kms_data_key_reuse_period_seconds = 300
+  kms_master_key_id                 = ""
+  max_message_size                  = 1048576
+  message_retention_seconds         = 345600
+  name                              = "e2e-handmade-jobs"
+  name_prefix                       = ""
+  policy                            = ""
+  receive_wait_time_seconds         = 0
+  redrive_allow_policy              = ""
+  redrive_policy                    = ""
+  region                            = "us-east-1"
+  sqs_managed_sse_enabled           = true
+  tags = {
+    env = "e2e"
+  }
+  tags_all = {
+    env = "e2e"
+  }
+  visibility_timeout_seconds = 30
 }
 
 # __generated__ by OpenTofu
@@ -91,6 +129,7 @@ resource "aws_sns_topic" "e2e_handmade_events" {
   lambda_failure_feedback_role_arn         = ""
   lambda_success_feedback_role_arn         = ""
   lambda_success_feedback_sample_rate      = 0
+  maximum_message_size                     = 0
   name                                     = "e2e-handmade-events"
   name_prefix                              = ""
   policy = jsonencode({
@@ -111,6 +150,7 @@ resource "aws_sns_topic" "e2e_handmade_events" {
     }]
     Version = "2008-10-17"
   })
+  region                           = "us-east-1"
   signature_version                = 0
   sqs_failure_feedback_role_arn    = ""
   sqs_success_feedback_role_arn    = ""
@@ -125,7 +165,7 @@ resource "aws_sns_topic" "e2e_handmade_events" {
 }
 
 # __generated__ by OpenTofu
-resource "aws_kms_key" "da83db11_4fb0_4c4d_8963_72affbc38047" {
+resource "aws_kms_key" "_115777c0_86d3_45b5_8651_8a966f89cd57" {
   provider                           = aws.us_east_1
   bypass_policy_lockout_safety_check = null
   custom_key_store_id                = ""
@@ -149,6 +189,7 @@ resource "aws_kms_key" "da83db11_4fb0_4c4d_8963_72affbc38047" {
     }]
     Version = "2012-10-17"
   })
+  region                  = "us-east-1"
   rotation_period_in_days = 0
   tags = {
     env = "e2e"
@@ -168,6 +209,8 @@ resource "aws_dynamodb_table" "e2e_handmade_sessions" {
   name                        = "e2e-handmade-sessions"
   range_key                   = null
   read_capacity               = 0
+  region                      = "us-east-1"
+  restore_backup_arn          = null
   restore_date_time           = null
   restore_source_name         = null
   restore_source_table_arn    = null
@@ -197,7 +240,7 @@ resource "aws_dynamodb_table" "e2e_handmade_sessions" {
 }
 
 # __generated__ by OpenTofu
-resource "aws_vpc" "vpc_06ecc563645a822ca" {
+resource "aws_vpc" "vpc_809bb4fec0f1accd1" {
   provider                             = aws.us_east_1
   assign_generated_ipv6_cidr_block     = false
   cidr_block                           = "10.42.0.0/16"
@@ -211,6 +254,7 @@ resource "aws_vpc" "vpc_06ecc563645a822ca" {
   ipv6_cidr_block_network_border_group = ""
   ipv6_ipam_pool_id                    = ""
   ipv6_netmask_length                  = 0
+  region                               = "us-east-1"
   tags = {
     env = "e2e"
   }
@@ -223,9 +267,11 @@ resource "aws_vpc" "vpc_06ecc563645a822ca" {
 resource "aws_s3_bucket" "e2e_handmade_assets" {
   provider            = aws.us_east_1
   bucket              = "e2e-handmade-assets"
+  bucket_namespace    = "global"
   bucket_prefix       = ""
-  force_destroy       = null
+  force_destroy       = false
   object_lock_enabled = false
+  region              = "us-east-1"
   tags = {
     Name = "e2e-handmade-assets"
     env  = "e2e"

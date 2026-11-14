@@ -3,9 +3,15 @@
 # against real AWS: the provider is pointed at moto by AWS_ENDPOINT_URL and
 # carries moto's fixed test credentials. Tagged, because the connector lists
 # what the Resource Groups Tagging API returns.
+#
+# This provider only stands in for the person who built them, so its version
+# is not adoption's (adoption pins ~> 6.73 in lib/tf/codegen.ts). It stays on
+# 5.x because 6.x sends a bucket's tags inside CreateBucket, which moto 5.2.5
+# drops (measured 2026-11-14): the bucket would be untagged, and the Tagging
+# API, which is how the connector finds it, would not list it.
 terraform {
   required_providers {
-    aws = { source = "hashicorp/aws", version = "~> 6.73" }
+    aws = { source = "hashicorp/aws", version = "~> 5.0" }
   }
 }
 

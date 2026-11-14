@@ -10,7 +10,7 @@ import { renderAdoption, planAdoption } from "./adopt.js";
 import { scanRepo } from "./scan.js";
 
 // The fixtures are real `plan -generate-config-out` output from the e2e stack
-// (moto 5.2.5, OpenTofu 1.12.6, hashicorp/aws 5.100.0) on 2026-11-14: one from
+// (moto 5.2.5, OpenTofu 1.12.6, hashicorp/aws 6.73.0) on 2026-11-14: one from
 // a `make e2e` run, one from API-created resources on the same stack. Each
 // file's header says how. moto, not real AWS.
 const FIX = join(__dirname, "__fixtures__");
@@ -49,23 +49,28 @@ const MOTO_REMOVED = [
   '  availability_zone_id                           = "use1-az6"',
   "  enable_lni_at_device_index                     = 0",
   '  ipv6_cidr_block                                = ""',
+  '  log_group_class             = ""',
+  '  name_prefix                 = ""',
+  '  deduplication_scope               = ""',
+  '  fifo_throughput_limit             = ""',
+  '  kms_master_key_id                 = ""',
+  '  name_prefix                       = ""',
   '  fifo_throughput_scope                    = ""',
+  "  maximum_message_size                     = 0",
   '  name_prefix                              = ""',
   "  signature_version                = 0",
   '  tracing_config = ""',
-  '  log_group_class   = ""',
-  '  name_prefix       = ""',
-  "    recovery_period_in_days = 0",
   '  custom_key_store_id                = ""',
   "  rotation_period_in_days = 0",
   '  xks_key_id = ""',
+  "    recovery_period_in_days = 0",
   '  ipv6_cidr_block                      = ""',
   '  ipv6_ipam_pool_id                    = ""',
   "  ipv6_netmask_length                  = 0",
   '  bucket_prefix       = ""',
 ];
 
-describe("cleaning generated AWS code (hashicorp/aws 5.100.0, captured on moto)", () => {
+describe("cleaning generated AWS code (hashicorp/aws 6.73.0, captured on moto)", () => {
   it("removes exactly the lines the provider rejected, and changes nothing else", () => {
     const r = clean(MOTO);
     expect(r.status, r.stderr).toBe(0);
@@ -76,9 +81,9 @@ describe("cleaning generated AWS code (hashicorp/aws 5.100.0, captured on moto)"
     const r = clean(MOTO);
     const log = r.stdout.trim().split("\n");
     expect(log).toHaveLength(MOTO_REMOVED.length + 1);
-    expect(log).toContain("generated.tf:226: removed bucket_prefix from aws_s3_bucket.e2e_handmade_assets: computed from the bucket name, which is set; the two conflict");
+    expect(log).toContain("generated.tf:271: removed bucket_prefix from aws_s3_bucket.e2e_handmade_assets: computed from the bucket name, which is set; the two conflict");
     expect(log).toContain(
-      "generated.tf:191: removed point_in_time_recovery.recovery_period_in_days from aws_dynamodb_table.e2e_handmade_sessions: 0 means not set, and the provider rejects 0 as out of range"
+      "generated.tf:234: removed point_in_time_recovery.recovery_period_in_days from aws_dynamodb_table.e2e_handmade_sessions: 0 means not set, and the provider rejects 0 as out of range"
     );
     expect(log.at(-1)).toBe(`removed ${MOTO_REMOVED.length} generated attribute(s) the provider rejects`);
     // The availability zone id is a real value; the log must not carry it.
@@ -96,8 +101,11 @@ describe("cleaning generated AWS code (hashicorp/aws 5.100.0, captured on moto)"
   it("keeps a real value where the rule names a placeholder", () => {
     const edited = MOTO.replace("  signature_version                = 0", "  signature_version                = 2")
       .replace("  rotation_period_in_days = 0", "  rotation_period_in_days = 365")
-      .replace('  tracing_config = ""', '  tracing_config = "Active"');
+      .replace('  tracing_config = ""', '  tracing_config = "Active"')
+      .replace('  kms_master_key_id                 = ""', '  kms_master_key_id                 = "alias/queue-key"');
     const r = clean(edited);
+    // A queue encrypted with a customer key keeps it.
+    expect(r.result).toContain('  kms_master_key_id                 = "alias/queue-key"\n');
     expect(r.result).toContain("  signature_version                = 2\n");
     expect(r.result).toContain("  rotation_period_in_days = 365\n");
     expect(r.result).toContain('  tracing_config = "Active"\n');
@@ -126,14 +134,20 @@ describe("what the cleanup will not touch", () => {
     const r = clean(API_CREATED);
     expect(r.status, r.stderr).toBe(0);
     expect(r.result).toContain('  key_usage                          = ""\n');
-    // The queue has no rules (not adoptable yet), so it passes through whole.
-    const queue = /# __generated__ by OpenTofu\nresource "aws_sqs_queue"[\s\S]*?\n}\n/.exec(API_CREATED)![0];
-    expect(r.result).toContain(queue);
-    expect(queue).toContain("  max_message_size                  = 1048576\n");
-    // The rules that do apply to this key still do.
+    // The rules that do apply to this key and queue still do, and the queue
+    // keeps its 1 MiB size: no rule touches it, and 6.x accepts it.
     expect(r.result).toBe(
-      without(API_CREATED, ['  custom_key_store_id                = ""', "  rotation_period_in_days = 0", '  xks_key_id              = ""'])
+      without(API_CREATED, [
+        '  deduplication_scope               = ""',
+        '  fifo_throughput_limit             = ""',
+        '  kms_master_key_id                 = ""',
+        '  name_prefix                       = ""',
+        '  custom_key_store_id                = ""',
+        "  rotation_period_in_days = 0",
+        '  xks_key_id              = ""',
+      ])
     );
+    expect(r.result).toContain("  max_message_size                  = 1048576\n");
   });
 
   it("passes code for types with no rules through byte for byte", () => {
