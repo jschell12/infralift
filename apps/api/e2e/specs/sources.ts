@@ -189,38 +189,11 @@ export const RAILWAY_QUERIES = [
                   }
                 }
               }
-              plugins {
-                edges {
-                  node {
-                    id
-                    name
-                    friendlyName
-                  }
-                }
-              }
             }
           }
         }
       }`,
 ];
-
-/** connectors/railway.ts, the plan query for the cost estimate. */
-export const RAILWAY_PLAN_QUERY = `{
-          me {
-            id
-            projects {
-              edges {
-                node {
-                  id
-                  name
-                  subscription {
-                    plan
-                  }
-                }
-              }
-            }
-          }
-        }`;
 
 // -- the manifest -------------------------------------------------------------------
 
@@ -293,13 +266,11 @@ export const SOURCES: SpecSource[] = [
     // Vercel's SDK repository commits the description it is generated from
     // (https://openapi.vercel.sh/, the published one).
     pin: { repo: "vercel/sdk", commit: "fe01b47433aa130b15c68a738a8773d9dd38b190", path: "vercel-spec.json" },
-    operations: ["/v2/user", "/v5/domains"].map(get),
-    undocumented: [
-      {
-        ...get("/v9/projects"),
-        note: "packages/collectors/vercel.mjs lists projects here; the description has /v10/projects and /v11/projects only, so the mock refuses it and the inventory fails under the mock. Production is unverified: src/connectors/__fixtures__/vercel-api.json is a /v9/projects response captured live on 2026-08-31 (commit 5c6eccb), so v9 still answered then; a real-account check is needed",
-      },
-    ],
+    // /v10/projects, not /v9: the description has v10 and v11 only. The
+    // collector moved from v9 (#153 finding 1); src/connectors/__fixtures__/
+    // vercel-api.json is still the v9 response captured live on 2026-08-31,
+    // and fixtures-match-specs.test.ts checks it against v10.
+    operations: ["/v2/user", "/v5/domains", "/v10/projects"].map(get),
   },
   {
     name: "heroku",
@@ -326,13 +297,9 @@ export const SOURCES: SpecSource[] = [
     out: "netlify.openapi.json",
     repo: "netlify/open-api",
     commit: "96b688490fa406c71e4453e041ec5a0587d35f0b",
-    roots: [{ path: "swagger.yml", operations: ["/user", "/sites", "/dns_zones", "/sites/{site_id}/build_hooks"].map(get) }],
-    undocumented: [
-      {
-        ...get("/forms"),
-        note: "connectors/netlify.ts lists forms here; the API lists them per site (/sites/{site_id}/forms), so the call fails and the connector reports no forms",
-      },
-    ],
+    // Forms per site: the API has no account-wide GET /forms, which the
+    // connector called until #153 finding 3.
+    roots: [{ path: "swagger.yml", operations: ["/user", "/sites", "/dns_zones", "/sites/{site_id}/build_hooks", "/sites/{site_id}/forms"].map(get) }],
   },
   {
     name: "flyio-machines",
@@ -360,13 +327,9 @@ export const SOURCES: SpecSource[] = [
     // Railway's CLI commits the introspection result of backboard.railway.com/graphql/v2.
     pin: { repo: "railwayapp/cli", commit: "7da7f0d4dd6061656ed0b001c193945887ee645a", path: "src/gql/schema.json" },
     schema: "introspection",
+    // The plan query that selected Project.subscription (not in the schema)
+    // and the deprecated `plugins` were removed (#153 finding 4).
     queries: RAILWAY_QUERIES,
-    rejectedQueries: [
-      {
-        query: RAILWAY_PLAN_QUERY,
-        note: "connectors/railway.ts asks for Project.subscription { plan }, which the schema does not have (it has subscriptionType), so the plan query always fails and the cost estimate is always $0",
-      },
-    ],
   },
   {
     name: "azure",
@@ -412,6 +375,9 @@ export const SOURCES: SpecSource[] = [
     repo: "googleapis/google-api-go-client",
     commit: "2a50de2f986c6287e7c29d3bdfbf0e6defe9923c",
     documents: [
+      // Cloud Run v2 services.list takes one location ("cannot be the '-'
+      // wildcard"), so the connector lists locations with v1 first.
+      { path: "run/v1/run-api.json", operations: [{ id: "run.projects.locations.list", path: "/v1/projects/{project}/locations" }] },
       { path: "run/v2/run-api.json", operations: [{ id: "run.projects.locations.services.list", path: "/v2/projects/{project}/locations/{location}/services" }] },
       { path: "compute/v1/compute-api.json", operations: [{ id: "compute.instances.aggregatedList", path: "/compute/v1/projects/{project}/aggregated/instances" }] },
       { path: "sqladmin/v1/sqladmin-api.json", operations: [{ id: "sql.instances.list", path: "/v1/projects/{project}/instances" }] },

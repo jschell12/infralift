@@ -28,7 +28,6 @@ type Project {
   environments(after: String, before: String, first: Int, isEphemeral: Boolean, last: Int, sort: SortOrder): ProjectEnvironmentsConnection!
   id: ID!
   name: String!
-  plugins(after: String, before: String, first: Int, last: Int): ProjectPluginsConnection! @deprecated(reason: "Plugins have been removed")
   services(after: String, before: String, first: Int, last: Int): ProjectServicesConnection!
 }
 
@@ -48,27 +47,6 @@ type Environment {
 enum SortOrder {
   asc
   desc
-}
-
-type ProjectPluginsConnection {
-  edges: [ProjectPluginsConnectionEdge!]!
-}
-
-type ProjectPluginsConnectionEdge {
-  node: Plugin!
-}
-
-type Plugin {
-  friendlyName: String!
-  id: ID!
-  name: PluginType!
-}
-
-enum PluginType {
-  mongodb
-  mysql
-  postgresql
-  redis
 }
 
 type ProjectServicesConnection {

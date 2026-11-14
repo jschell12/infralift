@@ -5,11 +5,11 @@ import { herokuConnector } from "./heroku.js";
 import { firebaseConnector } from "./firebase.js";
 import { githubConnector, parseGithubExpiration } from "./github.js";
 import { readFileSync } from "node:fs";
-import { netlifyConnector } from "./netlify.js";
-import { renderConnector } from "./render.js";
+import { netlifyConnector, NETLIFY_FORMS_CONCURRENCY } from "./netlify.js";
+import { PLAN_COST_CENTS, renderConnector } from "./render.js";
 import { railwayConnector } from "./railway.js";
 import { flyioConnector } from "./flyio.js";
-import { digitaloceanConnector } from "./digitalocean.js";
+import { digitaloceanConnector, DO_SPACES_NOT_INVENTORIED } from "./digitalocean.js";
 import { gcpConnector } from "./gcp.js";
 import { azureConnector } from "./azure.js";
 import { getConnector } from "./index.js";
@@ -18,6 +18,7 @@ const cfVerify = JSON.parse(
   readFileSync(new URL("./__fixtures__/cloudflare-token-verify.json", import.meta.url), "utf8")
 );
 const cfApi = JSON.parse(readFileSync(new URL("./__fixtures__/cloudflare-api.json", import.meta.url), "utf8"));
+const renderApi = JSON.parse(readFileSync(new URL("./__fixtures__/render-api.json", import.meta.url), "utf8"));
 
 // ---------------------------------------------------------------------------
 // Shared fetch mock helpers
@@ -94,7 +95,7 @@ describe("vercel", () => {
 
   it("assess inventories projects and domains", async () => {
     mockRoute({
-      "/v9/projects": {
+      "/v10/projects": {
         projects: [
           { id: "p1", name: "my-app", framework: "nextjs", env: [{ key: "A" }] },
         ],
@@ -370,7 +371,7 @@ describe("netlify", () => {
         },
       ],
       "/dns_zones": [{ id: "z1", name: "example.com", records: [{ id: "r1" }, { id: "r2" }] }],
-      "/forms?": [{ id: "f1", name: "contact", submission_count: 42 }],
+      "/sites/s1/forms": [{ id: "f1", site_id: "s1", name: "contact", submission_count: 42 }],
       "/build_hooks": [{ id: "h1" }],
     });
 
@@ -385,6 +386,43 @@ describe("netlify", () => {
     expect(result.findings.some((f) => f.category === "cost")).toBe(true);
     expect(result.estimatedMonthlyCostCents).toBeNull();
   });
+
+  // #153 finding 3: there is no account-wide GET /forms; forms are per site.
+  it("reads forms per site, never at /forms, at most NETLIFY_FORMS_CONCURRENCY at a time", async () => {
+    const sites = Array.from({ length: 9 }, (_, i) => ({ id: `s${i}`, name: `site-${i}` }));
+    let inFlight = 0;
+    let peak = 0;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/sites?")) return ok(sites);
+      const m = url.match(/\/sites\/(s\d)\/forms$/);
+      if (m) {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 2));
+        inFlight--;
+        if (m[1] === "s3") return fail(500);
+        return ok([{ id: `f-${m[1]}`, site_id: m[1], name: "contact", submission_count: 1 }]);
+      }
+      return ok([]);
+    });
+    const result = await netlifyConnector.assess("tok");
+    const urls = fetchMock.mock.calls.map(([u]) => String(u));
+    expect(urls.filter((u) => /\/forms/.test(u) && !/\/sites\/s\d\/forms$/.test(u))).toEqual([]);
+    expect(urls.filter((u) => /\/forms$/.test(u))).toHaveLength(9);
+    expect(peak).toBe(NETLIFY_FORMS_CONCURRENCY);
+    const forms = result.inventory.filter((i) => i.type === "netlify:form");
+    expect(forms.map((f) => f.externalId).sort()).toEqual(["f-s0", "f-s1", "f-s2", "f-s4", "f-s5", "f-s6", "f-s7", "f-s8"]);
+    expect(forms.find((f) => f.externalId === "f-s0")).toMatchObject({ name: "site-0: contact", metadata: { siteId: "s0", submissionCount: 1 } });
+    // The site whose forms list failed is said, not silently left out.
+    expect(result.findings).toContainEqual(expect.objectContaining({ category: "inventory", title: "Forms not read for 1 site(s)" }));
+  });
+
+  it("says nothing about forms for an account with no sites", async () => {
+    mockRoute({ "/sites?": [] });
+    const result = await netlifyConnector.assess("tok");
+    expect(fetchMock.mock.calls.map(([u]) => String(u)).filter((u) => u.includes("/forms"))).toEqual([]);
+    expect(result.findings.filter((f) => /form/i.test(f.title))).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -397,37 +435,54 @@ describe("render", () => {
     expect(await renderConnector.verify("tok")).toBe(true);
   });
 
-  it("assess inventories services, postgres, redis, env groups with cost", async () => {
+  // __fixtures__/render-api.json follows Render's description (checked by
+  // e2e/specs/fixtures-match-specs.test.ts). The inline fixtures it replaced
+  // put plan and region on the service, where the API never sends them
+  // (#153 finding 5), so these tests priced services the real API could not.
+  it("assess inventories services, postgres, redis and env groups, priced and placed from serviceDetails", async () => {
     mockRoute({
-      "/services?": [
-        { service: { id: "svc1", name: "api", type: "web_service", plan: "starter", region: "oregon" } },
-      ],
-      "/postgres?": [
-        { postgres: { id: "db1", name: "main-db", plan: "starter", version: "16", region: "oregon" } },
-      ],
-      "/redis?": [
-        { redis: { id: "r1", name: "cache", plan: "free", region: "oregon" } },
-      ],
-      "/env-groups?": [
-        { envGroup: { id: "eg1", name: "shared", envVars: [{ key: "A" }, { key: "B" }] } },
-      ],
+      "/services?": renderApi["/services"],
+      "/postgres?": renderApi["/postgres"],
+      "/redis?": renderApi["/redis"],
+      "/env-groups?": renderApi["/env-groups"],
     });
 
     const result = await renderConnector.assess("tok");
-    const types = result.inventory.map((i) => i.type);
-    expect(types).toContain("render:web_service");
-    expect(types).toContain("render:postgres");
-    expect(types).toContain("render:redis");
-    expect(types).toContain("render:env_group");
-    expect(result.estimatedMonthlyCostCents).toBe(700);
+    const byId = new Map(result.inventory.map((i) => [i.externalId, i]));
+    expect([...byId.values()].map((i) => i.type).sort()).toEqual(
+      ["render:background_worker", "render:env_group", "render:postgres", "render:redis", "render:static_site", "render:web_service"]
+    );
+    expect(byId.get("srv-api0000000000000001")).toMatchObject({
+      region: "frankfurt",
+      monthlyCostCents: PLAN_COST_CENTS.pro_plus,
+      metadata: { plan: "pro_plus", runtime: "node", repo: "https://github.com/acme/api", autoDeploy: "yes" },
+    });
+    expect(byId.get("srv-wrk0000000000000002")).toMatchObject({ region: "oregon", monthlyCostCents: 700, metadata: { plan: "starter", runtime: "docker" } });
+    // A static site's details carry no plan or region: unpriced, not guessed.
+    expect(byId.get("srv-web0000000000000003")).toMatchObject({ region: null, monthlyCostCents: undefined, metadata: { plan: null, runtime: null } });
+    expect(byId.get("dpg-main000000000000001")).toMatchObject({ name: "main-db", region: "oregon", metadata: { plan: "basic_1gb" } });
+    expect(byId.get("evg-shared0000000000001")).toMatchObject({ name: "shared" });
+    expect(result.estimatedMonthlyCostCents).toBe(17500 + 700);
     expect(result.findings.some((f) => f.title.includes("Render Postgres"))).toBe(true);
+  });
+
+  it("prices underscore plan names, and ignores a plan the API puts nowhere but serviceDetails", async () => {
+    mockRoute({
+      "/services?": [
+        { cursor: "c1", service: { id: "a", name: "a", type: "web_service", serviceDetails: { plan: "starter_plus", region: "ohio", runtime: "go" } } },
+        { cursor: "c2", service: { id: "b", name: "b", type: "web_service", plan: "pro", region: "virginia", serviceDetails: {} } },
+      ],
+    });
+    const result = await renderConnector.assess("tok");
+    expect(result.inventory.find((i) => i.externalId === "a")).toMatchObject({ region: "ohio", monthlyCostCents: 1500 });
+    expect(result.inventory.find((i) => i.externalId === "b")).toMatchObject({ region: null, monthlyCostCents: undefined });
   });
 
   it("assess prices the services and makes no savings claim of its own", async () => {
     mockRoute({
       "/services?": [
-        { service: { id: "svc1", name: "api", type: "web_service", plan: "standard" } },
-        { service: { id: "svc2", name: "worker", type: "worker", plan: "standard" } },
+        { cursor: "c1", service: { id: "svc1", name: "api", type: "web_service", serviceDetails: { plan: "standard", region: "oregon", runtime: "node" } } },
+        { cursor: "c2", service: { id: "svc2", name: "worker", type: "background_worker", serviceDetails: { plan: "standard", region: "oregon", runtime: "node" } } },
       ],
       "/postgres?": [],
       "/redis?": [],
@@ -464,63 +519,41 @@ describe("railway", () => {
     expect(await railwayConnector.verify("bad")).toBe(false);
   });
 
-  it("assess inventories projects, services, plugins, environments", async () => {
-    // Railway uses two GraphQL calls: projects listing, then me.projects for usage
-    let callCount = 0;
-    fetchMock.mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) {
-        return ok({
-          data: {
-            projects: {
-              edges: [
-                {
-                  node: {
-                    id: "proj1",
-                    name: "my-project",
-                    description: "test project",
-                    services: {
-                      edges: [{ node: { id: "svc1", name: "web", icon: null } }],
-                    },
-                    plugins: {
-                      edges: [
-                        { node: { id: "pg1", name: "postgresql", friendlyName: "PostgreSQL" } },
-                      ],
-                    },
-                    environments: {
-                      edges: [{ node: { id: "env1", name: "production" } }],
-                    },
-                  },
-                },
-              ],
-            },
-          },
-        });
-      }
-      // Second call: me.projects for usage/plan
-      return ok({
+  // #153 finding 4: a second "plan" query selected Project.subscription,
+  // which Railway's schema does not have, so it always failed and the cost
+  // read $0; and `plugins` is deprecated ("Plugins have been removed").
+  it("assess makes one query, without plugins or subscription, and reports the cost as unknown", async () => {
+    fetchMock.mockImplementation(() =>
+      ok({
         data: {
-          me: {
-            id: "u1",
-            projects: {
-              edges: [
-                { node: { id: "proj1", name: "my-project", subscription: { plan: "hobby" } } },
-              ],
-            },
+          projects: {
+            edges: [
+              {
+                node: {
+                  id: "proj1",
+                  name: "my-project",
+                  description: "test project",
+                  services: { edges: [{ node: { id: "svc1", name: "web", icon: null } }] },
+                  environments: { edges: [{ node: { id: "env1", name: "production" } }] },
+                },
+              },
+            ],
           },
         },
-      });
-    });
+      })
+    );
 
     const result = await railwayConnector.assess("tok");
-    const types = result.inventory.map((i) => i.type);
-    expect(types).toContain("railway:project");
-    expect(types).toContain("railway:service");
-    expect(types).toContain("railway:plugin");
-    expect(types).toContain("railway:environment");
-    expect(result.findings.some((f) => f.title.includes("Railway Postgres"))).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const { query } = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(query).not.toMatch(/plugins|subscription/);
+    expect(result.inventory.map((i) => `${i.type} ${i.externalId}`)).toEqual([
+      "railway:project proj1",
+      "railway:service svc1",
+      "railway:environment env1",
+    ]);
     expect(result.findings.some((f) => f.category === "cost")).toBe(true);
-    expect(result.estimatedMonthlyCostCents).toBe(500);
+    expect(result.estimatedMonthlyCostCents).toBeNull();
   });
 });
 
@@ -644,7 +677,6 @@ describe("digitalocean", () => {
           },
         ],
       },
-      "/spaces?": { spaces: [] },
       "/domains?": {
         domains: [{ name: "example.com", ttl: 1800 }],
       },
@@ -660,6 +692,22 @@ describe("digitalocean", () => {
     expect(types).toContain("digitalocean:domain");
     expect(result.estimatedMonthlyCostCents).toBeGreaterThan(0);
     expect(result.findings.some((f) => f.title.includes("DO Managed Postgres"))).toBe(true);
+  });
+
+  // #153 finding 2: the connector called GET /v2/spaces, which is not in
+  // DigitalOcean's API, and the 404 left Spaces out without a word.
+  it("never calls a Spaces endpoint, and says Spaces were not inventoried and why", async () => {
+    mockRoute({ "/droplets?": { droplets: [] } });
+    const result = await digitaloceanConnector.assess("tok");
+    const urls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(urls.length).toBeGreaterThan(0);
+    expect(urls.filter((u) => /spaces/i.test(u))).toEqual([]);
+    expect(result.inventory.some((i) => i.type === "digitalocean:space")).toBe(false);
+    expect(result.notInventoried).toEqual([DO_SPACES_NOT_INVENTORIED]);
+    expect(DO_SPACES_NOT_INVENTORIED.reason).toMatch(/Spaces access key/);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({ category: "inventory", title: "Spaces not inventoried", detail: DO_SPACES_NOT_INVENTORIED.reason })
+    );
   });
 });
 

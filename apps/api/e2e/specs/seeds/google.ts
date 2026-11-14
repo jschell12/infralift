@@ -23,6 +23,11 @@ export const GOOGLE_NAMES = {
 } as const;
 
 export const GOOGLE_EXAMPLES: Record<string, unknown> = {
+  // One location: Prism answers every location's services.list with the same
+  // example, so a second location would list the service twice.
+  "/v1/projects/{project}/locations": {
+    locations: [{ name: `${project}/locations/us-central1`, locationId: "us-central1", displayName: "Iowa" }],
+  },
   "/v2/projects/{project}/locations/{location}/services": {
     services: [{ name: GOOGLE_NAMES.runService, uri: "https://e2e-run-abc123-uc.a.run.app" }],
   },

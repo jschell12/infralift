@@ -11,7 +11,19 @@ cd "$(dirname "$0")/.."
 
 # This checkout's compose project and ports (apps/api/e2e/harness/ports.ts),
 # so a run in another worktree does not share or tear down this one's stack.
-eval "$(pnpm --silent --filter @infralift/api exec tsx e2e/harness/ports.ts)"
+# Captured first, not eval'd inline: `eval "$(cmd)"` succeeds when cmd fails
+# (it evals nothing), and the run would go on with compose's default project
+# and ports. ports.ts also refuses a preset COMPOSE_PROJECT_NAME or E2E_PORT_*
+# that disagrees with the layout.
+if ! layout="$(pnpm --silent --filter @infralift/api exec tsx e2e/harness/ports.ts)"; then
+  echo "e2e: could not work out this checkout's compose project and ports (apps/api/e2e/harness/ports.ts failed; its message is above)" >&2
+  exit 1
+fi
+if ! grep -q '^export COMPOSE_PROJECT_NAME=' <<<"$layout" || ! grep -q '^export E2E_PORT_BASE=' <<<"$layout"; then
+  echo "e2e: apps/api/e2e/harness/ports.ts printed no COMPOSE_PROJECT_NAME or E2E_PORT_BASE; refusing to start a stack with compose's defaults" >&2
+  exit 1
+fi
+eval "$layout"
 echo "e2e stack: project ${COMPOSE_PROJECT_NAME}, ports ${E2E_PORT_BASE}-$((E2E_PORT_BASE + 99))"
 
 compose=(docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.e2e.yml --profile tools --profile mocks)

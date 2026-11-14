@@ -47,7 +47,7 @@ response. Field selection is a function of explicit assignments (`pickProject`,
 `pickApp`, `pickAddon`), so adding a field requires editing that function and
 shows up in a diff. `--fields` prints the list.
 
-This matters concretely on Vercel: `GET /v9/projects` returns an `env` array
+This matters concretely on Vercel: `GET /v10/projects` returns an `env` array
 where each entry has a `value`. Vercel encrypts those, so they arrive as
 ciphertext rather than plaintext, but a collector that dumped the response
 would still drop about a kilobyte of opaque data per environment variable into
@@ -68,7 +68,7 @@ audit, no build step. What you read is what runs.
 
 | Script | Calls | Never calls |
 |---|---|---|
-| `vercel.mjs` | `GET /v9/projects?limit=100`<br>`GET /v5/domains?limit=100` | anything under `/v9/projects/{id}/env` |
+| `vercel.mjs` | `GET /v10/projects?limit=100` (then `&from=<pagination.next>` per further page)<br>`GET /v5/domains?limit=100` | anything under `/v10/projects/{id}/env` |
 | `heroku.mjs` | `GET /apps`<br>`GET /apps/{id}/formation`<br>`GET /apps/{id}/addons` | `GET /apps/{id}/config-vars` |
 
 This table is enforced, not documented: `bundle-parity.test.ts` in the API

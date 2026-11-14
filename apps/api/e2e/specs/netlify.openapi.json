@@ -266,6 +266,63 @@
      }
     }
    }
+  },
+  "/sites/{site_id}/forms": {
+   "get": {
+    "operationId": "listSiteForms",
+    "summary": "List a site's forms",
+    "tags": [
+     "form"
+    ],
+    "parameters": [
+     {
+      "name": "site_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/form"
+         }
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/netlify.ts)",
+          "value": [
+           {
+            "id": "e2e0form00000000000000001",
+            "site_id": "e2e0a0a0-0000-4000-8000-000000000201",
+            "name": "contact",
+            "submission_count": 3
+           }
+          ]
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/error"
+        }
+       }
+      }
+     }
+    }
+   }
   }
  },
  "components": {
@@ -818,6 +875,40 @@
      },
      "site_id": {
       "type": "string"
+     },
+     "created_at": {
+      "type": "string",
+      "format": "dateTime"
+     }
+    }
+   },
+   "form": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "site_id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "paths": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "submission_count": {
+      "type": "integer",
+      "format": "int32"
+     },
+     "fields": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
      },
      "created_at": {
       "type": "string",

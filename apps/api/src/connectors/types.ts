@@ -1,5 +1,6 @@
 import type {
   AssessmentFinding,
+  NotInventoried,
   Provider,
   ResourceInventoryItem,
 } from "@infralift/shared";
@@ -8,6 +9,10 @@ export interface ConnectorAssessment {
   inventory: ResourceInventoryItem[];
   findings: Omit<AssessmentFinding, "id">[];
   estimatedMonthlyCostCents: number | null;
+  /** Kinds of resource this credential cannot list at all, and why. The
+   *  unmanaged view returns them beside the list, and a connector that sets
+   *  this also says it in a finding, so neither reads as "there are none". */
+  notInventoried?: NotInventoried[];
   // No savings figure: connectors used to subtract a flat $20 VPS from the
   // bill, which contradicted the sized comparison. Savings are computed from
   // the inventory by buildMigrationOptions() (services/assessments.ts).

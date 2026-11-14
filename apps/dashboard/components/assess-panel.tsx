@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AssessmentSummary, ProviderConnectionSummary } from "@infralift/shared";
-import { api, formatCents, savingsNote, errorText } from "../lib/api";
+import { api, monthlyCostNow, savingsNote, errorText } from "../lib/api";
 import { findUnmanagedHref, latestCompletedAssessment, primaryFindAccount } from "../lib/adopt";
 import { isCloudAccount, replaceHref } from "../lib/connections";
 import { checkingText, useConnectionChecks } from "../lib/connection-checks";
@@ -205,7 +205,7 @@ export function AssessPanel({ highlight }: { highlight?: string | null }) {
               >
                 {latest && !running && (
                   <div className={`mt-3 border-t border-border pt-3 text-xs text-muted ${NUM}`}>
-                    {latest.resourceCount} resources &middot; {formatCents(latest.estimatedMonthlyCostCents)}/mo now
+                    {latest.resourceCount} resources &middot; {monthlyCostNow(latest.estimatedMonthlyCostCents)}
                     &middot; {savingsNote(latest)}
                   </div>
                 )}

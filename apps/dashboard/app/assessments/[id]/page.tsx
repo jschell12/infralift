@@ -210,7 +210,7 @@ export default function AssessmentReportPage({
         />
         <StatCard
           label="Estimated monthly cost"
-          value={formatCents(report.estimatedMonthlyCostCents)}
+          value={report.estimatedMonthlyCostCents === null ? "Unknown" : formatCents(report.estimatedMonthlyCostCents)}
           tone="danger"
           center
         />

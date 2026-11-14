@@ -128,6 +128,13 @@ export function formatCents(cents: number | null | undefined): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+/** An assessment's current monthly cost for a line of text: "$12.00/mo now",
+ *  or "monthly cost unknown" when the provider's API reports no billing (Vercel,
+ *  Netlify, Railway, GCP). Never "$0.00" for a cost nobody measured. */
+export function monthlyCostNow(cents: number | null | undefined): string {
+  return cents == null ? "monthly cost unknown" : `${formatCents(cents)}/mo now`;
+}
+
 /** An assessment's savings in a few words. An unknown bill reads "enter your
  * bill", never $0, and a negative figure is said as one rather than hidden. */
 export function savingsNote(a: {

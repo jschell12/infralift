@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, errorMessageFor, errorText, siteUrl } from "./api";
+import { ApiError, api, errorMessageFor, errorText, monthlyCostNow, siteUrl } from "./api";
 
 // Each body with a file named beside it is one the API sends, copied from
 // where that file builds it. The last four cases have no source: they are the
@@ -95,5 +95,16 @@ describe("siteUrl builds a stack project's URL only from settings it has", () =>
   ];
   it.each(cases)("%s", (_name, settings, expected) => {
     expect(siteUrl(settings)).toBe(expected);
+  });
+});
+
+// Railway, Vercel, Netlify and GCP report no billing, so their assessments
+// carry a null cost. It reads as unknown, never as $0.
+describe("monthlyCostNow", () => {
+  it("says unknown for a cost nobody measured, and the figure for one that was, including a real zero", () => {
+    expect(monthlyCostNow(null)).toBe("monthly cost unknown");
+    expect(monthlyCostNow(undefined)).toBe("monthly cost unknown");
+    expect(monthlyCostNow(1234)).toBe("$12.34/mo now");
+    expect(monthlyCostNow(0)).toBe("$0.00/mo now");
   });
 });

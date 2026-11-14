@@ -15,7 +15,7 @@
  *
  *   2. It captures a fixed list of fields, never a raw API response. See
  *      FIELDS below, or run --fields to print it. This matters more than it
- *      sounds: GET /v9/projects returns an `env` array where each entry
+ *      sounds: GET /v10/projects returns an `env` array where each entry
  *      carries a `value`. Vercel encrypts those values, so they arrive as
  *      ciphertext rather than plaintext, but a collector that dumped the raw
  *      response would still drop ~1KB of high-entropy data per environment
@@ -44,8 +44,8 @@ const API = "https://api.vercel.com";
 /** Every endpoint this collector calls. Printed by --dry-run. */
 export const ENDPOINTS = [
   {
-    path: "/v9/projects?limit=100",
-    why: "project list: framework, build settings, git link, env var count",
+    path: "/v10/projects?limit=100",
+    why: "project list: framework, build settings, git link, env var count. Paged: the next page passes the previous one's pagination.next as &from=",
   },
   {
     path: "/v5/domains?limit=100",
@@ -82,6 +82,39 @@ async function vfetch(token, path, fetchImpl) {
   });
   if (!res.ok) throw Object.assign(new Error(`Vercel API ${path} -> ${res.status}`), { status: res.status });
   return res.json();
+}
+
+/** Pages of projects read before giving up, so a provider that keeps
+ * answering with a next page cannot keep this running forever. 100 pages of
+ * 100 is far beyond any account this has been pointed at. */
+export const MAX_PROJECT_PAGES = 100;
+
+/**
+ * Every project in the account, following Vercel's pagination.
+ *
+ * GET /v10/projects answers either a bare array or { projects, pagination }
+ * (vercel/sdk's vercel-spec.json documents both). pagination.next is a
+ * continuation token (a string) or a timestamp (a number), and either one is
+ * passed back as `from`. A null or missing next is the last page. A next equal
+ * to the one just sent would ask for the same page again, so it ends the read
+ * too, with an error rather than a silently short list.
+ */
+async function listProjects(token, fetchImpl) {
+  const projects = [];
+  let from = null;
+  for (let page = 0; page < MAX_PROJECT_PAGES; page++) {
+    const path = from === null ? ENDPOINTS[0].path : `${ENDPOINTS[0].path}&from=${encodeURIComponent(String(from))}`;
+    const body = await vfetch(token, path, fetchImpl);
+    const items = Array.isArray(body) ? body : (body?.projects ?? []);
+    projects.push(...items);
+    const next = Array.isArray(body) ? null : (body?.pagination?.next ?? null);
+    if (next === null || items.length === 0) return projects;
+    if (String(next) === String(from)) {
+      throw new Error(`Vercel API /v10/projects returned the same next page (${next}) twice`);
+    }
+    from = next;
+  }
+  throw new Error(`Vercel API /v10/projects still had more pages after ${MAX_PROJECT_PAGES}`);
 }
 
 /**
@@ -136,8 +169,7 @@ export async function collect({
 } = {}) {
   if (!token) throw new Error("A Vercel token is required.");
 
-  const projectsRes = await vfetch(token, ENDPOINTS[0].path, fetchImpl);
-  const projects = (projectsRes.projects ?? []).map(pickProject);
+  const projects = (await listProjects(token, fetchImpl)).map(pickProject);
 
   // A token scoped without domain access is a normal, supported case. Record
   // that the read did not happen rather than reporting "no domains", so the

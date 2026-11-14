@@ -1,0 +1,43 @@
+{
+  "_source": "Hand-written in the shapes of Render's public API description (api-docs.render.com/openapi/render-public-api-1.json, pinned in apps/api/e2e/specs/sources.ts). Not a live capture. Checked against that description by apps/api/e2e/specs/fixtures-match-specs.test.ts. Plan, region and runtime sit under serviceDetails, and env groups are listed bare (no cursor wrapper).",
+  "/services": [
+    {
+      "cursor": "c1",
+      "service": {
+        "id": "srv-api0000000000000001",
+        "name": "api",
+        "type": "web_service",
+        "repo": "https://github.com/acme/api",
+        "autoDeploy": "yes",
+        "serviceDetails": { "plan": "pro_plus", "region": "frankfurt", "runtime": "node" }
+      }
+    },
+    {
+      "cursor": "c2",
+      "service": {
+        "id": "srv-wrk0000000000000002",
+        "name": "worker",
+        "type": "background_worker",
+        "serviceDetails": { "plan": "starter", "region": "oregon", "runtime": "docker" }
+      }
+    },
+    {
+      "cursor": "c3",
+      "service": {
+        "id": "srv-web0000000000000003",
+        "name": "marketing",
+        "type": "static_site",
+        "serviceDetails": { "buildCommand": "npm run build", "publishPath": "dist", "url": "https://marketing.onrender.com" }
+      }
+    }
+  ],
+  "/postgres": [
+    { "cursor": "c1", "postgres": { "id": "dpg-main000000000000001", "name": "main-db", "databaseName": "app", "plan": "basic_1gb", "version": "16", "region": "oregon", "status": "available" } }
+  ],
+  "/redis": [
+    { "cursor": "c1", "redis": { "id": "red-cache00000000000001", "name": "cache", "plan": "free", "region": "oregon", "status": "available" } }
+  ],
+  "/env-groups": [
+    { "id": "evg-shared0000000000001", "name": "shared", "ownerId": "tea-acme00000000000001" }
+  ]
+}

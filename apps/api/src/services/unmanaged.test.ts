@@ -92,6 +92,7 @@ const { INVENTORY_TTL_MS, cloudflareAccountsOf, commonAwsRegion, encodeCursor, r
 );
 const { ledgerKey } = await import("./managed-resources.js");
 const { cloudflareConnector } = await import("../connectors/cloudflare.js");
+const { DO_SPACES_NOT_INVENTORIED } = await import("../connectors/digitalocean.js");
 
 // -- the account and GitHub, over fetch ---------------------------------------------
 
@@ -108,6 +109,9 @@ function fakeNetwork() {
       if (url === `https://sqladmin.googleapis.com/v1/projects/${gcp.projectId}/instances`) return json(gcp.sqlInstances);
       if (url === `https://storage.googleapis.com/storage/v1/b?project=${gcp.projectId}`) return json(gcp.buckets);
       if (url.includes("googleapis.com")) return json({ error: { code: 403, status: "PERMISSION_DENIED" } }, 403);
+      // DigitalOcean: one droplet; every other list is empty.
+      if (url.startsWith("https://api.digitalocean.com/v2/droplets")) return json({ droplets: [{ id: 7, name: "web-1", region: { slug: "nyc3" } }] });
+      if (url.startsWith("https://api.digitalocean.com/v2/")) return json({});
       if (url.startsWith("https://api.cloudflare.com/client/v4")) {
         if (url.includes("/accounts?per_page")) cloudflareCalls++;
         if (cloudflareStatus !== 200) return json({ success: false, errors: [] }, cloudflareStatus);
@@ -137,6 +141,7 @@ const CONNECTION = {
   updatedAt: new Date("2026-11-10T00:00:00Z"),
 };
 const GCP_CONNECTION = { ...CONNECTION, id: "gcp-conn", provider: "gcp", label: "gcp", encryptedToken: GCP_KEY };
+const DO_CONNECTION = { ...CONNECTION, id: "do-conn", provider: "digitalocean", label: "do" };
 // Production 2026-11-13: a Firebase connection whose stored secret is not a
 // service account JSON key logged "inventory of connection ... failed
 // (firebase): Firebase connection must be a service account JSON key" and the
@@ -157,6 +162,7 @@ function connections(where: { id?: string; orgId: string; provider?: string }) {
   if (where.provider === "github") return { id: "gh-conn", orgId: "org-a", provider: "github", encryptedToken: "enc" };
   if (where.id === "cf-conn") return CONNECTION;
   if (where.id === "gcp-conn") return GCP_CONNECTION;
+  if (where.id === "do-conn") return DO_CONNECTION;
   if (where.id === "fb-conn") return FIREBASE_BAD_KEY;
   if (where.id === "aws-conn") return AWS_CONNECTION;
   if (where.id === "gh-conn") return { ...CONNECTION, id: "gh-conn", provider: "github" };
@@ -358,6 +364,16 @@ describe("GET /connections/:id/unmanaged", () => {
     expect(h.connFindFirst.mock.calls[0][0].where).toEqual({ id: "cf-conn", orgId: "org-a" });
     expect(h.ledgerFindMany.mock.calls[0][0].where).toEqual({ orgId: "org-a", providerConnectionId: "cf-conn" });
     expect(out.headers["x-next-cursor"]).toBeUndefined();
+  });
+
+  // #153 finding 2: a DigitalOcean token cannot list Spaces at all. The page
+  // says so beside the list, so "1 found" is not read as the whole account.
+  it("says what the connection could not inventory, and nothing for a provider that left nothing out", async () => {
+    const out = await list({}, { id: "do-conn" });
+    expect(out.status).toBe(200);
+    expect(out.body).toMatchObject({ provider: "digitalocean", total: 1 });
+    expect(out.body.notInventoried).toEqual([DO_SPACES_NOT_INVENTORIED]);
+    expect((await list()).body.notInventoried).toEqual([]);
   });
 
   it("404s another org's connection without calling the provider", async () => {
