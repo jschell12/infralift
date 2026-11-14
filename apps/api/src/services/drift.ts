@@ -7,6 +7,7 @@ import { checkSlug } from "../lib/import/check.js";
 import { DRIFT_JOB_NAME, driftJobName } from "../lib/import/contract.js";
 import { classifyDrift } from "../lib/import/result.js";
 import { markInvalidOnAuthFailure } from "./connections.js";
+import { log } from "../lib/log.js";
 
 // ---------------------------------------------------------------------------
 // Drift: did someone change the infrastructure outside Terraform?
@@ -133,7 +134,7 @@ export async function sweepDrift(now = new Date(), clientFor?: ClientFor): Promi
     try {
       if (await checkProjectDrift(project, now, clientFor)) n++;
     } catch (err) {
-      console.error(`drift check for project ${project.id} failed:`, err);
+      log.error({ err, projectId: project.id }, "drift check failed");
     }
   }
   return n;
@@ -141,7 +142,7 @@ export async function sweepDrift(now = new Date(), clientFor?: ClientFor): Promi
 
 /** Starts the drift sweep for this process, beside the job worker. */
 export function startDriftSweep(intervalMs = 15 * 60 * 1000): void {
-  const tick = () => void sweepDrift().catch((err) => console.error("drift sweep failed:", err));
+  const tick = () => void sweepDrift().catch((err) => log.error({ err }, "drift sweep failed"));
   tick();
   setInterval(tick, intervalMs).unref();
 }

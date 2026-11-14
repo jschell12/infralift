@@ -1,4 +1,5 @@
 import { claimAndRun } from "./queue.js";
+import { log } from "../log.js";
 
 /** Starts a queued job in the background: claims it for this process and runs
  *  it. If it cannot run now (the process stops first), the worker's sweep or
@@ -6,6 +7,6 @@ import { claimAndRun } from "./queue.js";
  *  so routes do not depend on how jobs are run. */
 export function startJob(jobId: string): void {
   void claimAndRun(jobId).catch((err) => {
-    console.error(`tf job ${jobId} failed:`, err);
+    log.error({ err, jobId }, "job failed to start");
   });
 }

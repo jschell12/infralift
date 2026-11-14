@@ -1,6 +1,7 @@
 import type { Project } from "@infralift/shared";
 import { prisma } from "../lib/db.js";
 import { PROJECT_ROW_INCLUDE, ProjectShapeError, toProjectView } from "../lib/projects/view.js";
+import { log } from "../lib/log.js";
 
 /** Most projects one list returns. A ceiling against an unbounded read, far
  *  above what an org has today, not a page size. */
@@ -21,7 +22,7 @@ export async function listProjects(orgId: string): Promise<Project[]> {
       projects.push(toProjectView(row));
     } catch (err) {
       if (!(err instanceof ProjectShapeError)) throw err;
-      console.error(err.message);
+      log.error({ err, projectId: err.projectId }, "project row has the wrong shape; left out of the list");
     }
   }
   return projects;

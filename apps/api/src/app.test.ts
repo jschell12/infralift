@@ -30,6 +30,22 @@ describe("the API survives a database outage", () => {
   }, 20000);
 });
 
+describe("liveness and readiness on the real app", () => {
+  it("is live but not ready while the database refuses connections", async () => {
+    expect((await fetch(url + "/health")).status).toBe(200);
+    const ready = await fetch(url + "/ready");
+    expect(ready.status).toBe(503);
+    expect(await ready.json()).toEqual({ ok: false, database: "unavailable" });
+  }, 20000);
+
+  it("sends a request id on every response, the 500s included", async () => {
+    const res = await fetch(url + "/workspaces");
+    const id = res.headers.get("x-request-id");
+    expect(id).toBeTruthy();
+    expect(await res.json()).toEqual({ error: "internal error", requestId: id });
+  }, 20000);
+});
+
 describe("every handler on the real app is wrapped", () => {
   // A router mounted after catchAsyncErrors(app) in app.ts would be skipped
   // silently. This walks the same tree and fails on any unwrapped handler.

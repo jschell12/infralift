@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import type {
@@ -34,6 +33,7 @@ import { toInventoryItem } from "../lib/inventory.js";
 import { intQuery } from "../lib/query.js";
 import { markInvalidOnAuthFailure } from "../services/connections.js";
 import { RATE_LIMITS, rateLimit } from "../lib/rate-limit.js";
+import { currentRequestId, log } from "../lib/log.js";
 
 export const assessmentsRouter = Router();
 
@@ -156,10 +156,8 @@ assessmentsRouter.post("/run", rateLimit(RATE_LIMITS.assessmentRun), handle(asyn
     // The provider's own message goes to the log, never the response: it can
     // quote a response body, and the dashboard shows a sentence instead. The
     // request id ties the two together when a customer reports it.
-    const requestId = randomUUID();
-    console.error(
-      `assessment ${assessment.id} failed (${connection.provider}) [request ${requestId}]: ${message}`
-    );
+    const requestId = req.id ?? currentRequestId();
+    log.error({ err, assessmentId: assessment.id, provider: connection.provider }, "assessment failed");
     throw new Upstream("Assessment failed", { assessmentId: assessment.id, requestId });
   }
 
@@ -215,10 +213,8 @@ assessmentsRouter.post("/from-bundle", handle(async (req, res) => {
     // Sent by hand on purpose: a failed bundle assessment is our fault (500),
     // and the body carries the assessment id the dashboard links to. The
     // analyzer's message is logged under a request id, not sent.
-    const requestId = randomUUID();
-    console.error(
-      `bundle assessment ${assessment.id} failed [request ${requestId}]: ${message}`
-    );
+    const requestId = req.id ?? currentRequestId();
+    log.error({ err, assessmentId: assessment.id }, "bundle assessment failed");
     return res.status(500).json({
       error: "Could not read that snapshot",
       assessmentId: assessment.id,
@@ -325,7 +321,7 @@ assessmentsRouter.get("/:id", handle(async (req, res) => {
         }),
       };
     } catch (err) {
-      console.error(`report extras failed for assessment ${summary.id}:`, err);
+      log.error({ err, assessmentId: summary.id }, "report extras failed");
     }
   }
 

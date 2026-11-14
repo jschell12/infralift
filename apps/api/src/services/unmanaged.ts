@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { ProviderConnection } from "@prisma/client";
 import type {
   AdoptBackendDefaults,
@@ -20,6 +19,7 @@ import { connectionSecret } from "./aws-access.js";
 import { authFailureStatus, markInvalid, markInvalidOnAuthFailure, providerLabel } from "./connections.js";
 import { openAdoption } from "./imports.js";
 import { ledgerKey, managedKeys, projectConnection, type LedgerKey } from "./managed-resources.js";
+import { currentRequestId, log } from "../lib/log.js";
 
 // ---------------------------------------------------------------------------
 // "Adopt from an account" (ADR 0010, starting point 1): what is in a
@@ -136,14 +136,13 @@ async function readInventory(connection: ProviderConnection): Promise<ResourceIn
   } catch (err) {
     if (err instanceof CredentialFormatError) {
       await markInvalid(connection.id, `the saved credential isn't ${err.expected}; replace it`).catch((markErr) =>
-        console.error(`could not mark connection ${connection.id} invalid:`, markErr)
+        log.error({ err: markErr, connectionId: connection.id }, "could not mark connection invalid")
       );
     } else {
       await markInvalidOnAuthFailure(connection, err, "connector", "an inventory of the account");
     }
-    const requestId = randomUUID();
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`inventory of connection ${connection.id} failed (${connection.provider}) [request ${requestId}]: ${message}`);
+    const requestId = currentRequestId();
+    log.error({ err, connectionId: connection.id, provider: connection.provider }, "inventory of connection failed");
     throw inventoryFailure(connection, err, requestId);
   }
 }

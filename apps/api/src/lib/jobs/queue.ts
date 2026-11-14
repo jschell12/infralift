@@ -3,6 +3,8 @@ import { prisma } from "../db.js";
 import { runJob } from "../tf/pipeline.js";
 import { failStuckAssessments } from "../../services/assessments.js";
 import { isTerminal, transition, type JobState, type Stage, type Status } from "./state.js";
+import { jobFailureMessage } from "./failure-message.js";
+import { log } from "../log.js";
 
 // ---------------------------------------------------------------------------
 // Job queue. A TfJob row is the queue entry: it is created "queued/pending",
@@ -84,7 +86,8 @@ async function claimThenRun(jobId: string): Promise<void> {
   try {
     await runJob(jobId);
   } catch (err) {
-    const message = `could not start: ${err instanceof Error ? err.message : String(err)}`.slice(0, 280);
+    // A sentence for the customer; the error itself is logged by the caller.
+    const message = `could not start: ${jobFailureMessage(err, { jobId, stage: "queued" })}`.slice(0, 280);
     await prisma.tfJob.updateMany({ where: { id: jobId, status: "pending" }, data: { status: "errored", statusMessage: message } });
     throw err;
   }
@@ -146,26 +149,26 @@ let timer: ReturnType<typeof setInterval> | null = null;
  *  Each part logs its own failure so one cannot stop the others. */
 export async function workerTick(): Promise<void> {
   const overdue = await failOverdueJobs().catch((err) => {
-    console.error("job worker: overdue sweep failed:", err);
+    log.error({ err }, "job worker: overdue sweep failed");
     return 0;
   });
-  if (overdue) console.log(`job worker: marked ${overdue} overdue job(s) as errored`);
+  if (overdue) log.info({ count: overdue }, "job worker: marked overdue jobs as errored");
   const stale = await failStuckAssessments().catch((err) => {
-    console.error("job worker: assessment sweep failed:", err);
+    log.error({ err }, "job worker: assessment sweep failed");
     return 0;
   });
-  if (stale) console.log(`job worker: marked ${stale} stuck assessment(s) as failed`);
+  if (stale) log.info({ count: stale }, "job worker: marked stuck assessments as failed");
   for (const id of await sweep()) {
     if (!accepting) return;
-    await claimAndRun(id).catch((err) => console.error(`tf job ${id} failed:`, err));
+    await claimAndRun(id).catch((err) => log.error({ err, jobId: id }, "job failed to start"));
   }
 }
 
 /** Starts the worker for this process: recover, then sweep on an interval. */
 export async function startJobWorker(intervalMs = 15_000): Promise<void> {
   const recovered = await recoverInterrupted();
-  if (recovered) console.log(`job worker: marked ${recovered} interrupted job(s) as errored`);
-  const tick = () => workerTick().catch((err) => console.error("job worker sweep failed:", err));
+  if (recovered) log.info({ count: recovered }, "job worker: marked interrupted jobs as errored");
+  const tick = () => workerTick().catch((err) => log.error({ err }, "job worker sweep failed"));
   await tick();
   timer = setInterval(() => void tick(), intervalMs);
   timer.unref();

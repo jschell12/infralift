@@ -1,6 +1,7 @@
 import { prisma } from "../lib/db.js";
 import { RATE_LIMITS, RateLimiter, resetRateLimits } from "../lib/rate-limit.js";
 import { CHECK_CLAIM_MS, claimCheck, runCheck, runClaimedCheck } from "./connections.js";
+import { log } from "../lib/log.js";
 
 // ---------------------------------------------------------------------------
 // Connections are checked again on their own, so a credential that stopped
@@ -87,7 +88,7 @@ export async function dueForCheck(now = new Date(), limit = SWEEP_BATCH, orgId?:
 
 function logFailure(id: string, err: unknown): void {
   // Only the error's class and our own message: never a provider body.
-  console.error(`connection check ${id} failed: ${err instanceof Error ? err.message : String(err)}`);
+  log.error({ connectionId: id, err: err instanceof Error ? err.message : String(err) }, "connection check failed");
 }
 
 // -- the sweep ------------------------------------------------------------------
@@ -120,9 +121,9 @@ export function startConnectionCheckSweep(random: () => number = Math.random): v
     setTimeout(() => {
       void sweepConnectionChecks()
         .then((n) => {
-          if (n) console.log(`connection checks: checked ${n} connection(s)`);
+          if (n) log.info({ count: n }, "connection checks: checked connections");
         })
-        .catch((err) => console.error("connection check sweep failed:", err))
+        .catch((err) => log.error({ err }, "connection check sweep failed"))
         .finally(() => schedule(SWEEP_EVERY_MS));
     }, base + Math.floor(random() * SWEEP_JITTER_MS)).unref();
   };

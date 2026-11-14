@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
 import { pino, type Logger } from "pino";
 
 // ---------------------------------------------------------------------------
@@ -39,6 +40,12 @@ const contextStore = new AsyncLocalStorage<RequestContext>();
  *  job worker's timers, boot). */
 export function currentRequestContext(): RequestContext | undefined {
   return contextStore.getStore();
+}
+
+/** The id of the request being served, or a fresh one outside a request.
+ *  For a response that names the log line it ties to (a 502's requestId). */
+export function currentRequestId(): string {
+  return contextStore.getStore()?.requestId ?? randomUUID();
 }
 
 /** Runs `fn` with `ctx` as the request context. The middleware in

@@ -15,6 +15,7 @@
 import { prisma } from "../lib/db.js";
 import { channelFor } from "./channels.js";
 import { HTTP_TIMEOUTS_MS, httpFetch } from "../lib/http.js";
+import { log } from "../lib/log.js";
 
 const SITE = "infralift";
 const DATASET = "marketing_analytics";
@@ -173,12 +174,9 @@ async function pass(): Promise<void> {
     if (doneSet.has(day)) continue;
     try {
       await rollupDay(day);
-      console.log(`[analytics] rolled up ${day}`);
+      log.info({ day }, "analytics: rolled up day");
     } catch (e) {
-      console.error(
-        `[analytics] rollup failed for ${day}:`,
-        e instanceof Error ? e.message : e
-      );
+      log.error({ day, err: e instanceof Error ? e.message : String(e) }, "analytics: rollup failed");
     }
   }
 }
@@ -186,12 +184,10 @@ async function pass(): Promise<void> {
 /** Start the hourly analytics rollup loop. Call once after listen(). */
 export function startAnalyticsRollup(): void {
   if (!process.env.CF_ACCOUNT_ID || !process.env.CF_ANALYTICS_TOKEN) {
-    console.log(
-      "[analytics] rollup disabled (CF_ACCOUNT_ID / CF_ANALYTICS_TOKEN not set)"
-    );
+    log.info("analytics: rollup disabled (CF_ACCOUNT_ID / CF_ANALYTICS_TOKEN not set)");
     return;
   }
-  const run = () => void pass().catch((e) => console.error("[analytics]", e));
+  const run = () => void pass().catch((e) => log.error({ err: e }, "analytics: pass failed"));
   run();
   setInterval(run, INTERVAL_MS).unref();
 }

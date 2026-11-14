@@ -25,6 +25,7 @@ import {
   releaseAdoption,
   reserve,
 } from "./managed-resources.js";
+import { log } from "../lib/log.js";
 
 // ---------------------------------------------------------------------------
 // Importing existing Terraform, and adopting resources built by hand.
@@ -294,7 +295,7 @@ async function settleLedger(project: { id: string; orgId: string; importJson: un
     if (result.prState === "closed") await releaseAdoption(project.orgId, project.id);
     else if (result.state === "passed") await confirmAdoption(project.orgId, project.id);
   } catch (err) {
-    console.error(`could not update the managed-resource ledger for project ${project.id}:`, err);
+    log.error({ err, projectId: project.id }, "could not update the managed-resource ledger");
   }
 }
 

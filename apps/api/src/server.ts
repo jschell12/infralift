@@ -4,6 +4,7 @@ import { drainJobs, startJobWorker } from "./lib/jobs/queue.js";
 import { startConnectionCheckSweep } from "./services/connection-checks.js";
 import { startDriftSweep } from "./services/drift.js";
 import { resolveRuntimeEndpointsAtBoot } from "./lib/endpoints.js";
+import { log } from "./lib/log.js";
 
 // Before listening: an endpoint override outside development and test, or one
 // that is not a URL, stops the process here rather than failing the first provider call.
@@ -17,9 +18,9 @@ const port = Number(process.env.PORT ?? 4000);
 const SHUTDOWN_DRAIN_MS = Number(process.env.SHUTDOWN_DRAIN_MS ?? 25_000);
 
 const server = app.listen(port, () => {
-  console.log(`infralift api listening on :${port}`);
+  log.info({ port }, "infralift api listening");
   startAnalyticsRollup();
-  void startJobWorker().catch((err) => console.error("job worker failed to start:", err));
+  void startJobWorker().catch((err) => log.error({ err }, "job worker failed to start"));
   startDriftSweep();
   startConnectionCheckSweep();
 });
@@ -34,7 +35,7 @@ let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`${signal}: shutting down, waiting up to ${SHUTDOWN_DRAIN_MS / 1000}s for in-flight work`);
+  log.info({ signal, drainMs: SHUTDOWN_DRAIN_MS }, "shutting down, waiting for in-flight work");
 
   const serverClosed = new Promise<void>((resolve) => server.close(() => resolve()));
   server.closeIdleConnections();
@@ -43,7 +44,7 @@ async function shutdown(signal: string): Promise<void> {
     Promise.race([serverClosed, new Promise((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_MS).unref())]),
   ]);
   if (!jobs.drained) {
-    console.warn(`shutdown: ${jobs.stillRunning} job(s) still running; the next process marks them interrupted`);
+    log.warn({ stillRunning: jobs.stillRunning }, "shutdown: jobs still running; the next process marks them interrupted");
   }
   process.exit(0);
 }

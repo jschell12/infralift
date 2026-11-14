@@ -13,6 +13,9 @@
 // dashboard as they are; changing one is a data migration.
 // ---------------------------------------------------------------------------
 
+import { log, serializeError } from "../log.js";
+import { jobFailureMessage } from "./failure-message.js";
+
 export const STAGES = ["queued", "render", "repo", "commit", "workspace", "complete"] as const;
 export type Stage = (typeof STAGES)[number];
 
@@ -114,16 +117,20 @@ export class JobRun {
 
   /** For catch blocks: records the error unless the job already ended. It
    *  never throws (a failed write is logged), so an error path cannot raise a
-   *  second error. */
+   *  second error. What is stored is a sentence for the customer
+   *  (jobFailureMessage); the error itself goes to the log under the job id. */
   async failSafely(err: unknown) {
+    const { stage } = this.state;
     if (isTerminal(this.state)) {
-      console.error(`job ${this.jobId} errored after it ended:`, err);
+      log.error({ err, jobId: this.jobId, stage }, "job errored after it ended");
       return;
     }
+    const shown = jobFailureMessage(err, { jobId: this.jobId, stage });
+    log.error({ err, jobId: this.jobId, stage, shown }, "job failed");
     try {
-      await this.fail(err instanceof Error ? err.message : String(err));
+      await this.fail(shown);
     } catch (writeErr) {
-      console.error(`job ${this.jobId} could not record its error:`, err, writeErr);
+      log.error({ err, writeError: serializeError(writeErr), jobId: this.jobId, stage }, "job could not record its error");
     }
   }
 }

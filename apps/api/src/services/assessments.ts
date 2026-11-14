@@ -5,6 +5,7 @@ import { toInventoryItem } from "../lib/inventory.js";
 import { Conflict, NotFound } from "../lib/errors.js";
 import { buildMigrationOptions, resolveCurrentSpend } from "../lib/options.js";
 import { headlineNetSavings } from "../lib/report-extras.js";
+import { log } from "../lib/log.js";
 
 /** How long an assessment may sit at "running". A token assessment runs
  *  inside its HTTP request, so one still running after this belonged to a
@@ -148,7 +149,7 @@ export async function assessmentSavings(
     });
     return { currentSpend, netMonthlySavingsCents: headlineNetSavings(report) };
   } catch (err) {
-    console.error(`savings comparison failed for assessment ${a.id}:`, err);
+    log.error({ err, assessmentId: a.id }, "savings comparison failed");
     return { currentSpend, netMonthlySavingsCents: null };
   }
 }

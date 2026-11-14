@@ -9,6 +9,7 @@ import { startJob } from "../lib/jobs/start.js";
 import { isUniqueViolation } from "../lib/prisma-errors.js";
 import { generateHcl, type CodegenOptions } from "../lib/tf/codegen.js";
 import { toCodegenSample } from "../lib/tf/sample.js";
+import { log } from "../lib/log.js";
 
 // ---------------------------------------------------------------------------
 // Codegen: Terraform generated from an assessment, and the approval that
@@ -65,7 +66,7 @@ export async function setCodegenUnlock(adminEmail: string, input: { orgId: strin
     data: { codegenUnlocked: input.unlocked },
     select: { id: true, name: true, codegenUnlocked: true },
   });
-  console.log(`codegen ${org.codegenUnlocked ? "unlocked" : "locked"} for org ${org.id} (${org.name}) by ${adminEmail}`);
+  log.info({ orgId: org.id, orgName: org.name, unlocked: org.codegenUnlocked, by: adminEmail }, "codegen gate changed");
   return org;
 }
 

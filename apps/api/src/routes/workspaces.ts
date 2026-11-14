@@ -27,6 +27,7 @@ import {
   type TfcCredential,
 } from "../lib/tf/extensions.js";
 import { RATE_LIMITS, rateLimit } from "../lib/rate-limit.js";
+import { log } from "../lib/log.js";
 
 export const workspacesRouter = Router();
 
@@ -73,7 +74,7 @@ function tfcFailure(err: unknown): never {
     // the body, which can echo request detail.
     throw new Upstream(`Terraform Cloud returned ${err.statusCode} for ${err.method} ${err.path}`);
   }
-  console.error("terraform cloud call failed:", err);
+  log.error({ err }, "terraform cloud call failed");
   throw new Upstream("could not complete the request to Terraform Cloud");
 }
 
