@@ -5,8 +5,8 @@ import { startConnectionCheckSweep } from "./services/connection-checks.js";
 import { startDriftSweep } from "./services/drift.js";
 import { resolveRuntimeEndpointsAtBoot } from "./lib/endpoints.js";
 
-// Before listening: an endpoint override in production, or one that is not a
-// URL, stops the process here rather than failing the first provider call.
+// Before listening: an endpoint override outside development and test, or one
+// that is not a URL, stops the process here rather than failing the first provider call.
 resolveRuntimeEndpointsAtBoot();
 
 const port = Number(process.env.PORT ?? 4000);

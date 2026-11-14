@@ -41,3 +41,40 @@ resource "aws_sns_topic" "events" {
   name = "e2e-handmade-events"
   tags = { env = "e2e" }
 }
+
+# Created by the provider, which sends KeyUsage = ENCRYPT_DECRYPT. A key made
+# through moto's API with no options comes back without KeyUsage (real AWS
+# always returns it), and its generated code would then plan a replacement;
+# see GENERATED_CLEANUP_RULES in src/lib/import/cleanup.ts.
+resource "aws_kms_key" "data" {
+  description = "e2e handmade key"
+  tags        = { env = "e2e" }
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.42.0.0/16"
+  tags       = { env = "e2e" }
+}
+
+resource "aws_subnet" "a" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.42.1.0/24"
+  availability_zone = "us-east-1a"
+  tags              = { env = "e2e" }
+}
+
+resource "aws_security_group" "web" {
+  name        = "e2e-handmade-web"
+  description = "hand made"
+  vpc_id      = aws_vpc.main.id
+  tags        = { env = "e2e" }
+}
+
+resource "aws_cloudwatch_log_group" "app" {
+  name = "/e2e/handmade/app"
+  tags = { env = "e2e" }
+}
+
+# The SQS queue is not here: the provider (5.x) would create it at 256 KiB,
+# but a queue made in the console or CLI gets SQS's 1 MiB default, which is
+# the case that matters. The suite creates it through moto's API instead.

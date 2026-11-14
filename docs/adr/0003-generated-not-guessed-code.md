@@ -12,4 +12,4 @@ The codegen that writes resource blocks from an assessment's inventory guesses a
 
 ## Cost
 
-The generated code is verbose and sometimes needs hand edits before the plan passes. The check commits it to the PR branch with the workflow's own token, which starts no new workflow run, so the check records its result on that commit itself.
+The generated code is verbose and sometimes needs hand edits before the plan passes. Edits the provider forces on every run (hashicorp/aws 5.x writes `bucket_prefix = ""` beside `bucket`, empty enums it then rejects) are made by the check itself, from a rule table (`lib/import/cleanup.ts`), before it plans; the plan still compares the result against what is running, so a removal cannot hide a difference. The check commits it to the PR branch with the workflow's own token, which starts no new workflow run, so the check records its result on that commit itself.

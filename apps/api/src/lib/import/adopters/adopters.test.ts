@@ -27,7 +27,6 @@ describe("aws adopter", () => {
     [`arn:aws:rds:us-west-2:${ACCT}:db:orders-db`, "aws_db_instance", "orders-db", "us_west_2"],
     [`arn:aws:rds:us-west-2:${ACCT}:cluster:orders-cluster`, "aws_rds_cluster", "orders-cluster", "us_west_2"],
     [`arn:aws:lambda:us-west-2:${ACCT}:function:resize-images`, "aws_lambda_function", "resize-images", "us_west_2"],
-    [`arn:aws:sqs:us-west-2:${ACCT}:jobs`, "aws_sqs_queue", `https://sqs.us-west-2.amazonaws.com/${ACCT}/jobs`, "us_west_2"],
     [`arn:aws:sns:us-west-2:${ACCT}:alerts`, "aws_sns_topic", `arn:aws:sns:us-west-2:${ACCT}:alerts`, "us_west_2"],
     [`arn:aws:dynamodb:us-west-2:${ACCT}:table/users`, "aws_dynamodb_table", "users", "us_west_2"],
     [`arn:aws:ecr:us-west-2:${ACCT}:repository/team/api`, "aws_ecr_repository", "team/api", "us_west_2"],
@@ -61,6 +60,18 @@ describe("aws adopter", () => {
     expect(plan.skipped).toEqual([]);
     expect(plan.imports[0]).toMatchObject({ to: `${tf}.thing`, id });
     expect(plan.imports[0].provider).toBe(alias && `aws.${alias}`);
+  });
+
+  it("does not adopt SQS queues yet: provider 5.x cannot write their 1 MiB default", () => {
+    const plan = planAdoption("aws", [awsItem(`arn:aws:sqs:us-west-2:${ACCT}:jobs`, "jobs", "us-west-2")]);
+    expect(plan.imports).toEqual([]);
+    expect(plan.skipped).toEqual([
+      {
+        type: "aws:any",
+        name: "jobs",
+        reason: "not adoptable yet: SQS queues default to a 1 MiB message size, which the AWS provider version adoption uses (5.x) cannot write",
+      },
+    ]);
   });
 
   it("skips with a reason when the ARN cannot produce the import id", () => {
