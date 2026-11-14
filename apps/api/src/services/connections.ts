@@ -12,6 +12,7 @@ import { TfcClient, TfcClientError, tfcBaseUrl } from "../lib/tf/tfc-client.js";
 import { TFC_PROVIDER } from "../lib/tf/tfc-connection.js";
 import { UnsafeHostError, assertPublicHost, tfcCredentialSchema } from "../lib/tf/extensions.js";
 import { log } from "../lib/log.js";
+import { isUniqueViolation } from "../lib/prisma-errors.js";
 
 // ---------------------------------------------------------------------------
 // A connection's life after it is added: verify it again, replace its
@@ -140,20 +141,30 @@ export async function createConnection(
 ): Promise<ProviderConnectionSummary> {
   const secret = await connectionSecret(orgId, input.provider, input.token);
   const outcome = await checkCredential(input.provider, secret);
-  const connection = await prisma.providerConnection.create({
-    data: {
-      orgId,
-      provider: input.provider,
-      label: input.label,
-      encryptedToken: encryptToken(secret),
-      status: outcome.valid ? "valid" : outcome.timedOut ? "unverified" : "invalid",
-      lastVerifiedAt: outcome.valid ? new Date() : null,
-      lastCheckedAt: new Date(),
-      lastError: outcome.reason,
-      expiresAt: outcome.expiresAt,
-    },
-  });
-  return toSummary(connection);
+  try {
+    const connection = await prisma.providerConnection.create({
+      data: {
+        orgId,
+        provider: input.provider,
+        label: input.label,
+        encryptedToken: encryptToken(secret),
+        status: outcome.valid ? "valid" : outcome.timedOut ? "unverified" : "invalid",
+        lastVerifiedAt: outcome.valid ? new Date() : null,
+        lastCheckedAt: new Date(),
+        lastError: outcome.reason,
+        expiresAt: outcome.expiresAt,
+      },
+    });
+    return toSummary(connection);
+  } catch (err) {
+    // Labels are unique per org and provider (@@unique([orgId, provider,
+    // label])). Caught on the insert rather than checked first, so two
+    // requests racing for one label cannot both pass a check.
+    if (isUniqueViolation(err)) {
+      throw new Conflict(`You already have a ${providerLabel(input.provider)} connection called "${input.label}". Pick another name, or replace that connection's credential instead.`);
+    }
+    throw err;
+  }
 }
 
 // -- checking a connection again ----------------------------------------------

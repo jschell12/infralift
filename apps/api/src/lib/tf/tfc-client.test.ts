@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { TFC_WORKSPACE_PAGES, TfcClient } from "./tfc-client.js";
+import { TFC_WORKSPACE_PAGES, TfcClient, tfcBaseUrl } from "./tfc-client.js";
 
 // Response shapes measured against app.terraform.io on 2026-10-08, not
 // taken from the docs. The docs suggested a 404 for a configuration version
@@ -18,6 +18,17 @@ function respond(status: number, body: string) {
 afterEach(() => vi.unstubAllGlobals());
 
 const client = () => new TfcClient("t", "acme");
+
+describe("tfcBaseUrl", () => {
+  it("takes app.terraform.io from the endpoints (lib/endpoints.ts), and a TFE host from the connection", () => {
+    const endpoints = { tfcApi: "http://127.0.0.1:9/api/v2" };
+    expect(tfcBaseUrl(null, endpoints)).toBe("http://127.0.0.1:9/api/v2");
+    expect(tfcBaseUrl("app.terraform.io", endpoints)).toBe("http://127.0.0.1:9/api/v2");
+    expect(tfcBaseUrl("tfe.acme.example", endpoints)).toBe("https://tfe.acme.example/api/v2");
+    // With no override in the environment, the real API.
+    expect(tfcBaseUrl()).toBe("https://app.terraform.io/api/v2");
+  });
+});
 
 describe("TfcClient against measured responses", () => {
   it("getIngress treats a 200 with a null body as no ingress", async () => {

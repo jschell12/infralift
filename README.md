@@ -41,7 +41,7 @@ make e2e                              # end to end, no cloud accounts (Docker)
 
 ## Testing without cloud accounts
 
-`make e2e` (or `pnpm e2e`) runs the adopt path end to end on your machine with no cloud account, no git host and no spend. It needs Docker. It brings up `docker-compose.e2e.yml`, runs `apps/api/e2e`, and tears the stack down; a run takes a few minutes once the images and providers are cached. `E2E_KEEP=1 make e2e` leaves the stack up.
+`make e2e` (or `pnpm e2e`) runs the adopt path end to end on your machine with no cloud account, no git host and no spend. It needs Docker. It brings up `docker-compose.e2e.yml`, runs `apps/api/e2e`, and tears the stack down; a run takes a few minutes once the images and providers are cached. `E2E_KEEP=1 make e2e` leaves the stack up. Each checkout gets its own compose project and its own block of 100 ports, derived from its path (`apps/api/e2e/harness/ports.ts`; `scripts/e2e.sh` prints both), so suites in two worktrees can run at once; `E2E_PORT_BASE` and `E2E_PROJECT` override them.
 
 The API runs from source with every provider endpoint pointed at the stack through `INFRALIFT_ENDPOINT_*` variables (`apps/api/src/lib/endpoints.ts`, one per API; the defaults are the real endpoints). A server refuses to start with any of them set unless `NODE_ENV` is exactly `development` or `test` (unset or any other value refuses), because an override sends customer credentials to another host. The suite runs the API with `NODE_ENV=development`.
 
@@ -70,11 +70,11 @@ What the AWS run proves: the connection verifies by assuming a role, the unmanag
 
 What the provider run proves (`apps/api/e2e/providers.e2e.test.ts`): for each provider above marked mocked, the connection verifies and the unmanaged view lists every seeded resource, against Prism serving the vendor's own description (`--errors`, so a request the description would refuse is refused) or, for GraphQL, the provider fake (`apps/api/e2e/provider-fakes/`) validating each query against the vendor's schema and executing it with that schema's types. The seeds (`apps/api/e2e/specs/seeds/`) are checked at extraction against the response schemas and may only carry fields the description declares. Each provider gets its own API process, because the unmanaged view allows an org ten provider reads per ten minutes. Calls a connector makes that the vendor does not document are recorded in `apps/api/e2e/specs/sources.ts` (`undocumented`, `rejectedQueries`), and extraction fails if a pin bump makes one documented, so the finding gets revisited.
 
-The recorded fixtures the unit tests use are checked against the same subsets by `apps/api/apps/api/e2e/specs/fixtures-match-specs.test.ts` in the ordinary `pnpm test`: each must validate (with trimmed required fields filled) and may only carry declared fields. Exceptions where the vendor's description, not the fixture, is wrong are listed there with the reason.
+The recorded fixtures the unit tests use are checked against the same subsets by `apps/api/e2e/specs/fixtures-match-specs.test.ts` in the ordinary `pnpm test`: each must validate (with trimmed required fields filled) and may only carry declared fields. Exceptions where the vendor's description, not the fixture, is wrong are listed there with the reason.
 
 Not covered: GitLab, the dashboard, and the fixtures written inline in `apps/api/src/connectors/connectors.test.ts` (only the JSON fixture files are checked).
 
-`pnpm --filter @infralift/api e2e:specs` re-extracts every subset from its pin in `apps/api/e2e/specs/sources.ts` (`--check` fails if the committed files differ; name entries to extract only those). Each subset carries its upstream copyright and licence notice, and NOTICE lists them. Bumping a pin and re-running shows, as a diff, what changed in the vendor's contract for exactly the calls infralift makes.
+`pnpm --filter @infralift/api e2e:specs` re-extracts every subset from its pin in `apps/api/e2e/specs/sources.ts` (`--check` fails if the committed files differ; name entries to extract only those). Both need network access. `e2e:specs --check --offline` needs none: it checks that each committed subset names the pin `sources.ts` has, skips Render with a note (it is not committed), and does not re-extract, so it cannot catch a hand-edited subset; CI runs the full `--check`. Each subset carries its upstream copyright and licence notice, and NOTICE lists them. Bumping a pin and re-running shows, as a diff, what changed in the vendor's contract for exactly the calls infralift makes.
 
 ## Deploying
 

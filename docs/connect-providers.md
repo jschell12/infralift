@@ -74,6 +74,8 @@ AWS access works via a cross-account IAM role, not a pasted key. Choose **AWS** 
 
 **What we read:** the Resource Groups Tagging API (`tag:GetResources`) in each region, which lists resources that carry, or once carried, a tag; untagged resources do not appear. The inventory stops at 1,000 resources and the report says so when it does. From Cost Explorer, last full month's total unblended cost (`ce:GetCostAndUsage`, which AWS bills at $0.01 per request). If the role lacks `ce:GetCostAndUsage`, the report has no monthly spend and says why. Neither action can create, modify, or delete anything.
 
+**Adopting into Terraform:** the import check in your repository runs with its own read-only key, not this role. With `hashicorp/aws` 6.x, which adoption uses, that key also needs `s3:ListTagsForResource` to generate code for S3 buckets. See [ADR 0008](adr/0008-adoption-applies-a-saved-plan.md#upgrading-an-adopted-project-from-hashicorpaws-5x-to-673).
+
 **Availability:** AWS connections need infralift's own AWS principal configured on the server. Until it is, the AWS step of **Add connection** says AWS isn't available yet and adding an AWS connection is refused.
 
 ## Firebase / Google Cloud

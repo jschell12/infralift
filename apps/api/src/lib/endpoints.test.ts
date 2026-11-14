@@ -94,6 +94,25 @@ describe("resolveEndpoints", () => {
     }
   });
 
+  it("points Terraform Cloud at app.terraform.io unless overridden", () => {
+    expect(resolveEndpoints({}).endpoints.tfcApi).toBe("https://app.terraform.io/api/v2");
+    expect(resolveEndpoints({ NODE_ENV: "test", INFRALIFT_ENDPOINT_TFC_API: "http://127.0.0.1:9/api/v2/" }).endpoints.tfcApi).toBe("http://127.0.0.1:9/api/v2");
+  });
+
+  it("treats the older TFC_API_URL as an override under the same rule, not a bypass", () => {
+    // It used to be read straight from process.env, outside this guard.
+    expect(() => resolveEndpoints({ NODE_ENV: "production", TFC_API_URL: "https://evil.example/api/v2" })).toThrow(EndpointOverrideRefused);
+    expect(() => resolveEndpoints({ TFC_API_URL: "https://evil.example/api/v2" })).toThrow(/TFC_API_URL is set while NODE_ENV is unset/);
+    expect(() => resolveEndpoints({ NODE_ENV: "test", TFC_API_URL: "ftp://x" })).toThrow(InvalidEndpoint);
+    const dev = resolveEndpoints({ NODE_ENV: "development", TFC_API_URL: "http://127.0.0.1:9/api/v2" });
+    expect(dev.endpoints.tfcApi).toBe("http://127.0.0.1:9/api/v2");
+    expect(dev.overridden).toEqual(["TFC_API_URL"]);
+    // Both set: the current name wins, and a refusal names both.
+    const both = { INFRALIFT_ENDPOINT_TFC_API: "http://a.test", TFC_API_URL: "http://b.test" };
+    expect(resolveEndpoints({ ...both, NODE_ENV: "test" }).endpoints.tfcApi).toBe("http://a.test");
+    expect(() => resolveEndpoints({ ...both, NODE_ENV: "prod" })).toThrow(/TFC_API_URL, INFRALIFT_ENDPOINT_TFC_API are set/);
+  });
+
   it("names every variable INFRALIFT_ENDPOINT_*, once", () => {
     const vars = Object.values(ENDPOINT_SPECS).map((s) => s.env);
     expect(new Set(vars).size).toBe(vars.length);

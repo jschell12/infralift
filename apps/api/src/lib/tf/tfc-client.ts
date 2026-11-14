@@ -3,13 +3,16 @@
 // All TFC responses use JSON:API format ({ data: { id, type, attributes } }).
 
 import { httpFetch } from "../http.js";
+import { runtimeEndpoints } from "../endpoints.js";
 import { log } from "../log.js";
 
-const TFC_BASE = process.env.TFC_API_URL ?? "https://app.terraform.io/api/v2";
-
-/** API base for a TFC/TFE hostname. Terraform Enterprise serves the same v2 API. */
-export function tfcBaseUrl(hostname?: string | null): string {
-  if (!hostname || hostname === "app.terraform.io") return TFC_BASE;
+/** API base for a TFC/TFE hostname. Terraform Enterprise serves the same v2 API.
+ *  app.terraform.io resolves through lib/endpoints.ts (tfcApi), so pointing it
+ *  elsewhere (INFRALIFT_ENDPOINT_TFC_API, or the older TFC_API_URL) is refused
+ *  outside development and test like every other endpoint override: it would
+ *  send customers' TFC tokens to that host. */
+export function tfcBaseUrl(hostname?: string | null, endpoints: { tfcApi: string } = runtimeEndpoints()): string {
+  if (!hostname || hostname === "app.terraform.io") return endpoints.tfcApi;
   return `https://${hostname}/api/v2`;
 }
 
@@ -127,7 +130,7 @@ export class TfcClient {
   constructor(
     private token: string,
     private org: string,
-    private base: string = TFC_BASE,
+    private base: string = runtimeEndpoints().tfcApi,
   ) {}
 
   // -- internal helpers -----------------------------------------------------

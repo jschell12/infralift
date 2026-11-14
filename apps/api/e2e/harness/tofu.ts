@@ -21,7 +21,7 @@ function hostUser(): string[] {
  *  as the host user (HOME is /tmp, which any user can write).
  *  bash -eo pipefail, as GitHub Actions runs a `run:` step. */
 export function runInTofu(opts: { dir: string; cwd?: string; script: string; env?: Record<string, string> }): Promise<StepResult> {
-  const args = ["compose", "-f", STACK.composeFile, "--profile", "tools", "run", "--rm", "-T", ...hostUser(), "-e", "HOME=/tmp", "-v", `${opts.dir}:/work`, "-w", `/work/${opts.cwd ?? ""}`];
+  const args = ["compose", "-p", STACK.composeProject, "-f", STACK.composeFile, "--profile", "tools", "run", "--rm", "-T", ...hostUser(), "-e", "HOME=/tmp", "-v", `${opts.dir}:/work`, "-w", `/work/${opts.cwd ?? ""}`];
   for (const [k, v] of Object.entries(opts.env ?? {})) args.push("-e", `${k}=${v}`);
   args.push("tofu", "bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", opts.script);
   return new Promise((resolve, reject) => {

@@ -61,7 +61,7 @@ function ownApi(provider: string): { call: <T = any>(method: string, path: strin
  *  returns the unmanaged view's rows keyed "<type> <providerId>". */
 function connectAndList(provider: string, token: () => string | Promise<string>) {
   const { call } = ownApi(provider);
-  const state: { id?: string; rows?: Map<string, any>; status?: number; body?: any } = {};
+  const state: { id?: string; rows?: Map<string, any>; status?: number; body?: any; call: typeof call } = { call };
   it(`connects ${provider}: the credential verifies against the mock`, async () => {
     const { status, body } = await call("POST", "/connections", { provider, label: `e2e ${provider} ${RUN}`, token: await token() });
     expect(status, JSON.stringify(body)).toBe(201);
@@ -98,6 +98,11 @@ describe("DigitalOcean (Prism, digitalocean/openapi)", () => {
       ].sort()
     );
     expect(s.rows!.get(`digitalocean:droplet ${DO_SEED.droplet.id}`)).toMatchObject({ name: DO_SEED.droplet.name, region: "nyc3" });
+  });
+  it("refuses a second connection with the same label: 409 and a sentence, not a 500", async () => {
+    const { status, body } = await s.call("POST", "/connections", { provider: "digitalocean", label: `e2e digitalocean ${RUN}`, token: "e2e-digitalocean-token" });
+    expect(status, JSON.stringify(body)).toBe(409);
+    expect(body.error).toBe(`You already have a DigitalOcean connection called "e2e digitalocean ${RUN}". Pick another name, or replace that connection's credential instead.`);
   });
   it("finding: no Spaces, because GET /v2/spaces is not in DigitalOcean's API", async () => {
     expect([...s.rows!.keys()].some((k) => k.startsWith("digitalocean:space"))).toBe(false);

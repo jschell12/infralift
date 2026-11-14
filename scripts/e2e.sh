@@ -9,7 +9,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-compose=(docker compose -f docker-compose.e2e.yml --profile tools --profile mocks)
+# This checkout's compose project and ports (apps/api/e2e/harness/ports.ts),
+# so a run in another worktree does not share or tear down this one's stack.
+eval "$(pnpm --silent --filter @infralift/api exec tsx e2e/harness/ports.ts)"
+echo "e2e stack: project ${COMPOSE_PROJECT_NAME}, ports ${E2E_PORT_BASE}-$((E2E_PORT_BASE + 99))"
+
+compose=(docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.e2e.yml --profile tools --profile mocks)
 
 stop() {
   if [ "${E2E_KEEP:-}" = "1" ]; then
@@ -29,6 +34,6 @@ trap stop EXIT
 # Render's description has no licence, so its subset is not committed: write
 # it from the pin (verified by sha256) before Prism mounts the specs.
 pnpm --filter @infralift/api e2e:specs render
-docker compose -f docker-compose.e2e.yml --profile mocks up -d --wait
+docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.e2e.yml --profile mocks up -d --wait
 
 pnpm --filter @infralift/api exec vitest run --config vitest.e2e.config.ts "$@"

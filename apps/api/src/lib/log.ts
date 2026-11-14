@@ -96,6 +96,12 @@ export const SECRET_PATTERNS: RegExp[] = [
   /\bglpat-[A-Za-z0-9_-]{20,}/g, // GitLab personal access tokens
   /\bsk-ant-[A-Za-z0-9_-]{20,}/g, // Anthropic API keys
   /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, // AWS access key ids
+  /\b[A-Za-z0-9]{14}\.atlasv1\.[A-Za-z0-9_-]{20,}/g, // Terraform Cloud / Enterprise API tokens
+  /\bdo[opr]_v1_[A-Za-z0-9]{20,}/g, // DigitalOcean personal, OAuth and refresh tokens
+  /\bfo1_[A-Za-z0-9_-]{20,}/g, // Fly.io personal access tokens (older format)
+  /\bfm[12][ar]?_[A-Za-z0-9+/=_-]{20,}/g, // Fly.io macaroon tokens ("FlyV1 fm2_...")
+  /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}/g, // Stripe secret and restricted keys
+  /\bwhsec_[A-Za-z0-9]{16,}/g, // Stripe webhook signing secrets
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, // PEM keys (GCP service accounts)
 ];
 

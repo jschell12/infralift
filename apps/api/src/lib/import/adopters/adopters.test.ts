@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { planAdoption, renderAdoption } from "../adopt.js";
 import { adopterFor } from "./index.js";
+import { AWS_KINDS, parseArn } from "./aws.js";
 
 // ARN formats are the ones in the AWS Service Authorization Reference for each
 // service; import ids are those in the hashicorp/aws docs, and every resource
@@ -62,6 +63,22 @@ describe("aws adopter", () => {
     expect(plan.skipped).toEqual([]);
     expect(plan.imports[0]).toMatchObject({ to: `${tf}.thing`, id });
     expect(plan.imports[0].provider).toBe(alias && `aws.${alias}`);
+  });
+
+  it("never builds an SQS queue URL outside the aws partition, at either check", () => {
+    // China's queue URLs are on amazonaws.com.cn and GovCloud has its own
+    // hosts: an amazonaws.com URL there names a queue that does not exist.
+    for (const partition of ["aws-cn", "aws-us-gov"]) {
+      const region = partition === "aws-cn" ? "cn-north-1" : "us-gov-west-1";
+      const arn = `arn:${partition}:sqs:${region}:${ACCT}:jobs`;
+      expect(AWS_KINDS["sqs:"].id(parseArn(arn)!)).toEqual({
+        skip: `the queue URL SQS imports by is only derived for the aws partition, and this queue is in ${partition}`,
+      });
+      const plan = planAdoption("aws", [awsItem(arn, "jobs", region)]);
+      expect(plan.imports).toEqual([]);
+      expect(plan.skipped.map((s) => s.reason)).toEqual([`only the commercial aws partition is mapped, not ${partition}`]);
+    }
+    expect(AWS_KINDS["sqs:"].id(parseArn(`arn:aws:sqs:us-east-1:${ACCT}:jobs`)!)).toBe(`https://sqs.us-east-1.amazonaws.com/${ACCT}/jobs`);
   });
 
   it("skips with a reason when the ARN cannot produce the import id", () => {
