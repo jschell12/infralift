@@ -9,9 +9,9 @@
 // actionlint (which also shellchecks the workflows' run: scripts); in CI
 // actionlint is required, because a workflow that does not parse never runs.
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { listStacks, renderStack } from "../src/lib/stacks/index.js";
 import { renderImportCheck } from "../src/lib/import/check.js";
 import { renderApplyWorkflow } from "../src/lib/import/apply.js";
@@ -37,6 +37,45 @@ const has = (cmd: string) => {
   }
 };
 
+/** Every directory under root holding .tf files, except child modules under
+ *  a modules/ directory, which init and validate through the root that calls
+ *  them. Absolute paths, sorted so the log reads the same every run. */
+function rootModuleDirs(root: string): string[] {
+  const dirs: string[] = [];
+  const walk = (dir: string) => {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    if (entries.some((e) => e.isFile() && e.name.endsWith(".tf"))) dirs.push(dir);
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith(".") || e.name === "modules") continue;
+      walk(join(dir, e.name));
+    }
+  };
+  walk(root);
+  return dirs.sort();
+}
+
+function usesStateEncryption(dir: string): boolean {
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".tf"))
+    .some((f) => /^\s*encryption\s*\{/m.test(readFileSync(join(dir, f), "utf8")));
+}
+
+/** Shell scripts in the rendered output, relative to root. */
+function shellScripts(root: string): string[] {
+  const found: string[] = [];
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory() && !e.name.startsWith(".")) walk(join(dir, e.name));
+      else if (e.isFile() && e.name.endsWith(".sh")) found.push(relative(root, join(dir, e.name)));
+    }
+  };
+  walk(root);
+  return found.sort();
+}
+
+// One provider download per tool for the whole run, not one per directory.
+process.env.TF_PLUGIN_CACHE_DIR ??= mkdtempSync(join(tmpdir(), "stack-plugins-"));
+
 let failures = 0;
 for (const stack of listStacks()) {
   for (const delivery of stack.deliveries)
@@ -57,25 +96,22 @@ for (const stack of listStacks()) {
         writeFileSync(full, f.content);
         if (f.mode === "100755") chmodSync(full, 0o755);
       }
-      const infra = join(out, "deploy/infra");
-      run(out, "tofu", ["fmt", "-check", "-recursive", "deploy"]);
-      run(infra, "tofu", ["init", "-backend=false", "-input=false"]);
-      run(infra, "tofu", ["validate"]);
-      if (backend === "r2") {
-        const boot = join(out, "deploy/bootstrap");
-        run(boot, "tofu", ["init", "-backend=false", "-input=false"]);
-        run(boot, "tofu", ["validate"]);
-      } else {
-        // A TFC workspace runs the root module with terraform, not tofu.
-        run(infra, "terraform", ["init", "-backend=false", "-input=false"]);
-        run(infra, "terraform", ["validate"]);
+      run(out, "tofu", ["fmt", "-check", "-recursive"]);
+      const roots = rootModuleDirs(out);
+      if (roots.length === 0) throw new Error("rendered no Terraform to validate");
+      for (const dir of roots) {
+        run(dir, "tofu", ["init", "-backend=false", "-input=false"]);
+        run(dir, "tofu", ["validate"]);
+        // A Terraform Cloud workspace runs the code with terraform, so
+        // everything must also pass there except what uses OpenTofu's state
+        // encryption, which only the R2 backend does and terraform cannot read.
+        if (!usesStateEncryption(dir)) {
+          run(dir, "terraform", ["init", "-backend=false", "-input=false"]);
+          run(dir, "terraform", ["validate"]);
+        }
       }
-      const generated = join(infra, "generated");
-      run(generated, "terraform", ["init", "-backend=false", "-input=false"]);
-      run(generated, "terraform", ["validate"]);
-      if (has("shellcheck")) {
-        run(out, "sh", ["-c", "shellcheck deploy/box/bin/*.sh deploy/box/*.sh"]);
-      }
+      const scripts = shellScripts(out);
+      if (scripts.length && has("shellcheck")) run(out, "shellcheck", scripts);
       if (existsSync(join(out, ".github/workflows"))) {
         if (has("actionlint")) {
           // Relative paths, so local actions (./.github/actions/...) resolve.
@@ -86,7 +122,7 @@ for (const stack of listStacks()) {
           throw new Error("actionlint is not installed, and CI must lint the rendered workflows");
         }
       }
-      console.log(`ok   ${label}`);
+      console.log(`ok   ${label}: ${roots.map((d) => relative(out, d) || ".").join(", ")}`);
     } catch (err) {
       failures++;
       console.error(`FAIL ${label}\n${(err as Error).message}`);

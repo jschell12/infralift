@@ -1,0 +1,7 @@
+.terraform/
+backend.r2.hcl
+tfplan
+plan.txt
+apply.txt
+*.tfstate
+*.tfstate.*

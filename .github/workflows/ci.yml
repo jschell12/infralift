@@ -52,7 +52,16 @@ jobs:
     # Every stack is rendered with its example inputs for each state backend
     # and the output run through tofu, terraform and shellcheck, because a
     # stack that renders but does not validate is broken customer output.
+    # The AWS stacks are then planned against moto (the e2e suite's AWS
+    # emulator), which catches what validate cannot: data sources and module
+    # wiring that only fail once a provider answers.
     runs-on: ubuntu-latest
+    services:
+      moto:
+        # The same pinned image as docker-compose.e2e.yml.
+        image: motoserver/moto:5.2.5
+        # plan:stacks waits for it to answer, so no health check is needed.
+        ports: ["5000:5000"]
     steps:
       - uses: actions/checkout@v4
 
@@ -87,6 +96,11 @@ jobs:
         run: pnpm --filter './packages/*' build
 
       - run: pnpm --filter @infralift/api validate:stacks
+
+      - name: Plan the AWS stacks against moto
+        run: pnpm --filter @infralift/api plan:stacks
+        env:
+          MOTO_ENDPOINT: http://127.0.0.1:5000
 
   e2e:
     name: End to end (local stack, non-blocking)
