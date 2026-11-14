@@ -17,9 +17,6 @@
 #               the suite starts on the host (apps/api/e2e/provider-fakes).
 #   tofu        OpenTofu with bash and jq, run per step by the suite (profile
 #               "tools", so `up` does not start it)
-#   gitlab      GitLab CE (profile "gitlab", opt-in: several GB of RAM and
-#               minutes to boot). E2E_GITLAB=1 scripts/e2e.sh starts it and
-#               runs e2e/gitlab.e2e.test.ts; nothing else needs it.
 #
 # The GitHub fake and the API run on the host from source, started by the
 # suite, so tests can read their state directly.
@@ -155,25 +152,6 @@ services:
       interval: 3s
       timeout: 5s
       retries: 40
-
-  gitlab:
-    image: gitlab/gitlab-ce:18.5.1-ce.0
-    profiles: ["gitlab"]
-    environment:
-      GITLAB_OMNIBUS_CONFIG: |
-        external_url 'http://127.0.0.1:54080'
-        puma['worker_processes'] = 0
-        sidekiq['concurrency'] = 2
-        prometheus_monitoring['enable'] = false
-        gitlab_rails['initial_root_password'] = 'e2e-not-a-secret-9f3k2'
-    ports: ["127.0.0.1:54080:54080"]
-    shm_size: 256m
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:54080/-/readiness"]
-      interval: 10s
-      timeout: 5s
-      retries: 60
-      start_period: 120s
 
   tofu:
     build: ./apps/api/e2e/tofu

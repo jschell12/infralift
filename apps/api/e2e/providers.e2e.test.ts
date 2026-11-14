@@ -127,7 +127,7 @@ describe("Vercel (Prism, vercel/sdk vercel-spec.json)", () => {
     expect(s.status, JSON.stringify(s.body)).toBe(502);
     expect((await fetch(`${STACK.mocks.vercel}/v9/projects?limit=100`, { headers: { authorization: "Bearer h" } })).status).toBe(404);
     // The documented domains call works on its own.
-    const domains = await (await fetch(`${STACK.mocks.vercel}/v5/domains?limit=100`, { headers: { authorization: "Bearer h" } })).json();
+    const domains: any = await (await fetch(`${STACK.mocks.vercel}/v5/domains?limit=100`, { headers: { authorization: "Bearer h" } })).json();
     expect(domains.domains.map((d: any) => d.name)).toEqual([VERCEL_SEED.domain.name]);
   });
 });

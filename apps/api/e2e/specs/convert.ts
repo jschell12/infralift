@@ -199,19 +199,26 @@ function hyperRefs(node: unknown, found: Set<string>): void {
   }
 }
 
-function hyperSchema(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(hyperSchema);
+function hyperSchema(node: unknown, defined: Set<string>): unknown {
+  if (Array.isArray(node)) return node.map((n) => hyperSchema(n, defined));
   if (!node || typeof node !== "object") return node;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(node)) {
     if (NAME_MAPS.has(k) && v && typeof v === "object") {
-      out[k] = Object.fromEntries(Object.entries(v).map(([name, s]) => [name, hyperSchema(s)]));
+      out[k] = Object.fromEntries(Object.entries(v).map(([name, s]) => [name, hyperSchema(s, defined)]));
       continue;
     }
     // prmd's strictProperties: no properties beyond those listed.
     if (k === "strictProperties" && v === true && !("additionalProperties" in node)) out.additionalProperties = false;
     if (HYPER_ONLY_KEYS.has(k)) continue;
-    out[k] = k === "$ref" && typeof v === "string" ? v.replace(/^#\/definitions\//, "#/components/schemas/") : hyperSchema(v);
+    if (k === "$ref" && typeof v === "string" && v.startsWith("#/definitions/") && !defined.has(v.split("/")[2])) {
+      // A ref to a definition the vendor's schema does not have (Heroku's v6
+      // formation.dyno_size points at "dyno_size", the definition is
+      // "dyno-size"): left open rather than guessed, and said so.
+      out["x-infralift-dangling-ref"] = v;
+      continue;
+    }
+    out[k] = k === "$ref" && typeof v === "string" ? v.replace(/^#\/definitions\//, "#/components/schemas/") : hyperSchema(v, defined);
   }
   return out;
 }
@@ -221,6 +228,7 @@ function hyperSchema(node: unknown): unknown {
 export function hyperSchemaToOpenApi(doc: Record<string, any>, operations: HyperSchemaOperation[]): OpenApiDocument {
   const paths: OpenApiDocument["paths"] = {};
   const pending = new Set<string>();
+  const defined = new Set(Object.keys(doc.definitions ?? {}));
   for (const op of operations) {
     const resource = doc.definitions?.[op.resource];
     const link = resource?.links?.find((l: Schema) => l.title === op.link);
@@ -235,7 +243,7 @@ export function hyperSchemaToOpenApi(doc: Record<string, any>, operations: Hyper
       // Heroku's own media type: clients send Accept: application/vnd.heroku+json;
       // version=3 (devcenter.heroku.com/articles/platform-api-reference), and
       // the schema itself does not name one.
-      responses: { "200": { description: "Successful response", content: { "application/vnd.heroku+json": { schema: hyperSchema(target) } } } },
+      responses: { "200": { description: "Successful response", content: { "application/vnd.heroku+json": { schema: hyperSchema(target, defined) } } } },
     };
   }
   const schemas: Record<string, Schema> = {};
@@ -246,11 +254,11 @@ export function hyperSchemaToOpenApi(doc: Record<string, any>, operations: Hyper
     if (done.has(name)) continue;
     done.add(name);
     const definition = doc.definitions?.[name];
-    if (!definition) throw new Error(`Heroku schema has no definition ${name}`);
+    if (!definition) continue; // a dangling ref, left open by hyperSchema
     const found = new Set<string>();
     hyperRefs(definition, found);
     for (const f of found) if (!done.has(f)) pending.add(f);
-    schemas[name] = hyperSchema(definition) as Schema;
+    schemas[name] = hyperSchema(definition, defined) as Schema;
   }
   const sorted = Object.fromEntries(Object.entries(schemas).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
   return { openapi: "3.1.0", info: { title: doc.title ?? "Heroku Platform API", version: "3" }, paths, components: { schemas: sorted } };

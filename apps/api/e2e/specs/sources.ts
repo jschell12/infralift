@@ -283,8 +283,11 @@ export const SOURCES: SpecSource[] = [
     format: "hyper-schema",
     out: "heroku.openapi.json",
     // heroku-go is generated from the Platform API's JSON Hyper-Schema
-    // (https://api.heroku.com/schema) and commits it.
-    pin: { repo: "heroku/heroku-go", commit: "eb24213a9cbb17f6af5003d23a92923949f3b48a", path: "v5/schema.json" },
+    // (https://api.heroku.com/schema) and commits it. v6, not v5: the live
+    // capture in src/connectors/__fixtures__/heroku-api.json fails v5 (no
+    // app.generation, no formation.dyno_size, a web_url pattern too short for
+    // today's hostnames) and passes v6.
+    pin: { repo: "heroku/heroku-go", commit: "eb24213a9cbb17f6af5003d23a92923949f3b48a", path: "v6/schema.json" },
     operations: [
       { resource: "account", link: "Info", path: "/account" },
       { resource: "app", link: "List", path: "/apps" },
@@ -399,7 +402,7 @@ export const SOURCES: SpecSource[] = [
     // served: TFC is not a connector (no verify, no inventory), and the
     // adopt path the e2e suite runs does not call it. The recorded fixtures
     // in lib/tf/__fixtures__/tfc are checked against it instead
-    // (src/connectors/fixtures-match-specs.test.ts).
+    // (apps/api/e2e/specs/fixtures-match-specs.test.ts).
     pin: { repo: "hashicorp/go-tfe", commit: "55fa43504b980ba9a50d73a3e69772d1d6819239", path: "v2/openapi/spec.json" },
     operations: [
       "/organizations/{organization_name}/workspaces",

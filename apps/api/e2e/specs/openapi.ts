@@ -147,7 +147,13 @@ function plainest(doc: OpenApiDocument, s: Schema, depth: number): unknown {
   if (s.nullable) return null;
   if ("default" in s) return s.default;
   if (Array.isArray(s.enum) && s.enum.length) return s.enum[0];
-  const type = s.type ?? (s.properties ? "object" : undefined);
+  let type = s.type ?? (s.properties ? "object" : undefined);
+  // JSON Schema type arrays (OpenAPI 3.1, Heroku's draft-04): null if allowed,
+  // else the first type.
+  if (Array.isArray(type)) {
+    if (type.includes("null")) return null;
+    type = type[0];
+  }
   switch (type) {
     case "string":
       if (s.format === "date-time") return FILL_DATE;

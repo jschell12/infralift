@@ -3,7 +3,7 @@
  "info": {
   "title": "Heroku Platform API",
   "version": "3",
-  "x-infralift-subset": "operations infralift calls, from heroku/heroku-go@eb24213a9cbb17f6af5003d23a92923949f3b48a/v5/schema.json"
+  "x-infralift-subset": "operations infralift calls, from heroku/heroku-go@eb24213a9cbb17f6af5003d23a92923949f3b48a/v6/schema.json"
  },
  "paths": {
   "/account": {
@@ -169,7 +169,16 @@
              "cents": 500,
              "contract": false,
              "unit": "month"
-            }
+            },
+            "actions": [],
+            "billing_entity": {},
+            "app": {},
+            "config_vars": [],
+            "created_at": "2026-01-01T00:00:00Z",
+            "provider_id": "",
+            "state": "provisioning",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "web_url": null
            }
           ]
          }
@@ -464,6 +473,22 @@
    "add-on": {
     "description": "Add-ons represent add-ons that have been provisioned and attached to one or more apps.",
     "additionalProperties": false,
+    "required": [
+     "actions",
+     "addon_service",
+     "billing_entity",
+     "app",
+     "billed_price",
+     "config_vars",
+     "created_at",
+     "id",
+     "name",
+     "plan",
+     "provider_id",
+     "state",
+     "updated_at",
+     "web_url"
+    ],
     "type": [
      "object"
     ],
@@ -611,14 +636,19 @@
        "null",
        "string"
       ]
-     }
-    },
-    "properties": {
-     "actions": {
-      "$ref": "#/components/schemas/add-on/definitions/actions"
      },
      "addon_service": {
       "description": "identity of add-on service",
+      "identity": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/add-on-service/definitions/id"
+        },
+        {
+         "$ref": "#/components/schemas/add-on-service/definitions/name"
+        }
+       ]
+      },
       "properties": {
        "id": {
         "$ref": "#/components/schemas/add-on-service/definitions/id"
@@ -631,6 +661,46 @@
       "type": [
        "object"
       ]
+     },
+     "plan": {
+      "description": "identity of add-on plan",
+      "identity": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/plan/definitions/id"
+        },
+        {
+         "$ref": "#/components/schemas/plan/definitions/name"
+        }
+       ]
+      },
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/plan/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/plan/definitions/name"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object"
+      ]
+     },
+     "provision_message": {
+      "description": "A provision message",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     }
+    },
+    "properties": {
+     "actions": {
+      "$ref": "#/components/schemas/add-on/definitions/actions"
+     },
+     "addon_service": {
+      "$ref": "#/components/schemas/add-on/definitions/addon_service"
      },
      "billing_entity": {
       "description": "billing entity associated with this add-on",
@@ -714,22 +784,13 @@
       "$ref": "#/components/schemas/add-on/definitions/name"
      },
      "plan": {
-      "description": "identity of add-on plan",
-      "properties": {
-       "id": {
-        "$ref": "#/components/schemas/plan/definitions/id"
-       },
-       "name": {
-        "$ref": "#/components/schemas/plan/definitions/name"
-       }
-      },
-      "additionalProperties": false,
-      "type": [
-       "object"
-      ]
+      "$ref": "#/components/schemas/add-on/definitions/plan"
      },
      "provider_id": {
       "$ref": "#/components/schemas/add-on/definitions/provider_id"
+     },
+     "provision_message": {
+      "$ref": "#/components/schemas/add-on/definitions/provision_message"
      },
      "state": {
       "$ref": "#/components/schemas/add-on/definitions/state"
@@ -898,6 +959,26 @@
       "type": [
        "string"
       ]
+     },
+     "supported_generations": {
+      "description": "generations supported by this add-on",
+      "readonly": true,
+      "type": [
+       "array"
+      ],
+      "items": {
+       "type": [
+        "object"
+       ],
+       "properties": {
+        "name": {
+         "$ref": "#/components/schemas/generation/definitions/name"
+        },
+        "id": {
+         "$ref": "#/components/schemas/generation/definitions/id"
+        }
+       }
+      }
      }
     },
     "properties": {
@@ -927,6 +1008,9 @@
      },
      "updated_at": {
       "$ref": "#/components/schemas/add-on-service/definitions/updated_at"
+     },
+     "supported_generations": {
+      "$ref": "#/components/schemas/add-on-service/definitions/supported_generations"
      }
     }
    },
@@ -961,6 +1045,30 @@
       "type": [
        "string"
       ]
+     },
+     "generation": {
+      "description": "Generation of the Heroku platform for this app",
+      "readOnly": true,
+      "type": [
+       "object"
+      ],
+      "properties": {
+       "id": {
+        "description": "unique identifier of the generation of the Heroku platform for this app",
+        "format": "uuid",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "name": {
+        "description": "unique name of the generation of the Heroku platform for this app",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      }
      },
      "git_url": {
       "description": "git repo URL of app",
@@ -1043,9 +1151,10 @@
      "web_url": {
       "description": "web URL of app",
       "format": "uri",
-      "pattern": "^https?://[a-z][a-z0-9-]{3,30}\\.herokuapp\\.com/$",
+      "pattern": "^https?://[a-z][a-z0-9-]{3,43}\\.herokuapp\\.com/$",
       "readOnly": true,
       "type": [
+       "null",
        "string"
       ]
      },
@@ -1085,6 +1194,9 @@
      },
      "created_at": {
       "$ref": "#/components/schemas/app/definitions/created_at"
+     },
+     "generation": {
+      "$ref": "#/components/schemas/app/definitions/generation"
      },
      "git_url": {
       "$ref": "#/components/schemas/app/definitions/git_url"
@@ -1211,6 +1323,162 @@
      }
     }
    },
+   "dyno-size": {
+    "description": "Dyno sizes are the values and details of sizes that can be assigned to dynos. This information can also be found at : [https://devcenter.heroku.com/articles/dyno-types](https://devcenter.heroku.com/articles/dyno-types).",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "architecture": {
+      "description": "CPU architecture of this dyno size",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "compute": {
+      "description": "minimum vCPUs, non-dedicated may get more depending on load",
+      "readOnly": true,
+      "type": [
+       "integer"
+      ]
+     },
+     "dedicated": {
+      "description": "whether this dyno will be dedicated to one user",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "generation": {
+      "description": "Generation of the Heroku platform for this dyno size",
+      "readOnly": true,
+      "type": [
+       "object"
+      ],
+      "properties": {
+       "id": {
+        "description": "unique identifier of the generation of the Heroku platform for this dyno size",
+        "format": "uuid",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "name": {
+        "description": "unique name of the generation of the Heroku platform for this dyno size",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      }
+     },
+     "id": {
+      "description": "unique identifier of the dyno size",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/dyno-size/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/dyno-size/definitions/name"
+       }
+      ]
+     },
+     "memory": {
+      "description": "amount of RAM in GB",
+      "readOnly": true,
+      "type": [
+       "number"
+      ]
+     },
+     "name": {
+      "description": "name of the dyno size",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "cost": {
+      "description": "price information for this dyno size",
+      "readOnly": true,
+      "type": [
+       "null",
+       "object"
+      ],
+      "definitions": {
+       "cents": {
+        "description": "price in cents per unit time",
+        "readOnly": true,
+        "type": [
+         "integer"
+        ]
+       },
+       "unit": {
+        "description": "unit of price for dyno",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      }
+     },
+     "precise_dyno_units": {
+      "description": "unit of consumption for Heroku Enterprise customers to 2 decimal places",
+      "readOnly": true,
+      "type": [
+       "number"
+      ]
+     },
+     "private_space_only": {
+      "description": "whether this dyno can only be provisioned in a private space",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     }
+    },
+    "properties": {
+     "architecture": {
+      "$ref": "#/components/schemas/dyno-size/definitions/architecture"
+     },
+     "compute": {
+      "$ref": "#/components/schemas/dyno-size/definitions/compute"
+     },
+     "cost": {
+      "$ref": "#/components/schemas/dyno-size/definitions/cost"
+     },
+     "dedicated": {
+      "$ref": "#/components/schemas/dyno-size/definitions/dedicated"
+     },
+     "precise_dyno_units": {
+      "$ref": "#/components/schemas/dyno-size/definitions/precise_dyno_units"
+     },
+     "generation": {
+      "$ref": "#/components/schemas/dyno-size/definitions/generation"
+     },
+     "id": {
+      "$ref": "#/components/schemas/dyno-size/definitions/id"
+     },
+     "memory": {
+      "$ref": "#/components/schemas/dyno-size/definitions/memory"
+     },
+     "name": {
+      "$ref": "#/components/schemas/dyno-size/definitions/name"
+     },
+     "private_space_only": {
+      "$ref": "#/components/schemas/dyno-size/definitions/private_space_only"
+     }
+    }
+   },
    "enterprise-account": {
     "description": "Enterprise accounts allow companies to manage their development teams and billing.",
     "additionalProperties": false,
@@ -1238,6 +1506,9 @@
       "anyOf": [
        {
         "$ref": "#/components/schemas/enterprise-account/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/enterprise-account/definitions/name"
        }
       ]
      },
@@ -1293,6 +1564,13 @@
       "type": [
        "boolean"
       ]
+     },
+     "partner_benefits": {
+      "description": "whether the enterprise account is part of the Salesforce Partner Program",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
      }
     },
     "properties": {
@@ -1313,6 +1591,9 @@
      },
      "trial": {
       "$ref": "#/components/schemas/enterprise-account/definitions/trial"
+     },
+     "partner_benefits": {
+      "$ref": "#/components/schemas/enterprise-account/definitions/partner_benefits"
      },
      "identity_provider": {
       "$ref": "#/components/schemas/enterprise-account/definitions/identity_provider"
@@ -1341,6 +1622,40 @@
        "string"
       ]
      },
+     "dyno_size": {
+      "description": "dyno size",
+      "identity": {
+       "anyOf": [
+        {
+         "x-infralift-dangling-ref": "#/definitions/dyno_size/definitions/id"
+        },
+        {
+         "x-infralift-dangling-ref": "#/definitions/dyno_size/definitions/name"
+        }
+       ]
+      },
+      "properties": {
+       "id": {
+        "description": "unique identifier of the dyno size",
+        "format": "uuid",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "name": {
+        "description": "name of the dyno size",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      },
+      "readOnly": false,
+      "type": [
+       "object"
+      ]
+     },
      "id": {
       "description": "unique identifier of this process type",
       "format": "uuid",
@@ -1367,7 +1682,8 @@
       ]
      },
      "size": {
-      "description": "dyno size (default: \"standard-1X\")",
+      "deprecated": true,
+      "description": "deprecated, refer to 'dyno_size' instead",
       "readOnly": false,
       "type": [
        "string"
@@ -1393,11 +1709,11 @@
       "additionalProperties": false,
       "description": "Properties to update a process type",
       "properties": {
+       "dyno_size": {
+        "$ref": "#/components/schemas/formation/definitions/dyno_size"
+       },
        "quantity": {
         "$ref": "#/components/schemas/formation/definitions/quantity"
-       },
-       "size": {
-        "$ref": "#/components/schemas/formation/definitions/size"
        },
        "type": {
         "$ref": "#/components/schemas/formation/definitions/type"
@@ -1433,6 +1749,20 @@
      "created_at": {
       "$ref": "#/components/schemas/formation/definitions/created_at"
      },
+     "dyno_size": {
+      "description": "dyno size",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/dyno-size/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/dyno-size/definitions/name"
+       }
+      },
+      "type": [
+       "object"
+      ]
+     },
      "id": {
       "$ref": "#/components/schemas/formation/definitions/id"
      },
@@ -1450,8 +1780,72 @@
      }
     }
    },
+   "generation": {
+    "description": "A generation represents a version of the Heroku platform that includes the app execution environment, routing, telemetry, and build systems.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "created_at": {
+      "description": "when generation was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of generation",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/generation/definitions/name"
+       },
+       {
+        "$ref": "#/components/schemas/generation/definitions/id"
+       }
+      ]
+     },
+     "name": {
+      "description": "unique name of generation",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "updated_at": {
+      "description": "when generation was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     }
+    },
+    "properties": {
+     "created_at": {
+      "$ref": "#/components/schemas/generation/definitions/created_at"
+     },
+     "id": {
+      "$ref": "#/components/schemas/generation/definitions/id"
+     },
+     "name": {
+      "$ref": "#/components/schemas/generation/definitions/name"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/generation/definitions/updated_at"
+     }
+    }
+   },
    "identity-provider": {
-    "description": "Identity Providers represent the SAML configuration of an Enterprise Account or Team.",
+    "description": "Identity Providers represent the SAML configuration of teams or an Enterprise account",
     "additionalProperties": false,
     "type": [
      "object"
@@ -1910,12 +2304,14 @@
          "ap-southeast-1",
          "ap-southeast-2",
          "eu-central-1",
+         "eu-west-2",
          "ap-northeast-2",
          "ap-northeast-1",
          "us-east-1",
          "sa-east-1",
          "us-west-1",
-         "us-west-2"
+         "us-west-2",
+         "ca-central-1"
         ]
        }
       },
@@ -2049,6 +2445,30 @@
       "type": [
        "string"
       ]
+     },
+     "generation": {
+      "description": "Generation of the Heroku platform for this space",
+      "readOnly": true,
+      "type": [
+       "object"
+      ],
+      "properties": {
+       "id": {
+        "description": "unique identifier of the generation of the Heroku platform for this space",
+        "format": "uuid",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "name": {
+        "description": "unique name of the generation of the Heroku platform for this space",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      }
      }
     },
     "properties": {
@@ -2115,6 +2535,9 @@
      },
      "data_cidr": {
       "$ref": "#/components/schemas/space/definitions/data_cidr"
+     },
+     "generation": {
+      "$ref": "#/components/schemas/space/definitions/generation"
      }
     }
    },
@@ -2490,11 +2913,7 @@
       ]
      },
      "identity": {
-      "anyOf": [
-       {
-        "$ref": "#/components/schemas/app/definitions/name"
-       }
-      ]
+      "$ref": "#/components/schemas/app/definitions/name"
      },
      "internal_routing": {
       "default": false,
@@ -2657,7 +3076,7 @@
  "x-infralift-source": {
   "repo": "heroku/heroku-go",
   "commit": "eb24213a9cbb17f6af5003d23a92923949f3b48a",
-  "path": "v5/schema.json",
-  "sha256": "2b2351afb8afbe24c24af44111cb37ec2d095699d8c6b8399a6cd93db909a783"
+  "path": "v6/schema.json",
+  "sha256": "d1e1a890e356075202201c8ac58bdc99214842d1308af2f08575f1939e3a3991"
  }
 }
