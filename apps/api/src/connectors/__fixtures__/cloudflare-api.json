@@ -1,5 +1,5 @@
 {
-  "_source": "Not captured from a live account. Each body is the response example in the Cloudflare API reference for that operation (GET /accounts, GET /zones, GET /zones/{zone_id}/dns_records, GET /accounts/{account_id}/r2/buckets), trimmed to the fields infralift reads, read 2026-11-10. The second zones page and the DNS record ids are copies of the first with new ids, so the paging test has two pages to follow. Replace with captured responses.",
+  "_source": "Not captured from a live account. Each body is the response example in the Cloudflare API reference for that operation (GET /accounts, GET /zones, GET /zones/{zone_id}/dns_records, GET /accounts/{account_id}/r2/buckets), trimmed to the fields infralift reads, read 2026-11-10. The R2 bucket's location is lowercase, enam, as the schema's enum has it; the reference example says ENAM (apps/api/e2e/specs/fixtures-match-specs.test.ts). The second zones page and the DNS record ids are copies of the first with new ids, so the paging test has two pages to follow. Replace with captured responses.",
   "accounts": {
     "errors": [],
     "messages": [],
@@ -62,7 +62,7 @@
     "messages": [],
     "success": true,
     "result": {
-      "buckets": [{ "creation_date": "2024-01-01T00:00:00Z", "jurisdiction": "default", "location": "ENAM", "name": "example-bucket", "storage_class": "Standard" }]
+      "buckets": [{ "creation_date": "2024-01-01T00:00:00Z", "jurisdiction": "default", "location": "enam", "name": "example-bucket", "storage_class": "Standard" }]
     }
   }
 }

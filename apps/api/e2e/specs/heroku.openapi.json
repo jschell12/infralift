@@ -1,0 +1,3090 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "Heroku Platform API",
+  "version": "3",
+  "x-infralift-subset": "operations infralift calls, from heroku/heroku-go@eb24213a9cbb17f6af5003d23a92923949f3b48a/v6/schema.json",
+  "license": {
+   "name": "MIT",
+   "url": "https://github.com/heroku/heroku-go/blob/eb24213a9cbb17f6af5003d23a92923949f3b48a/LICENSE"
+  },
+  "x-infralift-notice": [
+   "Copyright (c) 2014-2016 Timothée Peignier. Licensed under MIT: https://github.com/heroku/heroku-go/blob/eb24213a9cbb17f6af5003d23a92923949f3b48a/LICENSE",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE."
+  ]
+ },
+ "paths": {
+  "/account": {
+   "get": {
+    "summary": "account Info",
+    "description": "Info for account.",
+    "parameters": [],
+    "responses": {
+     "200": {
+      "description": "Successful response",
+      "content": {
+       "application/vnd.heroku+json": {
+        "schema": {
+         "$ref": "#/components/schemas/account"
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/heroku.ts)",
+          "value": {
+           "id": "e2e0a0a0-0000-4000-8000-0000000001aa",
+           "email": "e2e@infralift-e2e-heroku.example"
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/apps": {
+   "get": {
+    "summary": "app List",
+    "description": "List existing apps.",
+    "parameters": [],
+    "responses": {
+     "200": {
+      "description": "Successful response",
+      "content": {
+       "application/vnd.heroku+json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/app"
+         },
+         "type": [
+          "array"
+         ]
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/heroku.ts)",
+          "value": [
+           {
+            "id": "e2e0a0a0-0000-4000-8000-000000000101",
+            "name": "infralift-e2e-app",
+            "region": {
+             "id": "59accabd-516d-4f0e-83e6-6e3757701145",
+             "name": "us"
+            },
+            "stack": {
+             "id": "74cfe988-7527-4ca9-9667-77bb9f3029cf",
+             "name": "heroku-24"
+            },
+            "maintenance": false
+           }
+          ]
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/apps/{app_id_or_name}/formation": {
+   "get": {
+    "summary": "formation List",
+    "description": "List process type formation",
+    "parameters": [
+     {
+      "name": "app_id_or_name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful response",
+      "content": {
+       "application/vnd.heroku+json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/formation"
+         },
+         "type": [
+          "array"
+         ]
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/heroku.ts)",
+          "value": [
+           {
+            "type": "web",
+            "size": "Basic",
+            "quantity": 1
+           }
+          ]
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/apps/{app_id_or_name}/addons": {
+   "get": {
+    "summary": "add-on List By App",
+    "description": "List existing add-ons for an app.",
+    "parameters": [
+     {
+      "name": "app_id_or_name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful response",
+      "content": {
+       "application/vnd.heroku+json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/add-on"
+         },
+         "type": [
+          "array"
+         ]
+        },
+        "examples": {
+         "e2e": {
+          "summary": "infralift e2e seed (e2e/specs/seeds/heroku.ts)",
+          "value": [
+           {
+            "id": "e2e0a0a0-0000-4000-8000-000000000102",
+            "name": "postgresql-e2e-12345",
+            "addon_service": {
+             "id": "6c67493d-8fc2-4cd4-9161-4f1ec11cbe69",
+             "name": "heroku-postgresql"
+            },
+            "plan": {
+             "id": "a1c2e1b4-2e3b-4b5c-9b64-1b2c3d4e5f60",
+             "name": "heroku-postgresql:essential-0"
+            },
+            "billed_price": {
+             "cents": 500,
+             "contract": false,
+             "unit": "month"
+            },
+            "actions": [],
+            "billing_entity": {},
+            "app": {},
+            "config_vars": [],
+            "created_at": "2026-01-01T00:00:00Z",
+            "provider_id": "",
+            "state": "provisioning",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "web_url": null
+           }
+          ]
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "account": {
+    "description": "An account represents an individual signed up to use the Heroku platform.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "allow_tracking": {
+      "default": true,
+      "description": "whether to allow third party web activity tracking",
+      "readOnly": false,
+      "type": [
+       "boolean"
+      ]
+     },
+     "beta": {
+      "default": false,
+      "description": "whether allowed to utilize beta Heroku features",
+      "readOnly": false,
+      "type": [
+       "boolean"
+      ]
+     },
+     "created_at": {
+      "description": "when account was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "country_of_residence": {
+      "description": "country where account owner resides",
+      "readOnly": false,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "email": {
+      "description": "unique email address of account",
+      "format": "email",
+      "readOnly": false,
+      "type": [
+       "string"
+      ]
+     },
+     "federated": {
+      "description": "whether the user is federated and belongs to an Identity Provider",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of an account",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/account/definitions/email"
+       },
+       {
+        "$ref": "#/components/schemas/account/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/account/definitions/self"
+       }
+      ]
+     },
+     "last_login": {
+      "description": "when account last authorized with Heroku",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "name": {
+      "description": "full name of the account owner",
+      "readOnly": false,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "password": {
+      "description": "current password on the account",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "self": {
+      "description": "Implicit reference to currently authorized user",
+      "enum": [
+       "~"
+      ],
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "sms_number": {
+      "description": "SMS number of account",
+      "readOnly": true,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "suspended_at": {
+      "description": "when account was suspended",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "delinquent_at": {
+      "description": "when account became delinquent",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "two_factor_authentication": {
+      "description": "whether two-factor auth is enabled on the account",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "updated_at": {
+      "description": "when account was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "verified": {
+      "default": false,
+      "description": "whether account has been verified with billing information",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     }
+    },
+    "properties": {
+     "allow_tracking": {
+      "$ref": "#/components/schemas/account/definitions/allow_tracking"
+     },
+     "beta": {
+      "$ref": "#/components/schemas/account/definitions/beta"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/account/definitions/created_at"
+     },
+     "email": {
+      "$ref": "#/components/schemas/account/definitions/email"
+     },
+     "federated": {
+      "$ref": "#/components/schemas/account/definitions/federated"
+     },
+     "id": {
+      "$ref": "#/components/schemas/account/definitions/id"
+     },
+     "identity_provider": {
+      "description": "Identity Provider details for federated users.",
+      "additionalProperties": false,
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/identity-provider/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/identity-provider/definitions/name"
+       },
+       "team": {
+        "type": [
+         "object"
+        ],
+        "properties": {
+         "name": {
+          "$ref": "#/components/schemas/team/definitions/name"
+         }
+        }
+       },
+       "organization": {
+        "type": [
+         "object"
+        ],
+        "properties": {
+         "name": {
+          "$ref": "#/components/schemas/team/definitions/name"
+         }
+        }
+       },
+       "owner": {
+        "$ref": "#/components/schemas/identity-provider/definitions/owner"
+       }
+      },
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "last_login": {
+      "$ref": "#/components/schemas/account/definitions/last_login"
+     },
+     "name": {
+      "$ref": "#/components/schemas/account/definitions/name"
+     },
+     "sms_number": {
+      "$ref": "#/components/schemas/account/definitions/sms_number"
+     },
+     "suspended_at": {
+      "$ref": "#/components/schemas/account/definitions/suspended_at"
+     },
+     "delinquent_at": {
+      "$ref": "#/components/schemas/account/definitions/delinquent_at"
+     },
+     "two_factor_authentication": {
+      "$ref": "#/components/schemas/account/definitions/two_factor_authentication"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/account/definitions/updated_at"
+     },
+     "verified": {
+      "$ref": "#/components/schemas/account/definitions/verified"
+     },
+     "country_of_residence": {
+      "$ref": "#/components/schemas/account/definitions/country_of_residence"
+     },
+     "default_organization": {
+      "description": "team selected by default",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/team/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/team/definitions/name"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "default_team": {
+      "description": "team selected by default",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/team/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/team/definitions/name"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object",
+       "null"
+      ]
+     }
+    }
+   },
+   "add-on": {
+    "description": "Add-ons represent add-ons that have been provisioned and attached to one or more apps.",
+    "additionalProperties": false,
+    "required": [
+     "actions",
+     "addon_service",
+     "billing_entity",
+     "app",
+     "billed_price",
+     "config_vars",
+     "created_at",
+     "id",
+     "name",
+     "plan",
+     "provider_id",
+     "state",
+     "updated_at",
+     "web_url"
+    ],
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "actions": {
+      "description": "provider actions for this specific add-on",
+      "type": [
+       "array"
+      ],
+      "items": {
+       "type": [
+        "object"
+       ]
+      },
+      "readOnly": true,
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/add-on-plan-action/definitions/id"
+       },
+       "label": {
+        "$ref": "#/components/schemas/add-on-plan-action/definitions/label"
+       },
+       "action": {
+        "$ref": "#/components/schemas/add-on-plan-action/definitions/action"
+       },
+       "url": {
+        "$ref": "#/components/schemas/add-on-plan-action/definitions/url"
+       },
+       "requires_owner": {
+        "$ref": "#/components/schemas/add-on-plan-action/definitions/requires_owner"
+       }
+      }
+     },
+     "cents": {
+      "description": "price in cents per unit of add-on",
+      "readOnly": true,
+      "type": [
+       "integer"
+      ]
+     },
+     "config": {
+      "additionalProperties": false,
+      "description": "custom add-on provisioning options",
+      "patternProperties": {
+       "^\\w+$": {
+        "type": [
+         "string"
+        ]
+       }
+      },
+      "type": [
+       "object"
+      ]
+     },
+     "config_vars": {
+      "description": "config vars exposed to the owning app by this add-on",
+      "items": {
+       "type": [
+        "string"
+       ]
+      },
+      "readOnly": true,
+      "type": [
+       "array"
+      ]
+     },
+     "confirm": {
+      "description": "name of billing entity for confirmation",
+      "type": [
+       "string"
+      ]
+     },
+     "created_at": {
+      "description": "when add-on was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of add-on",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/add-on/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/add-on/definitions/name"
+       }
+      ]
+     },
+     "name": {
+      "description": "globally unique name of the add-on",
+      "pattern": "^[a-zA-Z][A-Za-z0-9_-]+$",
+      "type": [
+       "string"
+      ]
+     },
+     "provider_id": {
+      "description": "id of this add-on with its provider",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "state": {
+      "description": "state in the add-on's lifecycle",
+      "enum": [
+       "provisioning",
+       "provisioned",
+       "deprovisioned"
+      ],
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "unit": {
+      "description": "unit of price for add-on",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "updated_at": {
+      "description": "when add-on was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "web_url": {
+      "description": "URL for logging into web interface of add-on (e.g. a dashboard)",
+      "format": "uri",
+      "readOnly": true,
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "addon_service": {
+      "description": "identity of add-on service",
+      "identity": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/add-on-service/definitions/id"
+        },
+        {
+         "$ref": "#/components/schemas/add-on-service/definitions/name"
+        }
+       ]
+      },
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/add-on-service/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/add-on-service/definitions/name"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object"
+      ]
+     },
+     "plan": {
+      "description": "identity of add-on plan",
+      "identity": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/plan/definitions/id"
+        },
+        {
+         "$ref": "#/components/schemas/plan/definitions/name"
+        }
+       ]
+      },
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/plan/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/plan/definitions/name"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object"
+      ]
+     },
+     "provision_message": {
+      "description": "A provision message",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     }
+    },
+    "properties": {
+     "actions": {
+      "$ref": "#/components/schemas/add-on/definitions/actions"
+     },
+     "addon_service": {
+      "$ref": "#/components/schemas/add-on/definitions/addon_service"
+     },
+     "billing_entity": {
+      "description": "billing entity associated with this add-on",
+      "type": [
+       "object"
+      ],
+      "properties": {
+       "id": {
+        "description": "unique identifier of the billing entity",
+        "format": "uuid",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "name": {
+        "description": "name of the billing entity",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "type": {
+        "description": "type of Object of the billing entity; new types allowed at any time.",
+        "enum": [
+         "app",
+         "team"
+        ],
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      },
+      "additionalProperties": false
+     },
+     "app": {
+      "description": "billing application associated with this add-on",
+      "type": [
+       "object"
+      ],
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/app/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/app/definitions/name"
+       }
+      },
+      "additionalProperties": false
+     },
+     "billed_price": {
+      "description": "billed price",
+      "properties": {
+       "cents": {
+        "$ref": "#/components/schemas/plan/definitions/cents"
+       },
+       "contract": {
+        "$ref": "#/components/schemas/plan/definitions/contract"
+       },
+       "unit": {
+        "$ref": "#/components/schemas/plan/definitions/unit"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "config_vars": {
+      "$ref": "#/components/schemas/add-on/definitions/config_vars"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/add-on/definitions/created_at"
+     },
+     "id": {
+      "$ref": "#/components/schemas/add-on/definitions/id"
+     },
+     "name": {
+      "$ref": "#/components/schemas/add-on/definitions/name"
+     },
+     "plan": {
+      "$ref": "#/components/schemas/add-on/definitions/plan"
+     },
+     "provider_id": {
+      "$ref": "#/components/schemas/add-on/definitions/provider_id"
+     },
+     "provision_message": {
+      "$ref": "#/components/schemas/add-on/definitions/provision_message"
+     },
+     "state": {
+      "$ref": "#/components/schemas/add-on/definitions/state"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/add-on/definitions/updated_at"
+     },
+     "web_url": {
+      "$ref": "#/components/schemas/add-on/definitions/web_url"
+     }
+    }
+   },
+   "add-on-plan-action": {
+    "description": "Add-on Plan Actions are Provider functionality for specific add-on installations",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "id": {
+      "description": "a unique identifier",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "$ref": "#/components/schemas/add-on-plan-action/definitions/id"
+     },
+     "label": {
+      "description": "the display text shown in Dashboard",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "action": {
+      "description": "identifier of the action to take that is sent via SSO",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "url": {
+      "description": "absolute URL to use instead of an action",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "requires_owner": {
+      "description": "if the action requires the user to own the app",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     }
+    },
+    "properties": {
+     "id": {
+      "$ref": "#/components/schemas/add-on-plan-action/definitions/id"
+     },
+     "label": {
+      "$ref": "#/components/schemas/add-on-plan-action/definitions/label"
+     },
+     "action": {
+      "$ref": "#/components/schemas/add-on-plan-action/definitions/action"
+     },
+     "url": {
+      "$ref": "#/components/schemas/add-on-plan-action/definitions/url"
+     },
+     "requires_owner": {
+      "$ref": "#/components/schemas/add-on-plan-action/definitions/requires_owner"
+     }
+    }
+   },
+   "add-on-service": {
+    "description": "Add-on services represent add-ons that may be provisioned for apps. Endpoints under add-on services can be accessed without authentication.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "cli_plugin_name": {
+      "description": "npm package name of the add-on service's Heroku CLI plugin",
+      "readOnly": true,
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "created_at": {
+      "description": "when add-on-service was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "human_name": {
+      "description": "human-readable name of the add-on service provider",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of this add-on-service",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/add-on-service/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/add-on-service/definitions/name"
+       }
+      ]
+     },
+     "name": {
+      "description": "unique name of this add-on-service",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "state": {
+      "description": "release status for add-on service",
+      "enum": [
+       "alpha",
+       "beta",
+       "ga",
+       "shutdown"
+      ],
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "supports_multiple_installations": {
+      "default": false,
+      "description": "whether or not apps can have access to more than one instance of this add-on at the same time",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "supports_sharing": {
+      "default": false,
+      "description": "whether or not apps can have access to add-ons billed to a different app",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "updated_at": {
+      "description": "when add-on-service was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "supported_generations": {
+      "description": "generations supported by this add-on",
+      "readonly": true,
+      "type": [
+       "array"
+      ],
+      "items": {
+       "type": [
+        "object"
+       ],
+       "properties": {
+        "name": {
+         "$ref": "#/components/schemas/generation/definitions/name"
+        },
+        "id": {
+         "$ref": "#/components/schemas/generation/definitions/id"
+        }
+       }
+      }
+     }
+    },
+    "properties": {
+     "cli_plugin_name": {
+      "$ref": "#/components/schemas/add-on-service/definitions/cli_plugin_name"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/add-on-service/definitions/created_at"
+     },
+     "human_name": {
+      "$ref": "#/components/schemas/add-on-service/definitions/human_name"
+     },
+     "id": {
+      "$ref": "#/components/schemas/add-on-service/definitions/id"
+     },
+     "name": {
+      "$ref": "#/components/schemas/add-on-service/definitions/name"
+     },
+     "state": {
+      "$ref": "#/components/schemas/add-on-service/definitions/state"
+     },
+     "supports_multiple_installations": {
+      "$ref": "#/components/schemas/add-on-service/definitions/supports_multiple_installations"
+     },
+     "supports_sharing": {
+      "$ref": "#/components/schemas/add-on-service/definitions/supports_sharing"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/add-on-service/definitions/updated_at"
+     },
+     "supported_generations": {
+      "$ref": "#/components/schemas/add-on-service/definitions/supported_generations"
+     }
+    }
+   },
+   "app": {
+    "description": "An app represents the program that you would like to deploy and run on Heroku.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "archived_at": {
+      "description": "when app was archived",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "buildpack_provided_description": {
+      "description": "description from buildpack of app",
+      "readOnly": true,
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "created_at": {
+      "description": "when app was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "generation": {
+      "description": "Generation of the Heroku platform for this app",
+      "readOnly": true,
+      "type": [
+       "object"
+      ],
+      "properties": {
+       "id": {
+        "description": "unique identifier of the generation of the Heroku platform for this app",
+        "format": "uuid",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "name": {
+        "description": "unique name of the generation of the Heroku platform for this app",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      }
+     },
+     "git_url": {
+      "description": "git repo URL of app",
+      "pattern": "^https://git\\.heroku\\.com/[a-z][a-z0-9-]{2,29}\\.git$",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of app",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/app/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/app/definitions/name"
+       }
+      ]
+     },
+     "maintenance": {
+      "default": false,
+      "description": "maintenance status of app",
+      "readOnly": false,
+      "type": [
+       "boolean"
+      ]
+     },
+     "name": {
+      "description": "unique name of app",
+      "pattern": "^[a-z][a-z0-9-]{1,28}[a-z0-9]$",
+      "readOnly": false,
+      "type": [
+       "string"
+      ]
+     },
+     "released_at": {
+      "default": null,
+      "description": "when app was released",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "repo_size": {
+      "default": null,
+      "description": "git repo size in bytes of app",
+      "readOnly": true,
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "slug_size": {
+      "default": null,
+      "description": "slug size in bytes of app",
+      "readOnly": true,
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "updated_at": {
+      "description": "when app was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "web_url": {
+      "description": "web URL of app",
+      "format": "uri",
+      "pattern": "^https?://[a-z][a-z0-9-]{3,43}\\.herokuapp\\.com/$",
+      "readOnly": true,
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "acm": {
+      "description": "ACM status of this app",
+      "default": false,
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     }
+    },
+    "properties": {
+     "acm": {
+      "$ref": "#/components/schemas/app/definitions/acm"
+     },
+     "archived_at": {
+      "$ref": "#/components/schemas/app/definitions/archived_at"
+     },
+     "buildpack_provided_description": {
+      "$ref": "#/components/schemas/app/definitions/buildpack_provided_description"
+     },
+     "build_stack": {
+      "description": "identity of the stack that will be used for new builds",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/stack/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/stack/definitions/name"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object"
+      ]
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/app/definitions/created_at"
+     },
+     "generation": {
+      "$ref": "#/components/schemas/app/definitions/generation"
+     },
+     "git_url": {
+      "$ref": "#/components/schemas/app/definitions/git_url"
+     },
+     "id": {
+      "$ref": "#/components/schemas/app/definitions/id"
+     },
+     "internal_routing": {
+      "$ref": "#/components/schemas/team-app/definitions/internal_routing"
+     },
+     "maintenance": {
+      "$ref": "#/components/schemas/app/definitions/maintenance"
+     },
+     "name": {
+      "$ref": "#/components/schemas/app/definitions/name"
+     },
+     "owner": {
+      "description": "identity of app owner",
+      "properties": {
+       "email": {
+        "$ref": "#/components/schemas/account/definitions/email"
+       },
+       "id": {
+        "$ref": "#/components/schemas/account/definitions/id"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object"
+      ]
+     },
+     "organization": {
+      "description": "identity of team",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/team/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/team/definitions/name"
+       }
+      },
+      "type": [
+       "null",
+       "object"
+      ]
+     },
+     "team": {
+      "description": "identity of team",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/team/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/team/definitions/name"
+       }
+      },
+      "type": [
+       "null",
+       "object"
+      ]
+     },
+     "region": {
+      "description": "identity of app region",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/region/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/region/definitions/name"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object"
+      ]
+     },
+     "released_at": {
+      "$ref": "#/components/schemas/app/definitions/released_at"
+     },
+     "repo_size": {
+      "$ref": "#/components/schemas/app/definitions/repo_size"
+     },
+     "slug_size": {
+      "$ref": "#/components/schemas/app/definitions/slug_size"
+     },
+     "space": {
+      "description": "identity of space",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/space/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/space/definitions/name"
+       },
+       "shield": {
+        "$ref": "#/components/schemas/space/definitions/shield"
+       }
+      },
+      "type": [
+       "null",
+       "object"
+      ]
+     },
+     "stack": {
+      "description": "identity of app stack",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/stack/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/stack/definitions/name"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object"
+      ]
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/app/definitions/updated_at"
+     },
+     "web_url": {
+      "$ref": "#/components/schemas/app/definitions/web_url"
+     }
+    }
+   },
+   "dyno-size": {
+    "description": "Dyno sizes are the values and details of sizes that can be assigned to dynos. This information can also be found at : [https://devcenter.heroku.com/articles/dyno-types](https://devcenter.heroku.com/articles/dyno-types).",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "architecture": {
+      "description": "CPU architecture of this dyno size",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "compute": {
+      "description": "minimum vCPUs, non-dedicated may get more depending on load",
+      "readOnly": true,
+      "type": [
+       "integer"
+      ]
+     },
+     "dedicated": {
+      "description": "whether this dyno will be dedicated to one user",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "generation": {
+      "description": "Generation of the Heroku platform for this dyno size",
+      "readOnly": true,
+      "type": [
+       "object"
+      ],
+      "properties": {
+       "id": {
+        "description": "unique identifier of the generation of the Heroku platform for this dyno size",
+        "format": "uuid",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "name": {
+        "description": "unique name of the generation of the Heroku platform for this dyno size",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      }
+     },
+     "id": {
+      "description": "unique identifier of the dyno size",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/dyno-size/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/dyno-size/definitions/name"
+       }
+      ]
+     },
+     "memory": {
+      "description": "amount of RAM in GB",
+      "readOnly": true,
+      "type": [
+       "number"
+      ]
+     },
+     "name": {
+      "description": "name of the dyno size",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "cost": {
+      "description": "price information for this dyno size",
+      "readOnly": true,
+      "type": [
+       "null",
+       "object"
+      ],
+      "definitions": {
+       "cents": {
+        "description": "price in cents per unit time",
+        "readOnly": true,
+        "type": [
+         "integer"
+        ]
+       },
+       "unit": {
+        "description": "unit of price for dyno",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      }
+     },
+     "precise_dyno_units": {
+      "description": "unit of consumption for Heroku Enterprise customers to 2 decimal places",
+      "readOnly": true,
+      "type": [
+       "number"
+      ]
+     },
+     "private_space_only": {
+      "description": "whether this dyno can only be provisioned in a private space",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     }
+    },
+    "properties": {
+     "architecture": {
+      "$ref": "#/components/schemas/dyno-size/definitions/architecture"
+     },
+     "compute": {
+      "$ref": "#/components/schemas/dyno-size/definitions/compute"
+     },
+     "cost": {
+      "$ref": "#/components/schemas/dyno-size/definitions/cost"
+     },
+     "dedicated": {
+      "$ref": "#/components/schemas/dyno-size/definitions/dedicated"
+     },
+     "precise_dyno_units": {
+      "$ref": "#/components/schemas/dyno-size/definitions/precise_dyno_units"
+     },
+     "generation": {
+      "$ref": "#/components/schemas/dyno-size/definitions/generation"
+     },
+     "id": {
+      "$ref": "#/components/schemas/dyno-size/definitions/id"
+     },
+     "memory": {
+      "$ref": "#/components/schemas/dyno-size/definitions/memory"
+     },
+     "name": {
+      "$ref": "#/components/schemas/dyno-size/definitions/name"
+     },
+     "private_space_only": {
+      "$ref": "#/components/schemas/dyno-size/definitions/private_space_only"
+     }
+    }
+   },
+   "enterprise-account": {
+    "description": "Enterprise accounts allow companies to manage their development teams and billing.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "created_at": {
+      "description": "when the enterprise account was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of the enterprise account",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/enterprise-account/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/enterprise-account/definitions/name"
+       }
+      ]
+     },
+     "identity_provider": {
+      "description": "Identity Provider associated with the Enterprise Account",
+      "additionalProperties": false,
+      "type": [
+       "null",
+       "object"
+      ],
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/identity-provider/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/identity-provider/definitions/name"
+       },
+       "owner": {
+        "$ref": "#/components/schemas/identity-provider/definitions/owner"
+       }
+      }
+     },
+     "name": {
+      "description": "unique name of the enterprise account",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "updated_at": {
+      "description": "when the enterprise account was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "permissions": {
+      "description": "the current user's permissions for this enterprise account",
+      "readOnly": true,
+      "type": [
+       "array"
+      ],
+      "items": {
+       "type": [
+        "string"
+       ]
+      }
+     },
+     "trial": {
+      "description": "whether the enterprise account is a trial or not",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "partner_benefits": {
+      "description": "whether the enterprise account is part of the Salesforce Partner Program",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     }
+    },
+    "properties": {
+     "id": {
+      "$ref": "#/components/schemas/enterprise-account/definitions/id"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/enterprise-account/definitions/created_at"
+     },
+     "name": {
+      "$ref": "#/components/schemas/enterprise-account/definitions/name"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/enterprise-account/definitions/updated_at"
+     },
+     "permissions": {
+      "$ref": "#/components/schemas/enterprise-account/definitions/permissions"
+     },
+     "trial": {
+      "$ref": "#/components/schemas/enterprise-account/definitions/trial"
+     },
+     "partner_benefits": {
+      "$ref": "#/components/schemas/enterprise-account/definitions/partner_benefits"
+     },
+     "identity_provider": {
+      "$ref": "#/components/schemas/enterprise-account/definitions/identity_provider"
+     }
+    }
+   },
+   "formation": {
+    "description": "The formation of processes that should be maintained for an app. Update the formation to scale processes or change dyno sizes. Available process type names and commands are defined by the `process_types` attribute for the [slug](#slug) currently released on an app.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "command": {
+      "description": "command to use to launch this process",
+      "readOnly": false,
+      "type": [
+       "string"
+      ]
+     },
+     "created_at": {
+      "description": "when process type was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "dyno_size": {
+      "description": "dyno size",
+      "identity": {
+       "anyOf": [
+        {
+         "x-infralift-dangling-ref": "#/definitions/dyno_size/definitions/id"
+        },
+        {
+         "x-infralift-dangling-ref": "#/definitions/dyno_size/definitions/name"
+        }
+       ]
+      },
+      "properties": {
+       "id": {
+        "description": "unique identifier of the dyno size",
+        "format": "uuid",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "name": {
+        "description": "name of the dyno size",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      },
+      "readOnly": false,
+      "type": [
+       "object"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of this process type",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/formation/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/formation/definitions/type"
+       }
+      ]
+     },
+     "quantity": {
+      "description": "number of processes to maintain",
+      "readOnly": false,
+      "type": [
+       "integer"
+      ]
+     },
+     "size": {
+      "deprecated": true,
+      "description": "deprecated, refer to 'dyno_size' instead",
+      "readOnly": false,
+      "type": [
+       "string"
+      ]
+     },
+     "type": {
+      "description": "type of process to maintain",
+      "readOnly": true,
+      "pattern": "^[-\\w]{1,128}$",
+      "type": [
+       "string"
+      ]
+     },
+     "updated_at": {
+      "description": "when dyno type was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "update": {
+      "additionalProperties": false,
+      "description": "Properties to update a process type",
+      "properties": {
+       "dyno_size": {
+        "$ref": "#/components/schemas/formation/definitions/dyno_size"
+       },
+       "quantity": {
+        "$ref": "#/components/schemas/formation/definitions/quantity"
+       },
+       "type": {
+        "$ref": "#/components/schemas/formation/definitions/type"
+       }
+      },
+      "readOnly": false,
+      "required": [
+       "type"
+      ],
+      "type": [
+       "object"
+      ]
+     }
+    },
+    "properties": {
+     "app": {
+      "description": "app formation belongs to",
+      "properties": {
+       "name": {
+        "$ref": "#/components/schemas/app/definitions/name"
+       },
+       "id": {
+        "$ref": "#/components/schemas/app/definitions/id"
+       }
+      },
+      "type": [
+       "object"
+      ]
+     },
+     "command": {
+      "$ref": "#/components/schemas/formation/definitions/command"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/formation/definitions/created_at"
+     },
+     "dyno_size": {
+      "description": "dyno size",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/dyno-size/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/dyno-size/definitions/name"
+       }
+      },
+      "type": [
+       "object"
+      ]
+     },
+     "id": {
+      "$ref": "#/components/schemas/formation/definitions/id"
+     },
+     "quantity": {
+      "$ref": "#/components/schemas/formation/definitions/quantity"
+     },
+     "size": {
+      "$ref": "#/components/schemas/formation/definitions/size"
+     },
+     "type": {
+      "$ref": "#/components/schemas/formation/definitions/type"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/formation/definitions/updated_at"
+     }
+    }
+   },
+   "generation": {
+    "description": "A generation represents a version of the Heroku platform that includes the app execution environment, routing, telemetry, and build systems.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "created_at": {
+      "description": "when generation was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of generation",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/generation/definitions/name"
+       },
+       {
+        "$ref": "#/components/schemas/generation/definitions/id"
+       }
+      ]
+     },
+     "name": {
+      "description": "unique name of generation",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "updated_at": {
+      "description": "when generation was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     }
+    },
+    "properties": {
+     "created_at": {
+      "$ref": "#/components/schemas/generation/definitions/created_at"
+     },
+     "id": {
+      "$ref": "#/components/schemas/generation/definitions/id"
+     },
+     "name": {
+      "$ref": "#/components/schemas/generation/definitions/name"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/generation/definitions/updated_at"
+     }
+    }
+   },
+   "identity-provider": {
+    "description": "Identity Providers represent the SAML configuration of teams or an Enterprise account",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "certificate": {
+      "description": "raw contents of the public certificate (eg: .crt or .pem file)",
+      "readOnly": false,
+      "type": [
+       "string"
+      ]
+     },
+     "created_at": {
+      "description": "when provider record was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "entity_id": {
+      "description": "URL identifier provided by the identity provider",
+      "readOnly": false,
+      "type": [
+       "string"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of this identity provider",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "name": {
+      "description": "user-friendly unique identifier for this identity provider",
+      "type": [
+       "string"
+      ]
+     },
+     "slo_target_url": {
+      "description": "single log out URL for this identity provider",
+      "readOnly": false,
+      "type": [
+       "string"
+      ]
+     },
+     "sso_target_url": {
+      "description": "single sign on URL for this identity provider",
+      "readOnly": false,
+      "type": [
+       "string"
+      ]
+     },
+     "updated_at": {
+      "description": "when the identity provider record was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "owner": {
+      "description": "entity that owns this identity provider",
+      "properties": {
+       "id": {
+        "description": "unique identifier of the owner",
+        "format": "uuid",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "name": {
+        "description": "name of the owner",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "type": {
+        "description": "type of the owner",
+        "enum": [
+         "team",
+         "enterprise-account"
+        ],
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      },
+      "readOnly": false,
+      "required": [
+       "id",
+       "type"
+      ],
+      "type": [
+       "object"
+      ]
+     }
+    },
+    "properties": {
+     "certificate": {
+      "$ref": "#/components/schemas/identity-provider/definitions/certificate"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/identity-provider/definitions/created_at"
+     },
+     "entity_id": {
+      "$ref": "#/components/schemas/identity-provider/definitions/entity_id"
+     },
+     "id": {
+      "$ref": "#/components/schemas/identity-provider/definitions/id"
+     },
+     "slo_target_url": {
+      "$ref": "#/components/schemas/identity-provider/definitions/slo_target_url"
+     },
+     "sso_target_url": {
+      "$ref": "#/components/schemas/identity-provider/definitions/sso_target_url"
+     },
+     "organization": {
+      "description": "team associated with this identity provider",
+      "properties": {
+       "name": {
+        "$ref": "#/components/schemas/team/definitions/name"
+       }
+      },
+      "type": [
+       "null",
+       "object"
+      ]
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/identity-provider/definitions/updated_at"
+     },
+     "owner": {
+      "$ref": "#/components/schemas/identity-provider/definitions/owner"
+     }
+    }
+   },
+   "plan": {
+    "description": "Plans represent different configurations of add-ons that may be added to apps. Endpoints under add-on services can be accessed without authentication.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "created_at": {
+      "description": "when plan was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "compliance": {
+      "description": "the compliance regimes applied to an add-on plan",
+      "readOnly": false,
+      "type": [
+       "null",
+       "array"
+      ],
+      "items": {
+       "$ref": "#/components/schemas/plan/definitions/regime"
+      }
+     },
+     "default": {
+      "description": "whether this plan is the default for its add-on service",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "description": {
+      "description": "description of plan",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "human_name": {
+      "description": "human readable name of the add-on plan",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of this plan",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "installable_inside_private_network": {
+      "description": "whether this plan is installable to a Private Spaces app",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "installable_outside_private_network": {
+      "description": "whether this plan is installable to a Common Runtime app",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/plan/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/plan/definitions/name"
+       }
+      ]
+     },
+     "name": {
+      "description": "unique name of this plan",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "regime": {
+      "description": "compliance requirements an add-on plan must adhere to",
+      "readOnly": true,
+      "type": [
+       "string"
+      ],
+      "enum": [
+       "HIPAA",
+       "PCI"
+      ]
+     },
+     "cents": {
+      "description": "price in cents per unit of plan",
+      "readOnly": true,
+      "type": [
+       "integer"
+      ]
+     },
+     "contract": {
+      "description": "price is negotiated in a contract outside of monthly add-on billing",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "unit": {
+      "description": "unit of price for plan",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "space_default": {
+      "description": "whether this plan is the default for apps in Private Spaces",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "state": {
+      "description": "release status for plan",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "updated_at": {
+      "description": "when plan was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "visible": {
+      "description": "whether this plan is publicly visible",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     }
+    },
+    "properties": {
+     "addon_service": {
+      "description": "identity of add-on service",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/add-on-service/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/add-on-service/definitions/name"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object"
+      ]
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/plan/definitions/created_at"
+     },
+     "compliance": {
+      "$ref": "#/components/schemas/plan/definitions/compliance"
+     },
+     "default": {
+      "$ref": "#/components/schemas/plan/definitions/default"
+     },
+     "description": {
+      "$ref": "#/components/schemas/plan/definitions/description"
+     },
+     "human_name": {
+      "$ref": "#/components/schemas/plan/definitions/human_name"
+     },
+     "id": {
+      "$ref": "#/components/schemas/plan/definitions/id"
+     },
+     "installable_inside_private_network": {
+      "$ref": "#/components/schemas/plan/definitions/installable_inside_private_network"
+     },
+     "installable_outside_private_network": {
+      "$ref": "#/components/schemas/plan/definitions/installable_outside_private_network"
+     },
+     "name": {
+      "$ref": "#/components/schemas/plan/definitions/name"
+     },
+     "price": {
+      "description": "price",
+      "properties": {
+       "cents": {
+        "$ref": "#/components/schemas/plan/definitions/cents"
+       },
+       "contract": {
+        "$ref": "#/components/schemas/plan/definitions/contract"
+       },
+       "unit": {
+        "$ref": "#/components/schemas/plan/definitions/unit"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object"
+      ]
+     },
+     "space_default": {
+      "$ref": "#/components/schemas/plan/definitions/space_default"
+     },
+     "state": {
+      "$ref": "#/components/schemas/plan/definitions/state"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/plan/definitions/updated_at"
+     },
+     "visible": {
+      "$ref": "#/components/schemas/plan/definitions/visible"
+     }
+    }
+   },
+   "region": {
+    "description": "A region represents a geographic location in which your application may run.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "country": {
+      "description": "country where the region exists",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "created_at": {
+      "description": "when region was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "description": {
+      "description": "description of region",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of region",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/region/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/region/definitions/name"
+       }
+      ]
+     },
+     "locale": {
+      "description": "area in the country where the region exists",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "name": {
+      "description": "unique name of region",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "private_capable": {
+      "description": "whether or not region is available for creating a Private Space",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "provider": {
+      "description": "provider of underlying substrate",
+      "type": [
+       "object"
+      ],
+      "properties": {
+       "name": {
+        "description": "name of provider",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "region": {
+        "description": "region name used by provider",
+        "readOnly": true,
+        "type": [
+         "string"
+        ],
+        "enum": [
+         "ap-south-1",
+         "eu-west-1",
+         "ap-southeast-1",
+         "ap-southeast-2",
+         "eu-central-1",
+         "eu-west-2",
+         "ap-northeast-2",
+         "ap-northeast-1",
+         "us-east-1",
+         "sa-east-1",
+         "us-west-1",
+         "us-west-2",
+         "ca-central-1"
+        ]
+       }
+      },
+      "readOnly": true
+     },
+     "updated_at": {
+      "description": "when region was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     }
+    },
+    "properties": {
+     "country": {
+      "$ref": "#/components/schemas/region/definitions/country"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/region/definitions/created_at"
+     },
+     "description": {
+      "$ref": "#/components/schemas/region/definitions/description"
+     },
+     "id": {
+      "$ref": "#/components/schemas/region/definitions/id"
+     },
+     "locale": {
+      "$ref": "#/components/schemas/region/definitions/locale"
+     },
+     "name": {
+      "$ref": "#/components/schemas/region/definitions/name"
+     },
+     "private_capable": {
+      "$ref": "#/components/schemas/region/definitions/private_capable"
+     },
+     "provider": {
+      "$ref": "#/components/schemas/region/definitions/provider"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/region/definitions/updated_at"
+     }
+    }
+   },
+   "space": {
+    "description": "A space is an isolated, highly available, secure app execution environment.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "created_at": {
+      "description": "when space was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of space",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/space/definitions/id"
+       },
+       {
+        "$ref": "#/components/schemas/space/definitions/name"
+       }
+      ]
+     },
+     "name": {
+      "description": "unique name of space",
+      "readOnly": false,
+      "pattern": "^[a-z0-9](?:[a-z0-9]|-(?!-))+[a-z0-9]$",
+      "type": [
+       "string"
+      ]
+     },
+     "shield": {
+      "description": "true if this space has shield enabled",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "state": {
+      "description": "availability of this space",
+      "enum": [
+       "allocating",
+       "allocated",
+       "deleting"
+      ],
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "updated_at": {
+      "description": "when space was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "log_drain_url": {
+      "description": "URL to which all apps will drain logs. Only settable during space creation and enables direct logging. Must use HTTPS.",
+      "type": [
+       "string"
+      ]
+     },
+     "cidr": {
+      "description": "The RFC-1918 CIDR the Private Space will use. It must be a /16 in 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16",
+      "default": "10.0.0.0/16",
+      "pattern": "^((?:10|172\\.(?:1[6-9]|2[0-9]|3[01])|192\\.168)\\..*.+\\/16)$",
+      "readOnly": false,
+      "type": [
+       "string"
+      ]
+     },
+     "data_cidr": {
+      "description": "The RFC-1918 CIDR that the Private Space will use for the Heroku-managed peering connection that's automatically created when using Heroku Data add-ons. It must be between a /16 and a /20",
+      "readOnly": false,
+      "type": [
+       "string"
+      ]
+     },
+     "generation": {
+      "description": "Generation of the Heroku platform for this space",
+      "readOnly": true,
+      "type": [
+       "object"
+      ],
+      "properties": {
+       "id": {
+        "description": "unique identifier of the generation of the Heroku platform for this space",
+        "format": "uuid",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       },
+       "name": {
+        "description": "unique name of the generation of the Heroku platform for this space",
+        "readOnly": true,
+        "type": [
+         "string"
+        ]
+       }
+      }
+     }
+    },
+    "properties": {
+     "created_at": {
+      "$ref": "#/components/schemas/space/definitions/created_at"
+     },
+     "id": {
+      "$ref": "#/components/schemas/space/definitions/id"
+     },
+     "name": {
+      "$ref": "#/components/schemas/space/definitions/name"
+     },
+     "organization": {
+      "description": "organization that owns this space",
+      "properties": {
+       "name": {
+        "$ref": "#/components/schemas/team/definitions/name"
+       }
+      },
+      "type": [
+       "object"
+      ]
+     },
+     "team": {
+      "description": "team that owns this space",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/team/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/team/definitions/name"
+       }
+      },
+      "type": [
+       "object"
+      ]
+     },
+     "region": {
+      "description": "identity of space region",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/region/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/region/definitions/name"
+       }
+      },
+      "additionalProperties": false,
+      "type": [
+       "object"
+      ]
+     },
+     "shield": {
+      "$ref": "#/components/schemas/space/definitions/shield"
+     },
+     "state": {
+      "$ref": "#/components/schemas/space/definitions/state"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/space/definitions/updated_at"
+     },
+     "cidr": {
+      "$ref": "#/components/schemas/space/definitions/cidr"
+     },
+     "data_cidr": {
+      "$ref": "#/components/schemas/space/definitions/data_cidr"
+     },
+     "generation": {
+      "$ref": "#/components/schemas/space/definitions/generation"
+     }
+    }
+   },
+   "stack": {
+    "description": "Stacks are the different application execution environments available in the Heroku platform.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "created_at": {
+      "description": "when stack was introduced",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "default": {
+      "description": "indicates this stack is the default for new apps",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "id": {
+      "description": "unique identifier of stack",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/stack/definitions/name"
+       },
+       {
+        "$ref": "#/components/schemas/stack/definitions/id"
+       }
+      ]
+     },
+     "name": {
+      "description": "unique name of stack",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "state": {
+      "description": "availability of this stack: beta, deprecated or public",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "updated_at": {
+      "description": "when stack was last modified",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     }
+    },
+    "properties": {
+     "default": {
+      "$ref": "#/components/schemas/stack/definitions/default"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/stack/definitions/created_at"
+     },
+     "id": {
+      "$ref": "#/components/schemas/stack/definitions/id"
+     },
+     "name": {
+      "$ref": "#/components/schemas/stack/definitions/name"
+     },
+     "state": {
+      "$ref": "#/components/schemas/stack/definitions/state"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/stack/definitions/updated_at"
+     }
+    }
+   },
+   "team": {
+    "description": "Teams allow you to manage access to a shared group of applications and other resources.",
+    "additionalProperties": false,
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "created_at": {
+      "description": "when the team was created",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "credit_card_collections": {
+      "description": "whether charges incurred by the team are paid by credit card.",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "default": {
+      "description": "whether to use this team when none is specified",
+      "readOnly": false,
+      "type": [
+       "boolean"
+      ]
+     },
+     "enterprise_account": {
+      "type": [
+       "null",
+       "object"
+      ],
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/enterprise-account/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/enterprise-account/definitions/name"
+       }
+      }
+     },
+     "id": {
+      "description": "unique identifier of team",
+      "format": "uuid",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "identity": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/team/definitions/name"
+       },
+       {
+        "$ref": "#/components/schemas/team/definitions/id"
+       }
+      ]
+     },
+     "identity_provider": {
+      "description": "Identity Provider associated with the Team",
+      "additionalProperties": false,
+      "type": [
+       "null",
+       "object"
+      ],
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/identity-provider/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/identity-provider/definitions/name"
+       },
+       "owner": {
+        "$ref": "#/components/schemas/identity-provider/definitions/owner"
+       }
+      }
+     },
+     "device_data": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "Device data string generated by the client"
+     },
+     "nonce": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "Nonce generated by Braintree hosted fields form"
+     },
+     "address_1": {
+      "type": [
+       "string"
+      ],
+      "description": "street address line 1"
+     },
+     "address_2": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "street address line 2"
+     },
+     "card_number": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "encrypted card number of payment method"
+     },
+     "city": {
+      "type": [
+       "string"
+      ],
+      "description": "city"
+     },
+     "country": {
+      "type": [
+       "string"
+      ],
+      "description": "country"
+     },
+     "cvv": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "card verification value"
+     },
+     "expiration_month": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "expiration month"
+     },
+     "expiration_year": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "expiration year"
+     },
+     "first_name": {
+      "type": [
+       "string"
+      ],
+      "description": "the first name for payment method"
+     },
+     "last_name": {
+      "type": [
+       "string"
+      ],
+      "description": "the last name for payment method"
+     },
+     "other": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "metadata"
+     },
+     "postal_code": {
+      "type": [
+       "string"
+      ],
+      "description": "postal code"
+     },
+     "state": {
+      "type": [
+       "string"
+      ],
+      "description": "state"
+     },
+     "membership_limit": {
+      "description": "upper limit of members allowed in a team.",
+      "readOnly": true,
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "name": {
+      "description": "unique name of team",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "provisioned_licenses": {
+      "description": "whether the team is provisioned licenses by salesforce.",
+      "readOnly": true,
+      "type": [
+       "boolean"
+      ]
+     },
+     "role": {
+      "description": "role in the team",
+      "enum": [
+       "admin",
+       "collaborator",
+       "member",
+       "owner",
+       null
+      ],
+      "readOnly": true,
+      "type": [
+       "null",
+       "string"
+      ]
+     },
+     "type": {
+      "description": "type of team.",
+      "enum": [
+       "enterprise",
+       "team"
+      ],
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     },
+     "updated_at": {
+      "description": "when the team was updated",
+      "format": "date-time",
+      "readOnly": true,
+      "type": [
+       "string"
+      ]
+     }
+    },
+    "properties": {
+     "id": {
+      "$ref": "#/components/schemas/team/definitions/id"
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/team/definitions/created_at"
+     },
+     "credit_card_collections": {
+      "$ref": "#/components/schemas/team/definitions/credit_card_collections"
+     },
+     "default": {
+      "$ref": "#/components/schemas/team/definitions/default"
+     },
+     "enterprise_account": {
+      "$ref": "#/components/schemas/team/definitions/enterprise_account"
+     },
+     "identity_provider": {
+      "$ref": "#/components/schemas/team/definitions/identity_provider"
+     },
+     "membership_limit": {
+      "$ref": "#/components/schemas/team/definitions/membership_limit"
+     },
+     "name": {
+      "$ref": "#/components/schemas/team/definitions/name"
+     },
+     "provisioned_licenses": {
+      "$ref": "#/components/schemas/team/definitions/provisioned_licenses"
+     },
+     "role": {
+      "$ref": "#/components/schemas/team/definitions/role"
+     },
+     "type": {
+      "$ref": "#/components/schemas/team/definitions/type"
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/team/definitions/updated_at"
+     }
+    }
+   },
+   "team-app": {
+    "description": "A team app encapsulates the team specific functionality of Heroku apps.",
+    "type": [
+     "object"
+    ],
+    "definitions": {
+     "locked": {
+      "default": false,
+      "description": "are other team members forbidden from joining this app.",
+      "type": [
+       "boolean"
+      ]
+     },
+     "identity": {
+      "$ref": "#/components/schemas/app/definitions/name"
+     },
+     "internal_routing": {
+      "default": false,
+      "description": "describes whether a Private Spaces app is externally routable or not",
+      "readOnly": false,
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "joined": {
+      "default": false,
+      "description": "is the current member a collaborator on this app.",
+      "type": [
+       "boolean"
+      ]
+     },
+     "personal": {
+      "default": false,
+      "description": "force creation of the app in the user account even if a default team is set.",
+      "type": [
+       "boolean"
+      ]
+     }
+    },
+    "properties": {
+     "archived_at": {
+      "$ref": "#/components/schemas/app/definitions/archived_at"
+     },
+     "buildpack_provided_description": {
+      "$ref": "#/components/schemas/app/definitions/buildpack_provided_description"
+     },
+     "build_stack": {
+      "description": "identity of the stack that will be used for new builds",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/stack/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/stack/definitions/name"
+       }
+      },
+      "type": [
+       "object"
+      ]
+     },
+     "created_at": {
+      "$ref": "#/components/schemas/app/definitions/created_at"
+     },
+     "git_url": {
+      "$ref": "#/components/schemas/app/definitions/git_url"
+     },
+     "id": {
+      "$ref": "#/components/schemas/app/definitions/id"
+     },
+     "internal_routing": {
+      "$ref": "#/components/schemas/team-app/definitions/internal_routing"
+     },
+     "joined": {
+      "$ref": "#/components/schemas/team-app/definitions/joined"
+     },
+     "locked": {
+      "$ref": "#/components/schemas/team-app/definitions/locked"
+     },
+     "maintenance": {
+      "$ref": "#/components/schemas/app/definitions/maintenance"
+     },
+     "name": {
+      "$ref": "#/components/schemas/app/definitions/name"
+     },
+     "team": {
+      "description": "team that owns this app",
+      "properties": {
+       "name": {
+        "$ref": "#/components/schemas/team/definitions/name"
+       }
+      },
+      "type": [
+       "null",
+       "object"
+      ]
+     },
+     "owner": {
+      "description": "identity of app owner",
+      "properties": {
+       "email": {
+        "$ref": "#/components/schemas/account/definitions/email"
+       },
+       "id": {
+        "$ref": "#/components/schemas/account/definitions/id"
+       }
+      },
+      "type": [
+       "null",
+       "object"
+      ]
+     },
+     "region": {
+      "description": "identity of app region",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/region/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/region/definitions/name"
+       }
+      },
+      "type": [
+       "object"
+      ]
+     },
+     "released_at": {
+      "$ref": "#/components/schemas/app/definitions/released_at"
+     },
+     "repo_size": {
+      "$ref": "#/components/schemas/app/definitions/repo_size"
+     },
+     "slug_size": {
+      "$ref": "#/components/schemas/app/definitions/slug_size"
+     },
+     "space": {
+      "description": "identity of space",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/space/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/space/definitions/name"
+       }
+      },
+      "type": [
+       "null",
+       "object"
+      ]
+     },
+     "stack": {
+      "description": "identity of app stack",
+      "properties": {
+       "id": {
+        "$ref": "#/components/schemas/stack/definitions/id"
+       },
+       "name": {
+        "$ref": "#/components/schemas/stack/definitions/name"
+       }
+      },
+      "type": [
+       "object"
+      ]
+     },
+     "updated_at": {
+      "$ref": "#/components/schemas/app/definitions/updated_at"
+     },
+     "web_url": {
+      "$ref": "#/components/schemas/app/definitions/web_url"
+     }
+    }
+   }
+  }
+ },
+ "x-infralift-source": {
+  "repo": "heroku/heroku-go",
+  "commit": "eb24213a9cbb17f6af5003d23a92923949f3b48a",
+  "path": "v6/schema.json",
+  "sha256": "d1e1a890e356075202201c8ac58bdc99214842d1308af2f08575f1939e3a3991"
+ }
+}

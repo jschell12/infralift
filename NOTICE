@@ -9,3 +9,47 @@ trademarks of their respective owners. infralift uses them only to identify the
 service a connection is for, and is not affiliated with or endorsed by them.
 The AWS, Azure and Heroku marks are plain initials drawn for infralift, not
 those companies' logos.
+
+Vendor API descriptions (apps/api/e2e/specs)
+
+The e2e suite commits subsets of vendors' published API descriptions: only the
+operations infralift calls and what they reference, extracted and modified by
+apps/api/e2e/specs/extract.ts (examples removed; Swagger 2.0, Google discovery
+documents and Heroku's hyper-schema converted to OpenAPI; GraphQL schemas cut
+to the fields queried; seeded examples added). Each file carries its upstream
+copyright and licence notice in info.license and info.x-infralift-notice (JSON)
+or a comment header (GraphQL SDL). Each upstream LICENSE, copied verbatim at
+the pinned commit, is in apps/api/e2e/specs/licenses/.
+
+  File                          Upstream (repository@commit, path)                                   Licence       Copyright
+  github.openapi.json           github/rest-api-description@53fd7d2e,                                MIT           (c) 2020 GitHub
+                                descriptions/api.github.com/api.github.com.json
+  cloudflare.openapi.json       cloudflare/api-schemas@8b1a4518, openapi.json                        BSD-3-Clause  (c) 2022, Cloudflare
+  digitalocean.openapi.json     digitalocean/openapi@99819282,                                       Apache-2.0    DigitalOcean, LLC (owner; LICENSE has no copyright line)
+                                specification/DigitalOcean-public.v2.yaml and the files it references
+  vercel.openapi.json           vercel/sdk@fe01b474, vercel-spec.json                                Apache-2.0    Vercel, Inc. (owner; LICENSE has no copyright line)
+  heroku.openapi.json           heroku/heroku-go@eb24213a, v6/schema.json                            MIT           (c) 2014-2016 Timothée Peignier
+  netlify.openapi.json          netlify/open-api@96b68849, swagger.yml                               MIT           (c) 2016 Netlify
+  flyio-machines.openapi.json   superfly/docs@04085862, api/machines/openapi.json                    Apache-2.0    Fly.io, Inc. (owner; LICENSE has no copyright line)
+  flyio.graphql                 superfly/fly-go@84b82d65, schema.graphql                             Apache-2.0    Fly.io, Inc. (owner; LICENSE has no copyright line)
+  railway.graphql               railwayapp/cli@7da7f0d4, src/gql/schema.json                         MIT           (c) 2023 Railway Corp.
+  azure.openapi.json            Azure/azure-rest-api-specs@6a42ee6d, six files under                 MIT           (c) 2017 Microsoft
+                                specification/{web,compute,sql,storage}/resource-manager (sources.ts)
+  google.openapi.json           googleapis/google-api-go-client@2a50de2f, seven *-api.json           BSD-3-Clause  (c) 2011 Google Inc.
+                                discovery documents (sources.ts)
+  tfc.openapi.json              hashicorp/go-tfe@55fa4350, v2/openapi/spec.json                      MPL-2.0       (c) 2018 HashiCorp, Inc.
+
+Full commits and paths are in apps/api/e2e/specs/sources.ts. None of the
+upstream repositories has a NOTICE file of its own, so Apache-2.0 section 4(d)
+adds nothing beyond the licence text and this statement of modification.
+
+tfc.openapi.json is a modified subset of a file under the Mozilla Public
+License 2.0. A subset is a Modification (MPL 2.0, section 1.10), so the file
+remains Covered Software under the MPL 2.0: it carries the MPL's Exhibit A
+notice, the licence text is apps/api/e2e/specs/licenses/tfc.LICENSE, and its
+Source Code Form is the file itself (it is distributed only as source). The
+MPL is file-level, so it does not extend to the rest of infralift.
+
+Render's API description (api-docs.render.com) is used but not committed: it
+states no licence. scripts/e2e.sh fetches it at setup from an archived copy
+pinned by sha256 and writes it to a git-ignored path.

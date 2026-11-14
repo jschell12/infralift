@@ -1,0 +1,6122 @@
+{
+ "openapi": "3.0.0",
+ "info": {
+  "version": "124db3db",
+  "title": "HCP Terraform/Terraform Enterprise API v2-Beta",
+  "description": "OpenAPI Specification for the HCP Terraform/Terraform Enterprise API V2 Public Beta.",
+  "license": {
+   "name": "MPL-2.0",
+   "url": "https://www.mozilla.org/en-US/MPL/2.0/"
+  },
+  "contact": {
+   "name": "API Support",
+   "url": "https://developer.hashicorp.com/terraform/cloud-docs/api-docs"
+  },
+  "x-infralift-subset": "operations infralift calls, from hashicorp/go-tfe@55fa43504b980ba9a50d73a3e69772d1d6819239/v2/openapi/spec.json",
+  "x-infralift-notice": [
+   "Copyright (c) 2018 HashiCorp, Inc. Licensed under MPL-2.0: https://github.com/hashicorp/go-tfe/blob/55fa43504b980ba9a50d73a3e69772d1d6819239/LICENSE",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE.",
+   "This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/."
+  ]
+ },
+ "x-infralift-source": {
+  "repo": "hashicorp/go-tfe",
+  "commit": "55fa43504b980ba9a50d73a3e69772d1d6819239",
+  "path": "v2/openapi/spec.json",
+  "sha256": "d30d3362bf9b2883fefd06cae7696082fee234285cc2bdf8e11abfcc545a65d3"
+ },
+ "servers": [
+  {
+   "url": "https://app.terraform.io/api/v2"
+  }
+ ],
+ "security": [
+  {
+   "bearerAuth": []
+  }
+ ],
+ "paths": {
+  "/organizations/{organization_name}/workspaces": {
+   "get": {
+    "operationId": "listWorkspaces",
+    "summary": "List Workspaces",
+    "description": "List all workspaces in an organization.",
+    "tags": [
+     "workspaces"
+    ],
+    "parameters": [
+     {
+      "in": "path",
+      "name": "organization_name",
+      "schema": {
+       "type": "string"
+      },
+      "required": true,
+      "description": "The name of the organization."
+     },
+     {
+      "in": "query",
+      "name": "search[name]",
+      "schema": {
+       "type": "string"
+      },
+      "required": false,
+      "description": "Partial name to filter workspaces by name."
+     },
+     {
+      "in": "query",
+      "name": "search[wildcard-name]",
+      "schema": {
+       "type": "string"
+      },
+      "required": false,
+      "description": "Wildcard name filter for workspaces."
+     },
+     {
+      "in": "query",
+      "name": "filter[current-run][status]",
+      "schema": {
+       "type": "string"
+      },
+      "required": false,
+      "description": "Comma-separated list of run statuses to filter workspaces by."
+     },
+     {
+      "in": "query",
+      "name": "filter[project][id]",
+      "schema": {
+       "type": "string"
+      },
+      "required": false,
+      "description": "Filter workspaces by project external ID."
+     },
+     {
+      "in": "query",
+      "name": "search[tags]",
+      "schema": {
+       "type": "string"
+      },
+      "required": false,
+      "description": "Comma-separated list of up to 10 tag names that workspaces must have."
+     },
+     {
+      "in": "query",
+      "name": "search[exclude-tags]",
+      "schema": {
+       "type": "string"
+      },
+      "required": false,
+      "description": "Comma-separated list of up to 10 tag names that workspaces must not have."
+     },
+     {
+      "in": "query",
+      "name": "filter[tagged]",
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "required": [
+         "key"
+        ],
+        "properties": {
+         "key": {
+          "type": "string"
+         },
+         "value": {
+          "type": "string"
+         }
+        }
+       }
+      },
+      "required": false,
+      "style": "deepObject",
+      "explode": true,
+      "description": "Filter workspaces by effective tag bindings. Example usage is `filter[tagged][0][key]=env&filter[tagged][0][value]=prod`."
+     },
+     {
+      "in": "query",
+      "name": "filter[tag-union]",
+      "schema": {
+       "type": "boolean",
+       "default": false
+      },
+      "required": false,
+      "description": "Use OR logic for filter[tagged] across effective tag bindings when any provided tag key/value pair may match. By default, filtering uses intersection semantics, so all provided tags must match."
+     },
+     {
+      "in": "query",
+      "name": "filter[tag-value-default-null]",
+      "schema": {
+       "type": "boolean",
+       "default": false
+      },
+      "required": false,
+      "description": "Treat omitted filter[tagged][value] fields as NULL for effective tag bindings."
+     },
+     {
+      "in": "query",
+      "name": "sort",
+      "schema": {
+       "type": "string"
+      },
+      "required": false,
+      "description": "Sort workspaces. Valid values include name, current-run.created-at. Prefix with a hyphen (e.g., -name) to sort in descending order.\n"
+     },
+     {
+      "$ref": "#/components/parameters/page_number"
+     },
+     {
+      "$ref": "#/components/parameters/page_size"
+     },
+     {
+      "in": "query",
+      "name": "fields[workspaces]",
+      "description": "Return only the specified fields for workspaces resource(s) in the response. Use underscores for identifiers that contain a dash: For example, auto_apply instead of auto-apply. An empty value indicates that no fields should be returned.",
+      "style": "form",
+      "explode": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     },
+     {
+      "in": "query",
+      "name": "include",
+      "style": "form",
+      "explode": false,
+      "required": false,
+      "description": "Optionally side-load the specified relationships.",
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "enum": [
+         "agent_pool",
+         "current_assessment_result",
+         "current_configuration_version",
+         "current_configuration_version.ingress_attributes",
+         "current_run",
+         "current_run.apply",
+         "current_run.plan",
+         "current_run.configuration_version",
+         "current_run.configuration_version.ingress_attributes",
+         "current_state_version",
+         "current_state_version.resources_processed",
+         "latest_run",
+         "latest_run.plan",
+         "latest_run.configuration_version",
+         "latest_run.configuration_version.ingress_attributes",
+         "locked_by",
+         "no_code_module_version",
+         "no_code_module_version.no_code_module",
+         "no_code_module_version.no_code_module.latest_version",
+         "organization",
+         "outputs",
+         "project",
+         "readme",
+         "vars",
+         "effective_tag_bindings"
+        ]
+       }
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of workspaces",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "data"
+         ],
+         "properties": {
+          "data": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/workspaces"
+           }
+          },
+          "meta": {
+           "type": "object",
+           "properties": {
+            "pagination": {
+             "$ref": "#/components/schemas/pagination"
+            },
+            "status-counts": {
+             "type": "object",
+             "additionalProperties": {
+              "type": "integer"
+             }
+            }
+           }
+          },
+          "links": {
+           "$ref": "#/components/schemas/self-with-pagination"
+          },
+          "included": {
+           "type": "array",
+           "items": {
+            "oneOf": [
+             {
+              "$ref": "#/components/schemas/agent-pools"
+             },
+             {
+              "$ref": "#/components/schemas/assessment-results"
+             },
+             {
+              "$ref": "#/components/schemas/configuration-versions"
+             },
+             {
+              "$ref": "#/components/schemas/ingress-attributes"
+             },
+             {
+              "$ref": "#/components/schemas/runs"
+             },
+             {
+              "$ref": "#/components/schemas/applies"
+             },
+             {
+              "$ref": "#/components/schemas/plans"
+             },
+             {
+              "$ref": "#/components/schemas/state-versions"
+             },
+             {
+              "$ref": "#/components/schemas/users"
+             },
+             {
+              "$ref": "#/components/schemas/no-code-module-versions"
+             },
+             {
+              "$ref": "#/components/schemas/no-code-modules"
+             },
+             {
+              "$ref": "#/components/schemas/organizations"
+             },
+             {
+              "$ref": "#/components/schemas/workspace-outputs"
+             },
+             {
+              "$ref": "#/components/schemas/projects"
+             },
+             {
+              "$ref": "#/components/schemas/workspace-readme"
+             },
+             {
+              "$ref": "#/components/schemas/vars"
+             },
+             {
+              "$ref": "#/components/schemas/effective-tag-bindings"
+             }
+            ],
+            "discriminator": {
+             "propertyName": "type",
+             "mapping": {
+              "agent-pools": "#/components/schemas/agent-pools",
+              "assessment-results": "#/components/schemas/assessment-results",
+              "configuration-versions": "#/components/schemas/configuration-versions",
+              "ingress-attributes": "#/components/schemas/ingress-attributes",
+              "runs": "#/components/schemas/runs",
+              "applies": "#/components/schemas/applies",
+              "plans": "#/components/schemas/plans",
+              "state-versions": "#/components/schemas/state-versions",
+              "users": "#/components/schemas/users",
+              "no-code-module-versions": "#/components/schemas/no-code-module-versions",
+              "no-code-modules": "#/components/schemas/no-code-modules",
+              "organizations": "#/components/schemas/organizations",
+              "workspace-outputs": "#/components/schemas/workspace-outputs",
+              "projects": "#/components/schemas/projects",
+              "workspace-readme": "#/components/schemas/workspace-readme",
+              "vars": "#/components/schemas/vars",
+              "effective-tag-bindings": "#/components/schemas/effective-tag-bindings"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Organization not found or user unauthorized to view workspaces",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "$ref": "#/components/schemas/errors"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "Error details",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "$ref": "#/components/schemas/errors"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/workspaces/{workspace_id}": {
+   "get": {
+    "operationId": "getWorkspace",
+    "summary": "Get a Workspace",
+    "description": "Get details of a specific workspace by its external ID.",
+    "tags": [
+     "workspaces"
+    ],
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "schema": {
+       "type": "string"
+      },
+      "required": true,
+      "description": "The external ID of the workspace."
+     },
+     {
+      "in": "query",
+      "name": "fields[workspaces]",
+      "description": "Return only the specified fields for workspaces resource(s) in the response. Use underscores for identifiers that contain a dash: For example, auto_apply instead of auto-apply. An empty value indicates that no fields should be returned.",
+      "style": "form",
+      "explode": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     },
+     {
+      "in": "query",
+      "name": "include",
+      "style": "form",
+      "explode": false,
+      "required": false,
+      "description": "Optionally side-load the specified relationships.",
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "enum": [
+         "agent_pool",
+         "current_assessment_result",
+         "current_configuration_version",
+         "current_configuration_version.ingress_attributes",
+         "current_run",
+         "current_run.apply",
+         "current_run.plan",
+         "current_run.configuration_version",
+         "current_run.configuration_version.ingress_attributes",
+         "current_state_version",
+         "current_state_version.resources_processed",
+         "latest_run",
+         "latest_run.plan",
+         "latest_run.configuration_version",
+         "latest_run.configuration_version.ingress_attributes",
+         "locked_by",
+         "no_code_module_version",
+         "no_code_module_version.no_code_module",
+         "no_code_module_version.no_code_module.latest_version",
+         "organization",
+         "outputs",
+         "project",
+         "readme",
+         "vars",
+         "effective_tag_bindings"
+        ]
+       }
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Workspace details",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "$ref": "#/components/schemas/workspaces-envelope"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Workspace not found or user unauthorized to view workspace",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "$ref": "#/components/schemas/errors"
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "Error details",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "$ref": "#/components/schemas/errors"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/organizations/{organization_name}/oauth-clients": {
+   "get": {
+    "operationId": "listOAuthClients",
+    "summary": "List OAuth Clients",
+    "description": "List all VCS connections between an organization and its VCS providers.",
+    "tags": [
+     "oauth-clients"
+    ],
+    "parameters": [
+     {
+      "in": "path",
+      "name": "organization_name",
+      "schema": {
+       "type": "string"
+      },
+      "required": true,
+      "description": "The name of the organization."
+     },
+     {
+      "in": "query",
+      "name": "show_affected_workspaces",
+      "schema": {
+       "type": "boolean"
+      },
+      "required": false,
+      "description": "If true, includes names of up to 25 affected workspaces and total count per client."
+     },
+     {
+      "$ref": "#/components/parameters/page_number"
+     },
+     {
+      "$ref": "#/components/parameters/page_size"
+     },
+     {
+      "in": "query",
+      "name": "fields[oauth-clients]",
+      "description": "Return only the specified fields for oauth-clients resource(s) in the response. Use underscores for identifiers that contain a dash: For example, auto_apply instead of auto-apply. An empty value indicates that no fields should be returned.",
+      "style": "form",
+      "explode": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     },
+     {
+      "in": "query",
+      "name": "include",
+      "style": "form",
+      "explode": false,
+      "required": false,
+      "description": "Optionally side-load the specified relationships.",
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "enum": [
+         "oauth_tokens",
+         "projects",
+         "agent_pool"
+        ]
+       }
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of OAuth Clients",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "data": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/oauth-clients"
+           }
+          },
+          "meta": {
+           "type": "object",
+           "properties": {
+            "pagination": {
+             "$ref": "#/components/schemas/pagination"
+            }
+           }
+          },
+          "links": {
+           "$ref": "#/components/schemas/self-with-pagination"
+          },
+          "included": {
+           "type": "array",
+           "items": {
+            "oneOf": [
+             {
+              "$ref": "#/components/schemas/oauth-tokens"
+             },
+             {
+              "$ref": "#/components/schemas/projects"
+             },
+             {
+              "$ref": "#/components/schemas/agent-pools"
+             }
+            ],
+            "discriminator": {
+             "propertyName": "type",
+             "mapping": {
+              "oauth-tokens": "#/components/schemas/oauth-tokens",
+              "projects": "#/components/schemas/projects",
+              "agent-pools": "#/components/schemas/agent-pools"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "Error details",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "$ref": "#/components/schemas/errors"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/oauth-clients/{oauth_client_id}/oauth-tokens": {
+   "get": {
+    "tags": [
+     "oauth-tokens"
+    ],
+    "summary": "List OAuth Tokens for an OAuth Client",
+    "description": "List all OAuth tokens for a given OAuth client.",
+    "operationId": "listOauthTokensForOauthClient",
+    "parameters": [
+     {
+      "name": "oauth_client_id",
+      "in": "path",
+      "required": true,
+      "description": "The ID of the OAuth client.",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "$ref": "#/components/parameters/page_number"
+     },
+     {
+      "$ref": "#/components/parameters/page_size"
+     },
+     {
+      "in": "query",
+      "name": "fields[oauth-tokens]",
+      "description": "Return only the specified fields for oauth-tokens resource(s) in the response. Use underscores for identifiers that contain a dash: For example, auto_apply instead of auto-apply. An empty value indicates that no fields should be returned.",
+      "style": "form",
+      "explode": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "data": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/oauth-tokens"
+           }
+          },
+          "links": {
+           "$ref": "#/components/schemas/self-with-pagination"
+          },
+          "meta": {
+           "type": "object",
+           "properties": {
+            "pagination": {
+             "$ref": "#/components/schemas/pagination"
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "Not Found",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "$ref": "#/components/schemas/errors"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/workspaces/{workspace_id}/runs": {
+   "get": {
+    "operationId": "listWorkspaceRuns",
+    "summary": "List Runs in a Workspace",
+    "description": "List all runs in a workspace.",
+    "tags": [
+     "runs"
+    ],
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "schema": {
+       "type": "string"
+      },
+      "required": true,
+      "description": "Workspace ID"
+     },
+     {
+      "in": "query",
+      "name": "filter[operation]",
+      "schema": {
+       "type": "string"
+      },
+      "required": false,
+      "description": "Filter by run operation."
+     },
+     {
+      "in": "query",
+      "name": "filter[status]",
+      "schema": {
+       "type": "string"
+      },
+      "required": false,
+      "description": "Filter by run status."
+     },
+     {
+      "$ref": "#/components/parameters/page_number"
+     },
+     {
+      "$ref": "#/components/parameters/page_size"
+     },
+     {
+      "in": "query",
+      "name": "fields[runs]",
+      "description": "Return only the specified fields for runs resource(s) in the response. Use underscores for identifiers that contain a dash: For example, auto_apply instead of auto-apply. An empty value indicates that no fields should be returned.",
+      "style": "form",
+      "explode": false,
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     },
+     {
+      "in": "query",
+      "name": "include",
+      "style": "form",
+      "explode": false,
+      "required": false,
+      "description": "Optionally side-load the specified relationships.",
+      "schema": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "enum": [
+         "plan",
+         "apply",
+         "created_by",
+         "configuration_version",
+         "configuration_version.ingress_attributes",
+         "cost_estimate",
+         "workspace",
+         "task_stages",
+         "tf_policy_evaluations"
+        ]
+       }
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of runs",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "data": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/runs"
+           }
+          },
+          "meta": {
+           "type": "object",
+           "properties": {
+            "pagination": {
+             "$ref": "#/components/schemas/pagination"
+            }
+           }
+          },
+          "links": {
+           "$ref": "#/components/schemas/self-with-pagination"
+          },
+          "included": {
+           "type": "array",
+           "items": {
+            "oneOf": [
+             {
+              "$ref": "#/components/schemas/plans"
+             },
+             {
+              "$ref": "#/components/schemas/applies"
+             },
+             {
+              "$ref": "#/components/schemas/users"
+             },
+             {
+              "$ref": "#/components/schemas/configuration-versions"
+             },
+             {
+              "$ref": "#/components/schemas/ingress-attributes"
+             },
+             {
+              "$ref": "#/components/schemas/cost-estimates"
+             },
+             {
+              "$ref": "#/components/schemas/workspaces"
+             },
+             {
+              "$ref": "#/components/schemas/task-stages"
+             },
+             {
+              "$ref": "#/components/schemas/tf-policy-evaluations"
+             }
+            ],
+            "discriminator": {
+             "propertyName": "type",
+             "mapping": {
+              "plans": "#/components/schemas/plans",
+              "applies": "#/components/schemas/applies",
+              "users": "#/components/schemas/users",
+              "configuration-versions": "#/components/schemas/configuration-versions",
+              "ingress-attributes": "#/components/schemas/ingress-attributes",
+              "cost-estimates": "#/components/schemas/cost-estimates",
+              "workspaces": "#/components/schemas/workspaces",
+              "task-stages": "#/components/schemas/task-stages",
+              "tf-policy-evaluations": "#/components/schemas/tf-policy-evaluations"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "default": {
+      "description": "Error details",
+      "content": {
+       "application/vnd.api+json": {
+        "schema": {
+         "$ref": "#/components/schemas/errors"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "parameters": {
+   "page_number": {
+    "name": "page[number]",
+    "in": "query",
+    "description": "The page number to retrieve.",
+    "schema": {
+     "type": "integer"
+    }
+   },
+   "page_size": {
+    "name": "page[size]",
+    "in": "query",
+    "description": "The number of items to retrieve per page. Defaults to 20.",
+    "schema": {
+     "type": "integer"
+    }
+   }
+  },
+  "schemas": {
+   "agent-pools": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "agent-pools"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "organization-scoped": {
+        "type": "boolean"
+       },
+       "agent-count": {
+        "type": "integer",
+        "readOnly": true
+       }
+      }
+     },
+     "links": {
+      "$ref": "#/components/schemas/self"
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "agents": {
+        "$ref": "#/components/schemas/links_related"
+       },
+       "authentication-tokens": {
+        "$ref": "#/components/schemas/links_related"
+       },
+       "workspaces": {
+        "$ref": "#/components/schemas/workspaces-has-many"
+       },
+       "allowed-workspaces": {
+        "$ref": "#/components/schemas/workspaces-has-many"
+       },
+       "allowed-projects": {
+        "$ref": "#/components/schemas/projects-has-many"
+       },
+       "excluded-workspaces": {
+        "$ref": "#/components/schemas/workspaces-has-many"
+       },
+       "organization": {
+        "$ref": "#/components/schemas/organizations-has-one"
+       }
+      }
+     }
+    }
+   },
+   "agent-pools-has-one": {
+    "type": "object",
+    "nullable": true,
+    "required": [
+     "data"
+    ],
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/agent-pools-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "agent-pools-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "agent-pools"
+      ]
+     }
+    }
+   },
+   "applies": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "applies"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "execution-details": {
+        "type": "object",
+        "readOnly": true,
+        "nullable": true,
+        "properties": {
+         "mode": {
+          "type": "string",
+          "enum": [
+           "agent",
+           "remote",
+           "local"
+          ]
+         },
+         "agent-id": {
+          "type": "string"
+         },
+         "agent-name": {
+          "type": "string"
+         },
+         "agent-pool-id": {
+          "type": "string"
+         },
+         "agent-pool-name": {
+          "type": "string"
+         }
+        }
+       },
+       "status": {
+        "readOnly": true,
+        "type": "string",
+        "enum": [
+         "created",
+         "pending",
+         "queued",
+         "agent_queued",
+         "running",
+         "errored",
+         "canceled",
+         "finished",
+         "unreachable"
+        ]
+       },
+       "status-timestamps": {
+        "readOnly": true,
+        "type": "object",
+        "properties": {
+         "agent-queued-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "started-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "errored-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "canceled-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "force-canceled-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "finished-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         }
+        }
+       },
+       "log-read-url": {
+        "readOnly": true,
+        "type": "string"
+       },
+       "resource-additions": {
+        "readOnly": true,
+        "type": "integer",
+        "nullable": true
+       },
+       "resource-changes": {
+        "readOnly": true,
+        "type": "integer",
+        "nullable": true
+       },
+       "resource-destructions": {
+        "readOnly": true,
+        "type": "integer",
+        "nullable": true
+       },
+       "resource-imports": {
+        "readOnly": true,
+        "type": "integer",
+        "nullable": true
+       },
+       "action-invocations": {
+        "readOnly": true,
+        "type": "integer",
+        "nullable": true
+       },
+       "action-failures": {
+        "readOnly": true,
+        "type": "integer",
+        "nullable": true
+       },
+       "backing-data-state": {
+        "type": "string",
+        "readOnly": true,
+        "x-vis": [
+         "tfe"
+        ],
+        "description": "Data retention lifecycle state of the apply's backing data.\n\nThis attribute is only available in Terraform Enterprise.",
+        "enum": [
+         "backing_data_initialized",
+         "backing_data_available",
+         "backing_data_soft_deleted",
+         "backing_data_permanently_deleted"
+        ]
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "state-versions": {
+        "$ref": "#/components/schemas/state-versions-has-many"
+       }
+      }
+     },
+     "links": {
+      "$ref": "#/components/schemas/self"
+     }
+    }
+   },
+   "applies-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "$ref": "#/components/schemas/applies-identifier"
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "applies-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "applies"
+      ]
+     }
+    }
+   },
+   "assessment-results": {
+    "type": "object",
+    "required": [
+     "id",
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "assessment-results"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "succeeded": {
+        "type": "boolean",
+        "description": "Whether the assessment completed successfully"
+       },
+       "all-checks-succeeded": {
+        "type": "boolean",
+        "description": "Whether all health checks passed"
+       },
+       "checks-errored": {
+        "type": "integer",
+        "description": "Number of health checks that errored",
+        "nullable": true
+       },
+       "checks-failed": {
+        "type": "integer",
+        "description": "Number of health checks that failed",
+        "nullable": true
+       },
+       "checks-passed": {
+        "type": "integer",
+        "description": "Number of health checks that passed",
+        "nullable": true
+       },
+       "checks-unknown": {
+        "type": "integer",
+        "description": "Number of health checks with unknown status",
+        "nullable": true
+       },
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Timestamp when the assessment result was created"
+       },
+       "drifted": {
+        "type": "boolean",
+        "description": "Whether drift was detected"
+       },
+       "error-message": {
+        "type": "string",
+        "nullable": true,
+        "description": "Error message if the assessment failed"
+       },
+       "resources-drifted": {
+        "type": "integer",
+        "nullable": true,
+        "description": "Number of resources that have drifted"
+       },
+       "resources-undrifted": {
+        "type": "integer",
+        "nullable": true,
+        "description": "Number of resources that have not drifted"
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "workspace": {
+        "description": "The workspace this assessment result belongs to",
+        "$ref": "#/components/schemas/workspaces-has-one"
+       },
+       "source": {
+        "description": "The source assessment or plan that produced this result.",
+        "$ref": "#/components/schemas/assessment-source-has-one"
+       }
+      }
+     },
+     "links": {
+      "type": "object",
+      "properties": {
+       "self": {
+        "type": "string",
+        "description": "API URL for this assessment result"
+       },
+       "json-output": {
+        "type": "string",
+        "nullable": true,
+        "description": "API URL for the JSON formatted assessment output (available when assessment succeeded)"
+       },
+       "json-schema": {
+        "type": "string",
+        "nullable": true,
+        "description": "API URL for the JSON schema of this assessment (available when assessment succeeded)"
+       },
+       "sanitized-plan": {
+        "type": "string",
+        "nullable": true,
+        "description": "API URL for the sanitized plan (available when HYOK is enabled and assessment succeeded)",
+        "x-vis": [
+         "public-beta"
+        ]
+       },
+       "log-output": {
+        "type": "string",
+        "description": "API URL to read the logs for this assessment"
+       }
+      }
+     }
+    }
+   },
+   "assessment-results-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/assessment-results-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "assessment-results-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "assessment-results"
+      ]
+     }
+    }
+   },
+   "assessment-source-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "$ref": "#/components/schemas/assessment-source-identifier"
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "assessment-source-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "assessments",
+       "plans"
+      ]
+     }
+    }
+   },
+   "authenticated-resource-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "$ref": "#/components/schemas/authenticated-resource-identifier"
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "authenticated-resource-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "organizations",
+       "runs",
+       "users",
+       "teams"
+      ]
+     }
+    }
+   },
+   "configurable-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/configurable-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "configurable-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "workspaces",
+       "policy-sets",
+       "varsets"
+      ]
+     }
+    }
+   },
+   "configuration-versions": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "configuration-versions"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "auto-queue-runs": {
+        "type": "boolean"
+       },
+       "error": {
+        "type": "string",
+        "nullable": true
+       },
+       "error-message": {
+        "type": "string",
+        "nullable": true
+       },
+       "source": {
+        "type": "string",
+        "nullable": true
+       },
+       "speculative": {
+        "type": "boolean"
+       },
+       "status": {
+        "type": "string",
+        "enum": [
+         "pending",
+         "fetching",
+         "uploaded",
+         "archived",
+         "errored",
+         "backing_data_soft_deleted",
+         "backing_data_permanently_deleted"
+        ]
+       },
+       "status-timestamps": {
+        "type": "object",
+        "properties": {
+         "fetching-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "uploaded-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "errored-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "archived-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "soft-delete-backing-data-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "restore-backing-data-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "permanently-delete-backing-data-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         }
+        }
+       },
+       "provisional": {
+        "type": "boolean"
+       },
+       "upload-url": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "ingress-attributes": {
+        "$ref": "#/components/schemas/ingress-attributes-has-one"
+       }
+      }
+     },
+     "links": {
+      "type": "object",
+      "properties": {
+       "self": {
+        "type": "string"
+       },
+       "download": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   },
+   "configuration-versions-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/configuration-versions-identifier"
+       }
+      ],
+      "nullable": true
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "configuration-versions-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "configuration-versions"
+      ]
+     }
+    }
+   },
+   "cost-estimates": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "cost-estimates"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "error-message": {
+        "type": "string",
+        "nullable": true
+       },
+       "status": {
+        "type": "string",
+        "enum": [
+         "pending",
+         "queued",
+         "finished",
+         "canceled",
+         "errored",
+         "unreachable",
+         "skipped_due_to_targeting"
+        ]
+       },
+       "status-timestamps": {
+        "type": "object",
+        "properties": {
+         "pending-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "queued-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "finished-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "canceled-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "errored-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "skipped-due-to-targeting-at": {
+          "type": "string",
+          "format": "date-time"
+         }
+        }
+       },
+       "resources": {
+        "type": "object",
+        "nullable": true,
+        "description": "Low-level cost estimation details, only present when status is \"finished\". The keys or structure of this hash may change over time.",
+        "properties": {
+         "matched": {
+          "type": "array",
+          "items": {
+           "type": "object",
+           "additionalProperties": true
+          }
+         },
+         "unmatched": {
+          "type": "array",
+          "items": {
+           "type": "object",
+           "additionalProperties": true
+          }
+         }
+        }
+       },
+       "resources-count": {
+        "type": "integer",
+        "nullable": true,
+        "description": "Total number of resources. Only present when status is \"finished\"."
+       },
+       "matched-resources-count": {
+        "type": "integer",
+        "nullable": true,
+        "description": "Number of matched resources. Only present when status is \"finished\"."
+       },
+       "unmatched-resources-count": {
+        "type": "integer",
+        "nullable": true,
+        "description": "Number of unmatched resources. Only present when status is \"finished\"."
+       },
+       "prior-monthly-cost": {
+        "type": "string",
+        "nullable": true,
+        "description": "Prior monthly cost as a decimal string. Only present when status is \"finished\"."
+       },
+       "proposed-monthly-cost": {
+        "type": "string",
+        "nullable": true,
+        "description": "Proposed monthly cost as a decimal string. Only present when status is \"finished\"."
+       },
+       "delta-monthly-cost": {
+        "type": "string",
+        "nullable": true,
+        "description": "Delta monthly cost as a decimal string. Only present when status is \"finished\"."
+       }
+      }
+     }
+    }
+   },
+   "cost-estimates-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/cost-estimates-identifier"
+       }
+      ],
+      "nullable": true
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "cost-estimates-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "cost-estimates"
+      ]
+     }
+    }
+   },
+   "data-retention-policy-has-one": {
+    "type": "object",
+    "required": [
+     "data"
+    ],
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/data-retention-policy-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "data-retention-policy-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "data-retention-policy-delete-olders",
+       "data-retention-policy-dont-deletes"
+      ]
+     }
+    }
+   },
+   "effective-tag-bindings": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "effective-tag-bindings"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "required": [
+       "key"
+      ],
+      "properties": {
+       "key": {
+        "type": "string"
+       },
+       "value": {
+        "type": "string"
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "description": "Optional relationship indicating the project this binding was inherited from, if applicable.",
+      "properties": {
+       "inherited-from": {
+        "$ref": "#/components/schemas/inherited-from-has-one"
+       }
+      }
+     }
+    }
+   },
+   "entitlement-sets-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/entitlement-sets-identifier"
+       }
+      ],
+      "nullable": true
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "entitlement-sets-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "entitlement-sets"
+      ]
+     }
+    }
+   },
+   "errors": {
+    "type": "object",
+    "properties": {
+     "errors": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "status": {
+         "type": "string"
+        },
+        "title": {
+         "type": "string"
+        },
+        "detail": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   },
+   "hyok-configurations-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/hyok-configurations-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "hyok-configurations-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "hyok-configurations"
+      ]
+     }
+    }
+   },
+   "hyok-encrypted-data-keys-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/hyok-encrypted-data-keys-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "hyok-encrypted-data-keys-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "hyok-encrypted-data-keys"
+      ]
+     }
+    }
+   },
+   "ingress-attributes": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "ingress-attributes"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "branch": {
+        "type": "string"
+       },
+       "clone-url": {
+        "type": "string"
+       },
+       "commit-message": {
+        "type": "string"
+       },
+       "commit-sha": {
+        "type": "string"
+       },
+       "commit-url": {
+        "type": "string"
+       },
+       "compare-url": {
+        "type": "string"
+       },
+       "identifier": {
+        "type": "string"
+       },
+       "is-pull-request": {
+        "type": "boolean"
+       },
+       "on-default-branch": {
+        "type": "boolean"
+       },
+       "pull-request-number": {
+        "type": "integer"
+       },
+       "pull-request-url": {
+        "type": "string"
+       },
+       "pull-request-title": {
+        "type": "string"
+       },
+       "pull-request-body": {
+        "type": "string"
+       },
+       "tag": {
+        "type": "string",
+        "nullable": true
+       },
+       "sender-username": {
+        "type": "string"
+       },
+       "sender-avatar-url": {
+        "type": "string"
+       },
+       "sender-html-url": {
+        "type": "string"
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "created-by": {
+        "$ref": "#/components/schemas/users-has-one"
+       }
+      }
+     },
+     "links": {
+      "$ref": "#/components/schemas/self"
+     }
+    }
+   },
+   "ingress-attributes-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/ingress-attributes-identifier"
+       }
+      ],
+      "nullable": true
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "ingress-attributes-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "ingress-attributes"
+      ]
+     }
+    }
+   },
+   "inherited-from-has-one": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "object",
+      "nullable": true,
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/projects-identifier"
+       }
+      ],
+      "discriminator": {
+       "propertyName": "type",
+       "mapping": {
+        "projects": "#/components/schemas/projects-identifier"
+       }
+      }
+     }
+    }
+   },
+   "links_related": {
+    "type": "object",
+    "properties": {
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "locked-by-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/locked-by-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "locked-by-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "users",
+       "teams",
+       "runs"
+      ]
+     }
+    }
+   },
+   "no-code-module-versions": {
+    "type": "object",
+    "required": [
+     "id",
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "no-code-module-versions"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "module-version": {
+        "type": "string",
+        "readOnly": true,
+        "description": "Registry module version string this no-code module version pins\n(for example, 1.0.0).\n"
+       },
+       "version-number": {
+        "type": "integer",
+        "readOnly": true,
+        "description": "Monotonic version number for this no-code module version record.\n"
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "organization": {
+        "$ref": "#/components/schemas/organizations-has-one"
+       },
+       "no-code-module": {
+        "$ref": "#/components/schemas/no-code-modules-has-one"
+       },
+       "variable-options": {
+        "$ref": "#/components/schemas/variable-options-has-many"
+       }
+      }
+     }
+    }
+   },
+   "no-code-module-versions-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/no-code-module-versions-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "no-code-module-versions-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "no-code-module-versions"
+      ]
+     }
+    }
+   },
+   "no-code-modules": {
+    "type": "object",
+    "required": [
+     "id",
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "no-code-modules"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "enabled": {
+        "type": "boolean",
+        "description": "Whether this no-code module is enabled for deployment."
+       },
+       "version-pin": {
+        "type": "string",
+        "nullable": true,
+        "description": "Optional pinned module version for no-code deployments."
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "organization": {
+        "$ref": "#/components/schemas/organizations-has-one"
+       },
+       "registry-module": {
+        "$ref": "#/components/schemas/registry-modules-has-one"
+       },
+       "variable-options": {
+        "$ref": "#/components/schemas/variable-options-has-many"
+       },
+       "latest-version": {
+        "$ref": "#/components/schemas/no-code-module-versions-has-one"
+       }
+      }
+     },
+     "links": {
+      "$ref": "#/components/schemas/self"
+     }
+    }
+   },
+   "no-code-modules-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/no-code-modules-identifier"
+       }
+      ],
+      "nullable": true
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "no-code-modules-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "no-code-modules"
+      ]
+     }
+    }
+   },
+   "oauth-clients": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "oauth-clients"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "name": {
+        "type": "string",
+        "nullable": true
+       },
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "updated-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "callback-url": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "connect-path": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "service-provider": {
+        "type": "string"
+       },
+       "service-provider-display-name": {
+        "type": "string",
+        "readOnly": true
+       },
+       "http-url": {
+        "type": "string",
+        "nullable": true
+       },
+       "api-url": {
+        "type": "string",
+        "nullable": true
+       },
+       "key": {
+        "type": "string",
+        "nullable": true
+       },
+       "ado-entra-tenant-id": {
+        "type": "string",
+        "nullable": true
+       },
+       "ado-org-name": {
+        "type": "string",
+        "nullable": true,
+        "description": "The Azure DevOps organization name for connections using an org-scoped Personal Access Token (PAT). Must start and end with a letter or number and may contain only letters, numbers, and hyphens (e.g. \"my-company\"). Required when using an org-scoped PAT; omit or set to null when using a globally-scoped PAT.\n"
+       },
+       "secret": {
+        "type": "string",
+        "nullable": true
+       },
+       "rsa-public-key": {
+        "type": "string",
+        "nullable": true
+       },
+       "uuid": {
+        "type": "string",
+        "readOnly": true
+       },
+       "organization-scoped": {
+        "type": "boolean"
+       },
+       "affected-workspaces": {
+        "type": "array",
+        "nullable": true,
+        "items": {
+         "type": "string"
+        }
+       },
+       "affected-workspaces-count": {
+        "type": "integer",
+        "nullable": true
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "organization": {
+        "$ref": "#/components/schemas/organizations-has-one"
+       },
+       "agent-pool": {
+        "$ref": "#/components/schemas/agent-pools-has-one"
+       },
+       "projects": {
+        "$ref": "#/components/schemas/projects-has-many"
+       },
+       "oauth-tokens": {
+        "$ref": "#/components/schemas/oauth-tokens-has-many"
+       }
+      }
+     }
+    }
+   },
+   "oauth-clients-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/oauth-clients-identifier"
+       }
+      ],
+      "nullable": true
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "oauth-clients-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "oauth-clients"
+      ]
+     }
+    }
+   },
+   "oauth-tokens": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "oauth-tokens"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "service-provider-user": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "has-ssh-key": {
+        "type": "boolean",
+        "readOnly": true
+       },
+       "ssh-key": {
+        "type": "string",
+        "nullable": true,
+        "writeOnly": true,
+        "description": "The SSH private key. Write-only; use has-ssh-key to check if a key has been set."
+       }
+      }
+     },
+     "links": {
+      "$ref": "#/components/schemas/self"
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "oauth-client": {
+        "$ref": "#/components/schemas/oauth-clients-has-one"
+       },
+       "vcs-organizations": {
+        "$ref": "#/components/schemas/links_related"
+       }
+      }
+     }
+    }
+   },
+   "oauth-tokens-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/oauth-tokens-identifier"
+      }
+     }
+    }
+   },
+   "oauth-tokens-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "oauth-tokens"
+      ]
+     }
+    }
+   },
+   "organizations": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "organizations"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "external-id": {
+        "type": "string",
+        "readOnly": true
+       },
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "email": {
+        "type": "string"
+       },
+       "session-timeout": {
+        "type": "integer",
+        "nullable": true
+       },
+       "session-remember": {
+        "type": "integer",
+        "nullable": true
+       },
+       "collaborator-auth-policy": {
+        "type": "string",
+        "enum": [
+         "password",
+         "two_factor_mandatory"
+        ]
+       },
+       "plan-expired": {
+        "type": "boolean",
+        "readOnly": true
+       },
+       "plan-expires-at": {
+        "type": "string",
+        "format": "date-time",
+        "nullable": true,
+        "readOnly": true
+       },
+       "plan-is-trial": {
+        "type": "boolean",
+        "readOnly": true
+       },
+       "plan-is-enterprise": {
+        "type": "boolean",
+        "readOnly": true
+       },
+       "plan-identifier": {
+        "type": "string",
+        "readOnly": true
+       },
+       "cost-estimation-enabled": {
+        "type": "boolean"
+       },
+       "send-passing-statuses-for-untriggered-speculative-plans": {
+        "type": "boolean"
+       },
+       "aggregated-commit-status-enabled": {
+        "type": "boolean"
+       },
+       "speculative-plan-management-enabled": {
+        "type": "boolean"
+       },
+       "allow-force-delete-workspaces": {
+        "type": "boolean"
+       },
+       "name": {
+        "type": "string"
+       },
+       "hcp-id": {
+        "type": "string",
+        "readOnly": true,
+        "x-vis": [
+         "hcpt"
+        ],
+        "description": "This attribute is only available in HCP Terraform."
+       },
+       "is-unified": {
+        "type": "boolean",
+        "readOnly": true,
+        "x-vis": [
+         "hcpt"
+        ],
+        "description": "This attribute is only available in HCP Terraform."
+       },
+       "permissions": {
+        "type": "object",
+        "properties": {
+         "can-update": {
+          "type": "boolean"
+         },
+         "can-update-authentication-token": {
+          "type": "boolean"
+         },
+         "can-view-authentication": {
+          "type": "boolean"
+         },
+         "can-destroy": {
+          "type": "boolean"
+         },
+         "can-access-via-teams": {
+          "type": "boolean"
+         },
+         "can-create-module": {
+          "type": "boolean"
+         },
+         "can-create-team": {
+          "type": "boolean"
+         },
+         "can-create-workspace": {
+          "type": "boolean"
+         },
+         "can-manage-users": {
+          "type": "boolean"
+         },
+         "can-view-users": {
+          "type": "boolean"
+         },
+         "can-manage-subscription": {
+          "type": "boolean"
+         },
+         "can-manage-sso": {
+          "type": "boolean"
+         },
+         "can-update-oauth": {
+          "type": "boolean"
+         },
+         "can-update-sentinel": {
+          "type": "boolean"
+         },
+         "can-update-ssh-keys": {
+          "type": "boolean"
+         },
+         "can-update-api-token": {
+          "type": "boolean"
+         },
+         "can-traverse": {
+          "type": "boolean"
+         },
+         "can-view-usage": {
+          "type": "boolean"
+         },
+         "can-update-agent-pools": {
+          "type": "boolean"
+         },
+         "can-manage-tags": {
+          "type": "boolean"
+         },
+         "can-manage-varsets": {
+          "type": "boolean"
+         },
+         "can-read-varsets": {
+          "type": "boolean"
+         },
+         "can-manage-public-providers": {
+          "type": "boolean"
+         },
+         "can-create-provider": {
+          "type": "boolean"
+         },
+         "can-manage-public-modules": {
+          "type": "boolean"
+         },
+         "can-manage-custom-providers": {
+          "type": "boolean"
+         },
+         "can-manage-run-tasks": {
+          "type": "boolean"
+         },
+         "can-read-run-tasks": {
+          "type": "boolean"
+         },
+         "can-create-project": {
+          "type": "boolean"
+         },
+         "can-enable-stacks": {
+          "type": "boolean"
+         },
+         "can-manage-org-public-providers": {
+          "type": "boolean"
+         },
+         "can-manage-org-public-modules": {
+          "type": "boolean"
+         },
+         "can-manage-assessments": {
+          "type": "boolean"
+         },
+         "can-read-assessments": {
+          "type": "boolean"
+         },
+         "can-view-explorer": {
+          "type": "boolean"
+         },
+         "can-deploy-no-code-modules": {
+          "type": "boolean"
+         },
+         "can-manage-no-code-modules": {
+          "type": "boolean"
+         },
+         "can-manage-groups-in-hcp": {
+          "type": "boolean",
+          "x-vis": [
+           "hcpt"
+          ],
+          "description": "This attribute is only available in HCP Terraform."
+         },
+         "can-create-project-in-hcp": {
+          "type": "boolean",
+          "x-vis": [
+           "hcpt"
+          ],
+          "description": "This attribute is only available in HCP Terraform."
+         },
+         "can-update-hyok-configuration": {
+          "type": "boolean",
+          "x-vis": [
+           "hcpt"
+          ],
+          "description": "This attribute is only available in HCP Terraform."
+         },
+         "can-manage-recoverable-items": {
+          "type": "boolean",
+          "x-vis": [
+           "public-beta"
+          ],
+          "description": "This attribute is considered BETA, is SUBJECT TO CHANGE, and may be unavailable to some users."
+         },
+         "can-read-policies": {
+          "type": "boolean",
+          "x-vis": [
+           "tfe"
+          ],
+          "description": "This attribute is only available in Terraform Enterprise."
+         }
+        }
+       },
+       "fair-run-queuing-enabled": {
+        "type": "boolean",
+        "readOnly": true
+       },
+       "saml-enabled": {
+        "type": "boolean"
+       },
+       "owners-team-saml-role-id": {
+        "type": "string",
+        "nullable": true
+       },
+       "two-factor-conformant": {
+        "type": "boolean"
+       },
+       "assessments-enforced": {
+        "type": "boolean"
+       },
+       "is-in-degraded-mode": {
+        "type": "boolean",
+        "readOnly": true
+       },
+       "global-module-sharing": {
+        "type": "boolean",
+        "x-vis": [
+         "tfe"
+        ],
+        "description": "This attribute is only available in Terraform Enterprise."
+       },
+       "global-provider-sharing": {
+        "type": "boolean",
+        "x-vis": [
+         "tfe"
+        ],
+        "description": "This attribute is only available in Terraform Enterprise."
+       },
+       "parent-data-retention-policy-info": {
+        "type": "string",
+        "readOnly": true,
+        "x-vis": [
+         "tfe"
+        ],
+        "description": "This attribute is only available in Terraform Enterprise."
+       },
+       "module-consuming-organizations-count": {
+        "type": "integer",
+        "readOnly": true,
+        "x-vis": [
+         "tfe"
+        ],
+        "description": "This attribute is only available in Terraform Enterprise."
+       },
+       "provider-consuming-organizations-count": {
+        "type": "integer",
+        "readOnly": true,
+        "x-vis": [
+         "tfe"
+        ],
+        "description": "This attribute is only available in Terraform Enterprise."
+       },
+       "remaining-testable-count": {
+        "type": "integer",
+        "readOnly": true
+       },
+       "stacks-enabled": {
+        "type": "boolean",
+        "x-vis": [
+         "public-beta"
+        ],
+        "description": "This attribute is considered BETA, is SUBJECT TO CHANGE, and may be unavailable to some users."
+       },
+       "recoverable-items-enabled": {
+        "type": "boolean",
+        "x-vis": [
+         "public-beta"
+        ],
+        "description": "This attribute is considered BETA, is SUBJECT TO CHANGE, and may be unavailable to some users."
+       },
+       "over-stacks-resource-limit": {
+        "type": "boolean",
+        "readOnly": true,
+        "x-vis": [
+         "public-beta"
+        ],
+        "description": "This attribute is considered BETA, is SUBJECT TO CHANGE, and may be unavailable to some users."
+       },
+       "default-execution-mode": {
+        "type": "string",
+        "enum": [
+         "remote",
+         "local",
+         "agent"
+        ]
+       },
+       "stacks-default-execution-mode": {
+        "type": "string",
+        "enum": [
+         "remote",
+         "agent"
+        ]
+       },
+       "test-generation-enabled": {
+        "type": "boolean",
+        "readOnly": true,
+        "x-vis": [
+         "public-beta"
+        ],
+        "description": "This attribute is considered BETA, is SUBJECT TO CHANGE, and may be unavailable to some users."
+       },
+       "managed-resource-count": {
+        "type": "integer",
+        "readOnly": true,
+        "nullable": true
+       },
+       "user-tokens-enabled": {
+        "type": "boolean"
+       },
+       "sso-enabled": {
+        "type": "boolean",
+        "readOnly": true
+       },
+       "eligible-for-concurrency-add-ons": {
+        "type": "boolean"
+       },
+       "scim-configuration-present": {
+        "type": "boolean"
+       },
+       "enforce-hyok": {
+        "type": "boolean"
+       },
+       "sso-idp-cert-expiration": {
+        "type": "string",
+        "nullable": true
+       }
+      }
+     },
+     "links": {
+      "$ref": "#/components/schemas/self"
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "default-agent-pool": {
+        "$ref": "#/components/schemas/agent-pools-has-one"
+       },
+       "stacks-default-agent-pool": {
+        "$ref": "#/components/schemas/agent-pools-has-one"
+       },
+       "data-retention-policy": {
+        "$ref": "#/components/schemas/data-retention-policy-has-one",
+        "x-vis": [
+         "tfe"
+        ]
+       },
+       "module-producers": {
+        "x-vis": [
+         "tfe"
+        ],
+        "$ref": "#/components/schemas/links_related"
+       },
+       "provider-producers": {
+        "x-vis": [
+         "tfe"
+        ],
+        "$ref": "#/components/schemas/links_related"
+       },
+       "oauth-tokens": {
+        "$ref": "#/components/schemas/links_related"
+       },
+       "authentication-token": {
+        "$ref": "#/components/schemas/links_related"
+       },
+       "audit-trails-authentication-token": {
+        "$ref": "#/components/schemas/links_related",
+        "x-vis": [
+         "hcpt"
+        ]
+       },
+       "entitlement-set": {
+        "$ref": "#/components/schemas/entitlement-sets-has-one"
+       },
+       "subscription": {
+        "$ref": "#/components/schemas/subscriptions-has-one"
+       },
+       "default-project": {
+        "$ref": "#/components/schemas/projects-has-one"
+       },
+       "primary-hyok-configuration": {
+        "x-vis": [
+         "hcpt"
+        ],
+        "$ref": "#/components/schemas/hyok-configurations-has-one"
+       }
+      }
+     }
+    }
+   },
+   "organizations-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/organizations-identifier"
+       }
+      ],
+      "nullable": true
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "organizations-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "organizations"
+      ]
+     }
+    }
+   },
+   "pagination": {
+    "type": "object",
+    "properties": {
+     "current-page": {
+      "type": "integer"
+     },
+     "page-size": {
+      "type": "integer"
+     },
+     "prev-page": {
+      "type": "integer",
+      "nullable": true
+     },
+     "next-page": {
+      "type": "integer",
+      "nullable": true
+     },
+     "total-pages": {
+      "type": "integer"
+     },
+     "total-count": {
+      "type": "integer"
+     }
+    }
+   },
+   "plan-exports-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/plan-exports-identifier"
+      }
+     }
+    }
+   },
+   "plan-exports-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "plan-exports"
+      ]
+     }
+    }
+   },
+   "plans": {
+    "type": "object",
+    "required": [
+     "id",
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "plans"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "execution-details": {
+        "type": "object",
+        "nullable": true,
+        "description": "Details about the execution of this plan. Null if plan has not started.",
+        "properties": {
+         "mode": {
+          "type": "string",
+          "description": "Execution mode of the run",
+          "enum": [
+           "remote",
+           "agent",
+           "local"
+          ]
+         },
+         "agent-id": {
+          "type": "string",
+          "description": "ID of the agent used for this run (when mode is agent)\n\nThis attribute is only available in HCP Terraform.",
+          "x-vis": [
+           "hcpt"
+          ]
+         },
+         "agent-name": {
+          "type": "string",
+          "description": "Name of the agent used for this run (when mode is agent)\n\nThis attribute is only available in HCP Terraform.",
+          "x-vis": [
+           "hcpt"
+          ]
+         },
+         "agent-pool-id": {
+          "type": "string",
+          "description": "ID of the agent pool used for this run (when mode is agent)\n\nThis attribute is only available in HCP Terraform.",
+          "x-vis": [
+           "hcpt"
+          ]
+         },
+         "agent-pool-name": {
+          "type": "string",
+          "description": "Name of the agent pool used for this run (when mode is agent)\n\nThis attribute is only available in HCP Terraform.",
+          "x-vis": [
+           "hcpt"
+          ]
+         }
+        }
+       },
+       "generated-configuration": {
+        "type": "boolean",
+        "default": false,
+        "nullable": true,
+        "description": "Whether the plan generated new configuration as part of this run"
+       },
+       "has-changes": {
+        "type": "boolean",
+        "description": "Whether the plan has any changes"
+       },
+       "resource-additions": {
+        "type": "integer",
+        "description": "Number of resources that will be added",
+        "nullable": true
+       },
+       "resource-changes": {
+        "type": "integer",
+        "description": "Number of resources that will be changed",
+        "nullable": true
+       },
+       "resource-destructions": {
+        "type": "integer",
+        "description": "Number of resources that will be destroyed",
+        "nullable": true
+       },
+       "resource-imports": {
+        "type": "integer",
+        "description": "Number of resources that will be imported",
+        "nullable": true
+       },
+       "structured-run-output-enabled": {
+        "type": "boolean",
+        "nullable": true,
+        "description": "Whether structured run output is enabled"
+       },
+       "status": {
+        "type": "string",
+        "description": "Current status of the plan",
+        "enum": [
+         "pending",
+         "managed_queued",
+         "queued",
+         "running",
+         "errored",
+         "canceled",
+         "finished",
+         "unreachable"
+        ]
+       },
+       "status-timestamps": {
+        "type": "object",
+        "description": "Timestamps for state transitions of the plan",
+        "properties": {
+         "queued-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "pending-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "started-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         },
+         "finished-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+         }
+        }
+       },
+       "log-read-url": {
+        "type": "string",
+        "nullable": true,
+        "description": "URL to read the logs for this plan"
+       },
+       "actions": {
+        "type": "object",
+        "description": "Actions available for this plan",
+        "properties": {
+         "is-exportable": {
+          "type": "boolean",
+          "description": "Whether the plan can be exported"
+         }
+        }
+       },
+       "backing-data-state": {
+        "type": "string",
+        "readOnly": true,
+        "x-vis": [
+         "tfe"
+        ],
+        "description": "Data retention lifecycle state of the plan's backing data.\n\nThis attribute is only available in Terraform Enterprise.",
+        "enum": [
+         "backing_data_initialized",
+         "backing_data_available",
+         "backing_data_soft_deleted",
+         "backing_data_permanently_deleted"
+        ]
+       },
+       "permissions": {
+        "type": "object",
+        "description": "Permissions for the current user related to this plan",
+        "nullable": true,
+        "properties": {
+         "can-export": {
+          "type": "boolean",
+          "description": "Whether the current user can export the plan"
+         }
+        }
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "state-versions": {
+        "description": "State versions associated with this plan (for TF <= 0.8)",
+        "$ref": "#/components/schemas/state-versions-has-many"
+       },
+       "exports": {
+        "description": "Exports associated with this plan",
+        "$ref": "#/components/schemas/plan-exports-has-many"
+       },
+       "hyok-encrypted-data-key": {
+        "description": "HYOK encrypted data key associated with this plan",
+        "x-vis": [
+         "hcpt"
+        ],
+        "$ref": "#/components/schemas/hyok-encrypted-data-keys-has-one"
+       }
+      }
+     },
+     "links": {
+      "type": "object",
+      "properties": {
+       "self": {
+        "type": "string",
+        "description": "API URL for this plan"
+       },
+       "json-output": {
+        "type": "string",
+        "nullable": true,
+        "description": "API URL for the JSON formatted execution plan (available for Terraform 0.12+)"
+       },
+       "json-output-redacted": {
+        "type": "string",
+        "nullable": true,
+        "description": "API URL for the redacted JSON formatted execution plan (available for Terraform 0.15.2+)"
+       },
+       "json-schema": {
+        "type": "string",
+        "nullable": true,
+        "description": "API URL for the JSON schema of this plan (available for Terraform 0.12+)"
+       },
+       "sanitized-plan": {
+        "type": "string",
+        "nullable": true,
+        "description": "API URL for the sanitized plan (available when HYOK is enabled and with compatible Terraform version)",
+        "x-vis": [
+         "public-beta"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "plans-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "$ref": "#/components/schemas/plans-identifier"
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "plans-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "plans"
+      ]
+     }
+    }
+   },
+   "policy-checks-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/policy-checks-identifier"
+      }
+     }
+    }
+   },
+   "policy-checks-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "policy-checks"
+      ]
+     }
+    }
+   },
+   "policy-evaluations-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/policy-evaluations-identifier"
+      }
+     }
+    }
+   },
+   "policy-evaluations-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "policy-evaluations"
+      ]
+     }
+    }
+   },
+   "projects": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "projects"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "description": {
+        "type": "string",
+        "nullable": true
+       },
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "auto-destroy-activity-duration": {
+        "type": "string",
+        "nullable": true
+       },
+       "default-execution-mode": {
+        "type": "string",
+        "enum": [
+         "remote",
+         "local",
+         "agent"
+        ]
+       },
+       "stacks-default-execution-mode": {
+        "type": "string",
+        "enum": [
+         "remote",
+         "agent"
+        ]
+       },
+       "setting-overwrites": {
+        "type": "object",
+        "properties": {
+         "default-execution-mode": {
+          "type": "boolean"
+         },
+         "default-agent-pool": {
+          "type": "boolean"
+         },
+         "stacks-default-execution-mode": {
+          "type": "boolean"
+         },
+         "stacks-default-agent-pool": {
+          "type": "boolean"
+         }
+        }
+       },
+       "permissions": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+         "can-read": {
+          "type": "boolean"
+         },
+         "can-update": {
+          "type": "boolean"
+         },
+         "can-destroy": {
+          "type": "boolean"
+         },
+         "can-create-workspace": {
+          "type": "boolean"
+         },
+         "can-move-workspace": {
+          "type": "boolean"
+         },
+         "can-move-stack": {
+          "type": "boolean"
+         },
+         "can-manage-stacks": {
+          "type": "boolean"
+         },
+         "can-view-stacks": {
+          "type": "boolean"
+         },
+         "can-update-stacks": {
+          "type": "boolean"
+         },
+         "can-deploy-no-code-modules": {
+          "type": "boolean"
+         },
+         "can-read-teams": {
+          "type": "boolean"
+         },
+         "can-manage-tags": {
+          "type": "boolean"
+         },
+         "can-manage-teams": {
+          "type": "boolean"
+         },
+         "can-manage-in-hcp": {
+          "type": "boolean",
+          "x-vis": [
+           "hcpt"
+          ],
+          "description": "This attribute is only available in HCP Terraform."
+         },
+         "can-manage-varsets": {
+          "type": "boolean"
+         },
+         "can-manage-ephemeral-workspace-for-projects": {
+          "type": "boolean"
+         }
+        }
+       },
+       "workspace-count": {
+        "type": "integer",
+        "nullable": true
+       },
+       "team-count": {
+        "type": "integer",
+        "nullable": true
+       },
+       "hcp-id": {
+        "type": "string",
+        "nullable": true,
+        "x-vis": [
+         "hcpt"
+        ],
+        "description": "This attribute is only available in HCP Terraform."
+       },
+       "is-unified": {
+        "type": "boolean",
+        "nullable": true,
+        "x-vis": [
+         "hcpt"
+        ],
+        "description": "This attribute is only available in HCP Terraform."
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "organization": {
+        "$ref": "#/components/schemas/organizations-has-one"
+       },
+       "tag-bindings": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+         "links": {
+          "type": "object",
+          "properties": {
+           "related": {
+            "type": "string"
+           }
+          }
+         }
+        }
+       },
+       "default-agent-pool": {
+        "$ref": "#/components/schemas/agent-pools-has-one"
+       },
+       "stacks-default-agent-pool": {
+        "$ref": "#/components/schemas/agent-pools-has-one"
+       },
+       "default-hyok-configuration": {
+        "x-vis": [
+         "hcpt"
+        ],
+        "$ref": "#/components/schemas/hyok-configurations-has-one"
+       }
+      }
+     },
+     "links": {
+      "type": "object",
+      "properties": {
+       "self": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   },
+   "projects-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/projects-identifier"
+      }
+     }
+    }
+   },
+   "projects-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/projects-identifier"
+       }
+      ],
+      "nullable": true
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "projects-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "projects"
+      ]
+     }
+    }
+   },
+   "registry-modules-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/registry-modules-identifier"
+       }
+      ],
+      "nullable": true
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "registry-modules-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "registry-modules"
+      ]
+     }
+    }
+   },
+   "related": {
+    "type": "object",
+    "properties": {
+     "related": {
+      "type": "string"
+     }
+    }
+   },
+   "run-events-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/run-events-identifier"
+      }
+     }
+    }
+   },
+   "run-events-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "run-events"
+      ]
+     }
+    }
+   },
+   "runs": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "runs"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "actions": {
+        "type": "object",
+        "properties": {
+         "is-cancelable": {
+          "type": "boolean"
+         },
+         "is-confirmable": {
+          "type": "boolean"
+         },
+         "is-discardable": {
+          "type": "boolean"
+         },
+         "is-force-cancelable": {
+          "type": "boolean"
+         }
+        }
+       },
+       "allow-config-generation": {
+        "type": "boolean"
+       },
+       "allow-empty-apply": {
+        "type": "boolean"
+       },
+       "auto-apply": {
+        "type": "boolean"
+       },
+       "comment": {
+        "type": "string",
+        "writeOnly": true
+       },
+       "canceled-at": {
+        "type": "string",
+        "format": "date-time",
+        "nullable": true,
+        "readOnly": true
+       },
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "debugging-mode": {
+        "type": "boolean"
+       },
+       "has-changes": {
+        "type": "boolean"
+       },
+       "is-destroy": {
+        "type": "boolean"
+       },
+       "message": {
+        "type": "string"
+       },
+       "plan-only": {
+        "type": "boolean"
+       },
+       "refresh": {
+        "type": "boolean"
+       },
+       "refresh-only": {
+        "type": "boolean"
+       },
+       "replace-addrs": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        },
+        "nullable": true
+       },
+       "save-plan": {
+        "type": "boolean"
+       },
+       "source": {
+        "type": "string"
+       },
+       "status-timestamps": {
+        "type": "object",
+        "properties": {
+         "fetching-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "fetched-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "pre-plan-running-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "pre-plan-completed-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "plan-queued-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "planning-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "planned-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "tf-policy-checked-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "tf-policy-override-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "post-plan-running-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "post-plan-completed-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "cost-estimating-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "cost-estimated-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "policy-soft-failed-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "policy-checked-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "confirmed-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "planned-and-finished-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "planned-and-saved-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "pre-apply-running-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "pre-apply-completed-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "apply-queued-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "applying-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "post-apply-completed-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "applied-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "post-apply-running-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "discarded-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "errored-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "canceled-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "force-canceled-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "assessed-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "queuing-at": {
+          "type": "string",
+          "format": "date-time"
+         },
+         "queuing-apply-at": {
+          "type": "string",
+          "format": "date-time"
+         }
+        }
+       },
+       "status": {
+        "type": "string",
+        "description": "The current status of the run.\n\nTerraform Policy evaluation status values at plan stage:\n- `tf_policy_checked` - Terraform Policy evaluation completed\n- `tf_policy_override` - Terraform Policy evaluation was overridden\n",
+        "enum": [
+         "pending",
+         "fetching",
+         "fetching_completed",
+         "pre_plan_running",
+         "pre_plan_completed",
+         "pre_plan_awaiting_decision",
+         "queuing",
+         "plan_queued",
+         "planning",
+         "planned",
+         "tf_policy_checked",
+         "tf_policy_override",
+         "post_plan_running",
+         "post_plan_completed",
+         "cost_estimating",
+         "cost_estimated",
+         "policy_checking",
+         "policy_override",
+         "policy_soft_failed",
+         "policy_checked",
+         "confirmed",
+         "pre_apply_running",
+         "pre_apply_completed",
+         "queuing_apply",
+         "apply_queued",
+         "applying",
+         "post_apply_running",
+         "post_apply_completed",
+         "applied",
+         "discarded",
+         "errored",
+         "canceled",
+         "planned_and_finished",
+         "planned_and_saved",
+         "assessing",
+         "assessed"
+        ]
+       },
+       "target-addrs": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        },
+        "nullable": true
+       },
+       "trigger-reason": {
+        "type": "string"
+       },
+       "terraform-version": {
+        "type": "string"
+       },
+       "updated-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "triggering-source-name": {
+        "type": "string",
+        "nullable": true
+       },
+       "policy-paths": {
+        "type": "array",
+        "deprecated": true,
+        "items": {
+         "type": "string"
+        },
+        "nullable": true
+       },
+       "invoke-action-addrs": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        },
+        "nullable": true
+       },
+       "permissions": {
+        "type": "object",
+        "properties": {
+         "can-apply": {
+          "type": "boolean"
+         },
+         "can-cancel": {
+          "type": "boolean"
+         },
+         "can-comment": {
+          "type": "boolean"
+         },
+         "can-discard": {
+          "type": "boolean"
+         },
+         "can-force-execute": {
+          "type": "boolean"
+         },
+         "can-force-cancel": {
+          "type": "boolean"
+         },
+         "can-override-policy-check": {
+          "type": "boolean"
+         }
+        }
+       },
+       "variables": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "key": {
+           "type": "string"
+          },
+          "value": {
+           "type": "string"
+          }
+         }
+        }
+       },
+       "force-cancel-available-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "workspace": {
+        "$ref": "#/components/schemas/workspaces-has-one"
+       },
+       "triggering-source": {
+        "$ref": "#/components/schemas/workspaces-has-one"
+       },
+       "triggering-run": {
+        "$ref": "#/components/schemas/runs-has-one"
+       },
+       "apply": {
+        "$ref": "#/components/schemas/applies-has-one"
+       },
+       "canceled-by": {
+        "$ref": "#/components/schemas/users-has-one"
+       },
+       "configuration-version": {
+        "$ref": "#/components/schemas/configuration-versions-has-one"
+       },
+       "confirmed-by": {
+        "$ref": "#/components/schemas/users-has-one"
+       },
+       "cost-estimate": {
+        "$ref": "#/components/schemas/cost-estimates-has-one"
+       },
+       "created-by": {
+        "$ref": "#/components/schemas/users-has-one"
+       },
+       "plan": {
+        "$ref": "#/components/schemas/plans-has-one"
+       },
+       "run-events": {
+        "$ref": "#/components/schemas/run-events-has-many"
+       },
+       "task-stages": {
+        "$ref": "#/components/schemas/task-stages-has-many"
+       },
+       "policy-checks": {
+        "$ref": "#/components/schemas/policy-checks-has-many"
+       },
+       "run-trigger-snapshots": {
+        "$ref": "#/components/schemas/links_related"
+       },
+       "comments": {
+        "$ref": "#/components/schemas/workspace-comments-has-many"
+       },
+       "tf-policy-evaluations": {
+        "$ref": "#/components/schemas/tf-policy-evaluations-has-many"
+       }
+      }
+     }
+    }
+   },
+   "runs-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/runs-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "runs-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "runs"
+      ]
+     }
+    }
+   },
+   "self": {
+    "type": "object",
+    "properties": {
+     "self": {
+      "type": "string"
+     }
+    }
+   },
+   "self-with-pagination": {
+    "type": "object",
+    "properties": {
+     "self": {
+      "type": "string"
+     },
+     "first": {
+      "type": "string"
+     },
+     "prev": {
+      "type": "string",
+      "nullable": true
+     },
+     "next": {
+      "type": "string",
+      "nullable": true
+     },
+     "last": {
+      "type": "string"
+     }
+    }
+   },
+   "ssh-keys-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/ssh-keys-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "ssh-keys-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "ssh-keys"
+      ]
+     }
+    }
+   },
+   "state-version-outputs-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/state-version-outputs-identifier"
+      }
+     }
+    }
+   },
+   "state-version-outputs-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "state-version-outputs"
+      ]
+     }
+    }
+   },
+   "state-versions": {
+    "type": "object",
+    "required": [
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "state-versions"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "size": {
+        "type": "integer",
+        "nullable": true,
+        "readOnly": true
+       },
+       "hosted-state-download-url": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "hosted-json-state-download-url": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "hosted-state-upload-url": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "hosted-json-state-upload-url": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "encrypted-state-download-url": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "sanitized-state-download-url": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "sanitized-state-upload-url": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "modules": {
+        "type": "object",
+        "nullable": true,
+        "readOnly": true,
+        "additionalProperties": true
+       },
+       "providers": {
+        "type": "object",
+        "nullable": true,
+        "readOnly": true,
+        "additionalProperties": true
+       },
+       "resources": {
+        "type": "array",
+        "nullable": true,
+        "readOnly": true,
+        "items": {
+         "type": "object",
+         "properties": {
+          "name": {
+           "type": "string"
+          },
+          "type": {
+           "type": "string"
+          },
+          "count": {
+           "type": "integer"
+          },
+          "module": {
+           "type": "string"
+          },
+          "provider": {
+           "type": "string"
+          }
+         }
+        }
+       },
+       "resources-processed": {
+        "type": "boolean",
+        "readOnly": true
+       },
+       "serial": {
+        "type": "integer"
+       },
+       "md5": {
+        "type": "string",
+        "writeOnly": true
+       },
+       "lineage": {
+        "type": "string",
+        "writeOnly": true
+       },
+       "state": {
+        "type": "string",
+        "writeOnly": true
+       },
+       "json-state": {
+        "type": "string",
+        "writeOnly": true
+       },
+       "json-state-outputs": {
+        "type": "string",
+        "writeOnly": true
+       },
+       "force": {
+        "type": "boolean",
+        "writeOnly": true
+       },
+       "state-version": {
+        "type": "integer",
+        "nullable": true,
+        "readOnly": true
+       },
+       "status": {
+        "type": "string",
+        "readOnly": true,
+        "enum": [
+         "pending",
+         "finalized",
+         "discarded",
+         "backing_data_soft_deleted",
+         "backing_data_permanently_deleted"
+        ]
+       },
+       "terraform-version": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "vcs-commit-url": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "vcs-commit-sha": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true
+       },
+       "intermediate": {
+        "type": "boolean",
+        "readOnly": true
+       },
+       "billable-rum-count": {
+        "type": "integer",
+        "nullable": true,
+        "readOnly": true
+       },
+       "permissions": {
+        "type": "object",
+        "readOnly": true,
+        "properties": {
+         "can-restore-backing-data": {
+          "type": "boolean",
+          "readOnly": true
+         }
+        }
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "run": {
+        "$ref": "#/components/schemas/runs-has-one"
+       },
+       "rollback-state-version": {
+        "$ref": "#/components/schemas/state-versions-has-one"
+       },
+       "next-state-version": {
+        "$ref": "#/components/schemas/state-versions-has-one"
+       },
+       "previous-state-version": {
+        "$ref": "#/components/schemas/state-versions-has-one"
+       },
+       "created-by": {
+        "$ref": "#/components/schemas/users-has-one"
+       },
+       "workspace": {
+        "$ref": "#/components/schemas/workspaces-has-one"
+       },
+       "hyok-encrypted-data-key": {
+        "$ref": "#/components/schemas/hyok-encrypted-data-keys-has-one"
+       },
+       "outputs": {
+        "$ref": "#/components/schemas/state-version-outputs-has-many"
+       }
+      }
+     },
+     "links": {
+      "$ref": "#/components/schemas/self"
+     }
+    }
+   },
+   "state-versions-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/state-versions-identifier"
+      }
+     }
+    }
+   },
+   "state-versions-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/state-versions-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "state-versions-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "state-versions"
+      ]
+     }
+    }
+   },
+   "subscriptions-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/subscriptions-identifier"
+       }
+      ],
+      "nullable": true
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "subscriptions-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "subscriptions"
+      ]
+     }
+    }
+   },
+   "tags-has-many": {
+    "type": "object",
+    "required": [
+     "data"
+    ],
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "type"
+       ],
+       "properties": {
+        "type": {
+         "type": "string",
+         "enum": [
+          "tags"
+         ]
+        },
+        "id": {
+         "type": "string"
+        },
+        "attributes": {
+         "type": "object",
+         "properties": {
+          "name": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   },
+   "task-results-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/task-results-identifier"
+      }
+     }
+    }
+   },
+   "task-results-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "task-results"
+      ]
+     }
+    }
+   },
+   "task-stages": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "task-stages"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "status": {
+        "type": "string",
+        "readOnly": true,
+        "enum": [
+         "pending",
+         "running",
+         "passed",
+         "failed",
+         "awaiting_override",
+         "errored",
+         "canceled",
+         "unreachable"
+        ]
+       },
+       "stage": {
+        "type": "string",
+        "readOnly": true,
+        "description": "The run stage during which this task stage executes (e.g., post_plan, pre_plan, pre_apply, post_apply)."
+       },
+       "status-timestamps": {
+        "type": "object",
+        "nullable": true,
+        "readOnly": true,
+        "additionalProperties": true,
+        "description": "A map of status names to timestamps indicating when the task stage entered each status. Keys are formatted as \"{status}-at\"."
+       },
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "updated-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "permissions": {
+        "type": "object",
+        "readOnly": true,
+        "properties": {
+         "can-override-policy": {
+          "type": "boolean"
+         },
+         "can-override-tasks": {
+          "type": "boolean"
+         },
+         "can-override": {
+          "type": "boolean"
+         }
+        }
+       },
+       "actions": {
+        "type": "object",
+        "readOnly": true,
+        "properties": {
+         "is-overridable": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "run": {
+        "$ref": "#/components/schemas/runs-has-one"
+       },
+       "cost-estimate": {
+        "$ref": "#/components/schemas/cost-estimates-has-one"
+       },
+       "task-results": {
+        "$ref": "#/components/schemas/task-results-has-many"
+       },
+       "policy-evaluations": {
+        "$ref": "#/components/schemas/policy-evaluations-has-many"
+       }
+      }
+     },
+     "links": {
+      "$ref": "#/components/schemas/self"
+     }
+    }
+   },
+   "task-stages-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/task-stages-identifier"
+      }
+     }
+    }
+   },
+   "task-stages-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "task-stages"
+      ]
+     }
+    }
+   },
+   "tf-policy-evaluations": {
+    "type": "object",
+    "description": "Represents a Terraform Policy evaluation for a run. Coordinates the evaluation of multiple policy sets and aggregates their results. Each evaluation is associated with a specific stage (Init or Plan or Apply) in the run lifecycle.",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "tf-policy-evaluations"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "status": {
+        "type": "string",
+        "description": "Current status of the Terraform policy evaluation. Status values:\n- `pending`: Initial state, not yet queued for evaluation\n- `queued`: Queued and waiting to be evaluated\n- `running`: Actively being evaluated\n- `awaiting_override`: Failed with overridable policies, awaiting manual override\n- `passed`: All policies passed (final state)\n- `failed`: Failed with mandatory policies (final state)\n- `overridden`: Failed evaluation manually overridden (final state)\n- `errored`: System error during processing (final state)\n- `canceled`: Canceled before completion (final state)\n- `unreachable`: Pseudo-state derived from run state\n",
+        "enum": [
+         "pending",
+         "queued",
+         "running",
+         "awaiting_override",
+         "passed",
+         "failed",
+         "overridden",
+         "errored",
+         "canceled",
+         "unreachable"
+        ]
+       },
+       "stage-type": {
+        "type": "string",
+        "description": "The type of stage this evaluation is associated with.",
+        "enum": [
+         "Init",
+         "Plan",
+         "Apply"
+        ]
+       },
+       "status-timestamps": {
+        "type": "object",
+        "description": "Timestamps for each status transition during the evaluation lifecycle",
+        "properties": {
+         "pending-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true,
+          "description": "When the evaluation entered pending status"
+         },
+         "queued-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true,
+          "description": "When the evaluation was queued for processing"
+         },
+         "running-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true,
+          "description": "When the evaluation started running"
+         },
+         "awaiting-override-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true,
+          "description": "When the evaluation entered awaiting override status (for failed mandatory policies)"
+         },
+         "passed-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true,
+          "description": "When the evaluation passed successfully"
+         },
+         "failed-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true,
+          "description": "When the evaluation failed"
+         },
+         "overridden-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true,
+          "description": "When a failed evaluation was overridden"
+         },
+         "errored-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true,
+          "description": "When the evaluation encountered an error"
+         },
+         "canceled-at": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true,
+          "description": "When the evaluation was canceled"
+         }
+        }
+       },
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true,
+        "description": "When the evaluation was created"
+       },
+       "updated-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true,
+        "description": "When the evaluation was last updated"
+       },
+       "result-count": {
+        "type": "object",
+        "description": "Aggregated counts of policy results across all policy sets in this evaluation",
+        "properties": {
+         "advisory-failed": {
+          "type": "integer",
+          "description": "Policies with advisory enforcement level that failed"
+         },
+         "mandatory-failed": {
+          "type": "integer",
+          "description": "Policies with mandatory enforcement level that failed"
+         },
+         "mandatory-overridable-failed": {
+          "type": "integer",
+          "description": "Policies with `mandatory_overridable` enforcement level that failed.\n"
+         },
+         "passed": {
+          "type": "integer",
+          "description": "Policies that passed"
+         },
+         "errored": {
+          "type": "integer",
+          "description": "Policies that errored during evaluation"
+         },
+         "unknown": {
+          "type": "integer",
+          "description": "Policies with an unknown evaluation result"
+         }
+        }
+       },
+       "error": {
+        "type": "object",
+        "nullable": true,
+        "description": "Error information if the entire evaluation failed (not policy-specific errors)",
+        "properties": {
+         "type": {
+          "type": "string",
+          "enum": [
+           "setup_error",
+           "tool_version_error",
+           "incompatible_agent_version",
+           "incompatible_terraform_version_error"
+          ],
+          "description": "Error type identifier indicating the category of failure"
+         },
+         "summary": {
+          "type": "string",
+          "description": "Brief error summary for display"
+         },
+         "detail": {
+          "type": "string",
+          "description": "Detailed error message with additional context"
+         }
+        }
+       },
+       "archivist-supported": {
+        "type": "boolean",
+        "readOnly": true,
+        "description": "Whether this evaluation supports archivist-backed outcome storage. When `true`,\nfull policy results are available via `policy-set-result-url` on each\n`tf-policy-set-outcome`. When `false`, use the `outcomes` array instead.\n"
+       },
+       "permissions": {
+        "type": "object",
+        "description": "User permissions for this evaluation",
+        "properties": {
+         "can-override": {
+          "type": "boolean",
+          "description": "Whether the current user has permission to override failed policies"
+         }
+        }
+       },
+       "actions": {
+        "type": "object",
+        "description": "Available actions for this evaluation",
+        "properties": {
+         "is-overridable": {
+          "type": "boolean",
+          "description": "Whether this evaluation can be overridden (based on policy enforcement levels and current status)"
+         }
+        }
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "run": {
+        "description": "The run that this policy evaluation belongs to",
+        "$ref": "#/components/schemas/runs-has-one"
+       },
+       "tf-policy-set-outcomes": {
+        "description": "The Terraform policy set outcomes that are part of this evaluation",
+        "$ref": "#/components/schemas/tf-policy-set-outcomes-has-many"
+       }
+      }
+     },
+     "links": {
+      "type": "object",
+      "properties": {
+       "self": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   },
+   "tf-policy-evaluations-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/tf-policy-evaluations-identifier"
+      }
+     }
+    }
+   },
+   "tf-policy-evaluations-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "tf-policy-evaluations"
+      ]
+     }
+    }
+   },
+   "tf-policy-set-outcomes-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/tf-policy-set-outcomes-identifier"
+      }
+     }
+    }
+   },
+   "tf-policy-set-outcomes-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "tf-policy-set-outcomes"
+      ]
+     }
+    }
+   },
+   "users": {
+    "type": "object",
+    "required": [
+     "id",
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "users"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "username": {
+        "type": "string",
+        "nullable": true
+       },
+       "display-name": {
+        "description": "Human-readable display name for the user.",
+        "type": "string",
+        "readOnly": true,
+        "nullable": true
+       },
+       "is-service-account": {
+        "description": "Indicates whether this user is a synthetic user representing a team or organization.",
+        "type": "boolean"
+       },
+       "avatar-url": {
+        "type": "string",
+        "nullable": true,
+        "description": "Gravatar URL for the user. Null in TFE when an admin has disabled Gravatar via the avatar_sources setting."
+       },
+       "initials": {
+        "type": "string",
+        "readOnly": true,
+        "description": "TFE only. Backend-computed initials derived from the user's username, or email local part as a fallback. At most two characters. Returns \"?\" when neither is available."
+       },
+       "avatar-color-index": {
+        "type": "integer",
+        "readOnly": true,
+        "description": "TFE only. Stable index into the frontend avatar fallback colour palette, derived from the user's external ID. Colour uniqueness across users is not guaranteed."
+       },
+       "auth-method": {
+        "type": "string"
+       },
+       "v2-only": {
+        "type": "boolean"
+       },
+       "is-admin": {
+        "type": "boolean"
+       },
+       "is-site-admin": {
+        "description": "Deprecated. Use is-admin.",
+        "type": "boolean"
+       },
+       "is-sso-login": {
+        "type": "boolean"
+       },
+       "is-confirmed": {
+        "type": "boolean"
+       },
+       "is-unified": {
+        "type": "boolean"
+       },
+       "is-sudo": {
+        "type": "boolean"
+       },
+       "email": {
+        "type": "string"
+       },
+       "unconfirmed-email": {
+        "type": "string",
+        "nullable": true
+       },
+       "preferred-language": {
+        "type": "string",
+        "nullable": true,
+        "description": "The user's preferred language as a locale code (for example, \"en\" or \"fr\"). Must be one of the application's supported locales. Only returned for the current user."
+       },
+       "password": {
+        "type": "string",
+        "nullable": true
+       },
+       "enterprise-support": {
+        "type": "boolean"
+       },
+       "has-linked-hcp": {
+        "type": "boolean"
+       },
+       "has-git-hub-app-token": {
+        "type": "boolean"
+       },
+       "two-factor": {
+        "type": "object",
+        "properties": {
+         "enabled": {
+          "type": "boolean"
+         },
+         "verified": {
+          "type": "boolean"
+         }
+        }
+       },
+       "permissions": {
+        "type": "object",
+        "properties": {
+         "can-create-organization": {
+          "type": "boolean"
+         },
+         "can-view-organizations": {
+          "type": "boolean"
+         },
+         "can-view-settings": {
+          "type": "boolean"
+         },
+         "can-view-smtp-settings": {
+          "type": "boolean"
+         },
+         "can-view-twilio-settings": {
+          "type": "boolean"
+         },
+         "can-view-saml-settings": {
+          "type": "boolean"
+         },
+         "can-view-admin-workspaces": {
+          "type": "boolean"
+         },
+         "can-view-admin-runs": {
+          "type": "boolean"
+         },
+         "can-view-admin-in-app-notifications": {
+          "type": "boolean",
+          "x-vis": [
+           "hcpt",
+           "public-beta"
+          ],
+          "description": "Whether the user can view and author feature announcements in the admin UI. Present only for admins when site-admin RBAC is enabled.\n\nThis attribute is only available in HCP Terraform.\n\nThis attribute is considered BETA, is SUBJECT TO CHANGE, and may be unavailable to some users."
+         },
+         "can-view-customization-settings": {
+          "type": "boolean"
+         },
+         "can-view-cost-estimation-settings": {
+          "type": "boolean"
+         },
+         "can-view-tool-versions": {
+          "type": "boolean"
+         },
+         "can-create-tool-versions": {
+          "type": "boolean"
+         },
+         "can-view-general-settings": {
+          "type": "boolean"
+         },
+         "can-use-sql-runner": {
+          "type": "boolean"
+         },
+         "can-view-profile": {
+          "type": "boolean"
+         },
+         "can-change-email": {
+          "type": "boolean"
+         },
+         "can-change-username": {
+          "type": "boolean"
+         },
+         "can-change-password": {
+          "type": "boolean"
+         },
+         "can-manage-sessions": {
+          "type": "boolean"
+         },
+         "can-manage-user-tokens": {
+          "type": "boolean"
+         },
+         "can-update-user": {
+          "type": "boolean"
+         },
+         "can-reenable-2fa-by-unlinking": {
+          "type": "boolean",
+          "x-vis": [
+           "hcpt"
+          ],
+          "description": "This attribute is only available in HCP Terraform."
+         },
+         "can-manage-hcp-accounts": {
+          "type": "boolean",
+          "x-vis": [
+           "hcpt"
+          ],
+          "description": "This attribute is only available in HCP Terraform."
+         }
+        }
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "authentication-tokens": {
+        "$ref": "#/components/schemas/links_related"
+       },
+       "github-app-oauth-tokens": {
+        "$ref": "#/components/schemas/links_related"
+       },
+       "authenticated-resource": {
+        "$ref": "#/components/schemas/authenticated-resource-has-one"
+       }
+      }
+     },
+     "links": {
+      "$ref": "#/components/schemas/self"
+     }
+    }
+   },
+   "users-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "nullable": true,
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "type": {
+        "type": "string",
+        "enum": [
+         "users"
+        ]
+       }
+      }
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "variable-options-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/variable-options-identifier"
+      }
+     }
+    }
+   },
+   "variable-options-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "variable-options"
+      ]
+     }
+    }
+   },
+   "vars": {
+    "type": "object",
+    "required": [
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "vars"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "key": {
+        "type": "string"
+       },
+       "value": {
+        "type": "string",
+        "nullable": true
+       },
+       "sensitive": {
+        "type": "boolean"
+       },
+       "category": {
+        "type": "string",
+        "enum": [
+         "terraform",
+         "env",
+         "terraform-cloud",
+         "policy-set"
+        ]
+       },
+       "hcl": {
+        "type": "boolean"
+       },
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "description": {
+        "type": "string",
+        "nullable": true
+       },
+       "version-id": {
+        "type": "string"
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "configurable": {
+        "$ref": "#/components/schemas/configurable-has-one"
+       },
+       "varset": {
+        "$ref": "#/components/schemas/varsets-has-one"
+       },
+       "workspace": {
+        "$ref": "#/components/schemas/workspaces-has-one"
+       },
+       "overwritten": {
+        "$ref": "#/components/schemas/vars-has-many"
+       },
+       "overwriter": {
+        "$ref": "#/components/schemas/vars-has-one"
+       }
+      }
+     },
+     "links": {
+      "type": "object",
+      "properties": {
+       "self": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   },
+   "vars-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/vars-identifier"
+      }
+     }
+    }
+   },
+   "vars-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/vars-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "vars-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "vars"
+      ]
+     }
+    }
+   },
+   "varsets-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/varsets-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "varsets-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "varsets"
+      ]
+     }
+    }
+   },
+   "workspace-comments-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/workspace-comments-identifier"
+      }
+     }
+    }
+   },
+   "workspace-comments-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "workspace-comments"
+      ]
+     }
+    }
+   },
+   "workspace-links": {
+    "type": "object",
+    "properties": {
+     "self": {
+      "type": "string"
+     },
+     "self-html": {
+      "type": "string"
+     }
+    }
+   },
+   "workspace-outputs": {
+    "type": "object",
+    "description": "Workspace outputs are Terraform output values associated with a workspace.\nThey include the name of the output and a sensitive boolean. There is an\nadditional attribute, \"value\", that can be any JSON type, including null when\nthe output is sensitive; it is intentionally omitted from this schema (same\npattern as state-version-outputs) because OpenAPI cannot express a nullable\nany-type under the project's nullable-type-sibling lint rule.\n",
+    "required": [
+     "id",
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "workspace-outputs"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "sensitive": {
+        "type": "boolean"
+       },
+       "output-type": {
+        "type": "string",
+        "description": "The Terraform type of the output value (e.g. string, number, bool,\nlist, map, set, object, tuple).\n"
+       },
+       "detailed-type": {
+        "description": "A detailed representation of the output type. May be a string for\nsimple types or an array for complex types such as tuples and objects.\n"
+       },
+       "workspace-attributes": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         }
+        }
+       },
+       "organization-attributes": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   },
+   "workspace-outputs-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/workspace-outputs-identifier"
+      }
+     }
+    }
+   },
+   "workspace-outputs-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "workspace-outputs"
+      ]
+     }
+    }
+   },
+   "workspace-readme": {
+    "type": "object",
+    "required": [
+     "id",
+     "type",
+     "attributes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "workspace-readme"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "properties": {
+       "raw-markdown": {
+        "type": "string",
+        "readOnly": true,
+        "description": "Raw markdown contents of the workspace README."
+       }
+      }
+     }
+    }
+   },
+   "workspace-readme-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/workspace-readme-identifier"
+       }
+      ],
+      "nullable": true
+     }
+    }
+   },
+   "workspace-readme-identifier": {
+    "type": "object",
+    "required": [
+     "id",
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "workspace-readme"
+      ]
+     }
+    }
+   },
+   "workspaces": {
+    "type": "object",
+    "required": [
+     "type"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "readOnly": true
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "workspaces"
+      ]
+     },
+     "attributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "allow-destroy-plan": {
+        "type": "boolean"
+       },
+       "auto-apply": {
+        "type": "boolean"
+       },
+       "auto-apply-run-trigger": {
+        "type": "boolean"
+       },
+       "auto-destroy-activity-duration": {
+        "type": "string",
+        "nullable": true
+       },
+       "auto-destroy-at": {
+        "type": "string",
+        "format": "date-time",
+        "nullable": true
+       },
+       "auto-destroy-status": {
+        "type": "string",
+        "nullable": true
+       },
+       "inherits-project-auto-destroy": {
+        "type": "boolean"
+       },
+       "created-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "environment": {
+        "type": "string"
+       },
+       "locked": {
+        "type": "boolean"
+       },
+       "name": {
+        "type": "string"
+       },
+       "queue-all-runs": {
+        "type": "boolean"
+       },
+       "speculative-enabled": {
+        "type": "boolean"
+       },
+       "structured-run-output-enabled": {
+        "type": "boolean"
+       },
+       "terraform-version": {
+        "type": "string"
+       },
+       "working-directory": {
+        "type": "string",
+        "nullable": true
+       },
+       "global-remote-state": {
+        "type": "boolean"
+       },
+       "project-remote-state": {
+        "type": "boolean"
+       },
+       "updated-at": {
+        "type": "string",
+        "format": "date-time",
+        "readOnly": true
+       },
+       "resource-count": {
+        "type": "integer"
+       },
+       "apply-duration-average": {
+        "type": "integer",
+        "nullable": true
+       },
+       "plan-duration-average": {
+        "type": "integer",
+        "nullable": true
+       },
+       "policy-check-failures": {
+        "type": "integer",
+        "nullable": true
+       },
+       "run-failures": {
+        "type": "integer",
+        "nullable": true
+       },
+       "workspace-kpis-runs-count": {
+        "type": "integer",
+        "nullable": true
+       },
+       "latest-change-at": {
+        "type": "string",
+        "format": "date-time",
+        "nullable": true
+       },
+       "operations": {
+        "type": "boolean",
+        "description": "Deprecated. Use execution-mode instead."
+       },
+       "execution-mode": {
+        "type": "string",
+        "enum": [
+         "remote",
+         "local",
+         "agent"
+        ]
+       },
+       "setting-overwrites": {
+        "type": "object",
+        "properties": {
+         "execution-mode": {
+          "type": "boolean"
+         },
+         "agent-pool": {
+          "type": "boolean"
+         }
+        }
+       },
+       "vcs-repo": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+         "identifier": {
+          "type": "string"
+         },
+         "display-identifier": {
+          "type": "string",
+          "nullable": true
+         },
+         "branch": {
+          "type": "string",
+          "nullable": true
+         },
+         "ingress-submodules": {
+          "type": "boolean"
+         },
+         "oauth-token-id": {
+          "type": "string",
+          "nullable": true
+         },
+         "github-app-installation-id": {
+          "type": "string",
+          "nullable": true
+         },
+         "tags-regex": {
+          "type": "string",
+          "nullable": true
+         }
+        }
+       },
+       "vcs-repo-identifier": {
+        "type": "string",
+        "nullable": true
+       },
+       "permissions": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+         "can-update": {
+          "type": "boolean"
+         },
+         "can-destroy": {
+          "type": "boolean"
+         },
+         "can-queue-run": {
+          "type": "boolean"
+         },
+         "can-read-run": {
+          "type": "boolean"
+         },
+         "can-read-variable": {
+          "type": "boolean"
+         },
+         "can-update-variable": {
+          "type": "boolean"
+         },
+         "can-read-state-versions": {
+          "type": "boolean"
+         },
+         "can-read-state-outputs": {
+          "type": "boolean"
+         },
+         "can-create-state-versions": {
+          "type": "boolean"
+         },
+         "can-queue-apply": {
+          "type": "boolean"
+         },
+         "can-lock": {
+          "type": "boolean"
+         },
+         "can-unlock": {
+          "type": "boolean"
+         },
+         "can-force-unlock": {
+          "type": "boolean"
+         },
+         "can-read-settings": {
+          "type": "boolean"
+         },
+         "can-manage-tags": {
+          "type": "boolean"
+         },
+         "can-manage-run-tasks": {
+          "type": "boolean"
+         },
+         "can-force-delete": {
+          "type": "boolean"
+         },
+         "can-manage-assessments": {
+          "type": "boolean"
+         },
+         "can-manage-ephemeral-workspaces": {
+          "type": "boolean"
+         },
+         "can-read-assessment-results": {
+          "type": "boolean"
+         },
+         "can-queue-destroy": {
+          "type": "boolean"
+         }
+        }
+       },
+       "actions": {
+        "type": "object",
+        "properties": {
+         "is-destroyable": {
+          "type": "boolean"
+         }
+        }
+       },
+       "description": {
+        "type": "string",
+        "nullable": true
+       },
+       "file-triggers-enabled": {
+        "type": "boolean"
+       },
+       "trigger-prefixes": {
+        "type": "array",
+        "nullable": true,
+        "items": {
+         "type": "string"
+        }
+       },
+       "trigger-patterns": {
+        "type": "array",
+        "nullable": true,
+        "items": {
+         "type": "string"
+        }
+       },
+       "assessments-enabled": {
+        "type": "boolean"
+       },
+       "last-assessment-result-at": {
+        "type": "string",
+        "format": "date-time",
+        "nullable": true
+       },
+       "locked-reason": {
+        "type": "string",
+        "nullable": true
+       },
+       "source": {
+        "type": "string",
+        "nullable": true
+       },
+       "source-name": {
+        "type": "string",
+        "nullable": true
+       },
+       "source-url": {
+        "type": "string",
+        "nullable": true
+       },
+       "source-module-id": {
+        "type": "string",
+        "nullable": true,
+        "readOnly": true,
+        "description": "Identifier of the no-code module and version this workspace was created from\n(for example, private/<org>/<name>/<provider>/<version>). Present only for\nno-code workspaces; omitted otherwise. Prefer the no-code-module-version\nrelationship for a typed link to the current no-code module version.\n"
+       },
+       "no-code-upgrade-available": {
+        "type": "boolean",
+        "nullable": true,
+        "readOnly": true,
+        "description": "Whether a newer no-code module version is available for this workspace.\nPresent only for no-code workspaces; omitted otherwise.\n"
+       },
+       "tag-names": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "effective-state-version-retention-desc": {
+        "type": "string",
+        "nullable": true,
+        "x-vis": [
+         "tfe"
+        ],
+        "description": "A human-readable description of the effective state-version\nretention window for this workspace. Returns null when no state-version retention policy is in effect for the\nworkspace, or when the policy does not delete state versions.\n\n\nThis attribute is only available in Terraform Enterprise."
+       },
+       "parent-data-retention-policy-info": {
+        "x-vis": [
+         "tfe"
+        ],
+        "type": "string",
+        "nullable": false,
+        "description": "This attribute is only available in Terraform Enterprise."
+       },
+       "effective-run-data-retention-desc": {
+        "type": "string",
+        "nullable": true,
+        "x-vis": [
+         "tfe"
+        ],
+        "description": "A human-readable description of the effective run data and logs\nretention window for this workspace. Returns null when no run data retention policy is in effect for the\nworkspace, or when the policy does not delete run data and logs.\n\n\nThis attribute is only available in Terraform Enterprise."
+       },
+       "hyok-enabled": {
+        "type": "boolean",
+        "x-vis": [
+         "hcpt"
+        ],
+        "description": "HCP Terraform Premium Tier only. Enabled Hold Your Own Key for the workspace. Once this has been set to true,\nit can no longer be disabled.\n\n\nThis attribute is only available in HCP Terraform."
+       },
+       "unarchived-workspace-change-requests-count": {
+        "x-vis": [
+         "public-beta"
+        ],
+        "type": "integer",
+        "description": "This attribute is considered BETA, is SUBJECT TO CHANGE, and may be unavailable to some users."
+       },
+       "oauth-client-name": {
+        "type": "string",
+        "nullable": true,
+        "description": "The display name of the OAuth client associated with this workspace, if any.\n"
+       }
+      }
+     },
+     "relationships": {
+      "type": "object",
+      "properties": {
+       "organization": {
+        "$ref": "#/components/schemas/organizations-has-one"
+       },
+       "ssh-key": {
+        "$ref": "#/components/schemas/ssh-keys-has-one"
+       },
+       "locked-by": {
+        "$ref": "#/components/schemas/locked-by-has-one"
+       },
+       "current-run": {
+        "$ref": "#/components/schemas/runs-has-one"
+       },
+       "latest-run": {
+        "$ref": "#/components/schemas/runs-has-one"
+       },
+       "outputs": {
+        "$ref": "#/components/schemas/workspace-outputs-has-many"
+       },
+       "remote-state-consumers": {
+        "type": "object",
+        "properties": {
+         "links": {
+          "$ref": "#/components/schemas/related"
+         }
+        }
+       },
+       "current-state-version": {
+        "$ref": "#/components/schemas/state-versions-has-one"
+       },
+       "current-configuration-version": {
+        "$ref": "#/components/schemas/configuration-versions-has-one"
+       },
+       "agent-pool": {
+        "$ref": "#/components/schemas/agent-pools-has-one"
+       },
+       "readme": {
+        "$ref": "#/components/schemas/workspace-readme-has-one"
+       },
+       "project": {
+        "$ref": "#/components/schemas/projects-has-one"
+       },
+       "current-assessment-result": {
+        "$ref": "#/components/schemas/assessment-results-has-one"
+       },
+       "no-code-module-version": {
+        "description": "The no-code module version this workspace was created from. Present\nonly for no-code workspaces; data is null or omitted otherwise.\n",
+        "$ref": "#/components/schemas/no-code-module-versions-has-one"
+       },
+       "vars": {
+        "$ref": "#/components/schemas/vars-has-many"
+       },
+       "tags": {
+        "$ref": "#/components/schemas/tags-has-many"
+       }
+      }
+     },
+     "links": {
+      "$ref": "#/components/schemas/workspace-links"
+     }
+    }
+   },
+   "workspaces-envelope": {
+    "type": "object",
+    "required": [
+     "data"
+    ],
+    "properties": {
+     "data": {
+      "$ref": "#/components/schemas/workspaces"
+     },
+     "included": {
+      "type": "array",
+      "items": {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/agent-pools"
+        },
+        {
+         "$ref": "#/components/schemas/assessment-results"
+        },
+        {
+         "$ref": "#/components/schemas/configuration-versions"
+        },
+        {
+         "$ref": "#/components/schemas/ingress-attributes"
+        },
+        {
+         "$ref": "#/components/schemas/runs"
+        },
+        {
+         "$ref": "#/components/schemas/applies"
+        },
+        {
+         "$ref": "#/components/schemas/plans"
+        },
+        {
+         "$ref": "#/components/schemas/state-versions"
+        },
+        {
+         "$ref": "#/components/schemas/users"
+        },
+        {
+         "$ref": "#/components/schemas/no-code-module-versions"
+        },
+        {
+         "$ref": "#/components/schemas/no-code-modules"
+        },
+        {
+         "$ref": "#/components/schemas/organizations"
+        },
+        {
+         "$ref": "#/components/schemas/workspace-outputs"
+        },
+        {
+         "$ref": "#/components/schemas/projects"
+        },
+        {
+         "$ref": "#/components/schemas/workspace-readme"
+        },
+        {
+         "$ref": "#/components/schemas/vars"
+        },
+        {
+         "$ref": "#/components/schemas/effective-tag-bindings"
+        }
+       ],
+       "discriminator": {
+        "propertyName": "type",
+        "mapping": {
+         "agent-pools": "#/components/schemas/agent-pools",
+         "assessment-results": "#/components/schemas/assessment-results",
+         "configuration-versions": "#/components/schemas/configuration-versions",
+         "ingress-attributes": "#/components/schemas/ingress-attributes",
+         "runs": "#/components/schemas/runs",
+         "applies": "#/components/schemas/applies",
+         "plans": "#/components/schemas/plans",
+         "state-versions": "#/components/schemas/state-versions",
+         "users": "#/components/schemas/users",
+         "no-code-module-versions": "#/components/schemas/no-code-module-versions",
+         "no-code-modules": "#/components/schemas/no-code-modules",
+         "organizations": "#/components/schemas/organizations",
+         "workspace-outputs": "#/components/schemas/workspace-outputs",
+         "projects": "#/components/schemas/projects",
+         "workspace-readme": "#/components/schemas/workspace-readme",
+         "vars": "#/components/schemas/vars",
+         "effective-tag-bindings": "#/components/schemas/effective-tag-bindings"
+        }
+       }
+      }
+     }
+    }
+   },
+   "workspaces-has-many": {
+    "type": "object",
+    "nullable": true,
+    "properties": {
+     "data": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/workspaces-identifier"
+      }
+     }
+    }
+   },
+   "workspaces-has-one": {
+    "type": "object",
+    "properties": {
+     "data": {
+      "type": "object",
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/workspaces-identifier"
+       }
+      ],
+      "nullable": true
+     },
+     "links": {
+      "$ref": "#/components/schemas/related"
+     }
+    }
+   },
+   "workspaces-identifier": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "workspaces"
+      ]
+     }
+    }
+   }
+  },
+  "securitySchemes": {
+   "bearerAuth": {
+    "type": "http",
+    "scheme": "bearer"
+   }
+  }
+ }
+}

@@ -147,7 +147,13 @@ function plainest(doc: OpenApiDocument, s: Schema, depth: number): unknown {
   if (s.nullable) return null;
   if ("default" in s) return s.default;
   if (Array.isArray(s.enum) && s.enum.length) return s.enum[0];
-  const type = s.type ?? (s.properties ? "object" : undefined);
+  let type = s.type ?? (s.properties ? "object" : undefined);
+  // JSON Schema type arrays (OpenAPI 3.1, Heroku's draft-04): null if allowed,
+  // else the first type.
+  if (Array.isArray(type)) {
+    if (type.includes("null")) return null;
+    type = type[0];
+  }
   switch (type) {
     case "string":
       if (s.format === "date-time") return FILL_DATE;
@@ -210,4 +216,60 @@ function fits(doc: OpenApiDocument, branch: Schema, value: unknown): boolean {
     if (Array.isArray(prop?.enum) && !prop.enum.includes(v)) return false;
   }
   return true;
+}
+
+// -- fields the description does not declare --------------------------------------
+
+/**
+ * Every property in `value` that `schema` does not declare, as a JSON path.
+ * Validation alone cannot catch an invented field: most vendor schemas leave
+ * additionalProperties open, so a field the vendor never sends passes. This
+ * is the check that does: a seed or a recorded fixture may only carry fields
+ * the vendor documents. A property counts as declared when any allOf, oneOf
+ * or anyOf branch declares it. An object is open (anything goes) when its
+ * schema declares no properties at all, or says additionalProperties: true;
+ * an additionalProperties schema is applied to the undeclared keys instead.
+ */
+export function undeclaredFields(doc: OpenApiDocument, schema: Schema | undefined, value: unknown, path = "$"): string[] {
+  if (value === null || typeof value !== "object" || !schema) return [];
+  const parts = branches(doc, schema);
+  if (Array.isArray(value)) {
+    const items = parts.map((p) => p.items).find(Boolean);
+    return items ? value.flatMap((v, i) => undeclaredFields(doc, items, v, `${path}[${i}]`)) : [];
+  }
+  const declared = new Map<string, Schema[]>();
+  let extra: Schema | undefined;
+  let open = true;
+  for (const p of parts) {
+    if (p.properties) {
+      open = false;
+      for (const [k, v] of Object.entries<Schema>(p.properties)) declared.set(k, [...(declared.get(k) ?? []), v]);
+    }
+    if (p.additionalProperties === true) return [];
+    if (p.additionalProperties && typeof p.additionalProperties === "object") extra = p.additionalProperties;
+  }
+  if (open && !extra) return [];
+  const out: string[] = [];
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    const candidates = declared.get(key) ?? (extra ? [extra] : null);
+    if (!candidates) {
+      out.push(`${path}.${key}`);
+      continue;
+    }
+    // Declared by several branches: undeclared below only if every branch says so.
+    const nested = candidates.map((c) => undeclaredFields(doc, c, v, `${path}.${key}`));
+    out.push(...nested.reduce((a, b) => a.filter((x) => b.includes(x))));
+  }
+  return out;
+}
+
+/** A schema's own part plus every allOf/oneOf/anyOf branch, refs followed. */
+function branches(doc: OpenApiDocument, schema: Schema, depth = 0): Schema[] {
+  const s = deref(doc, schema);
+  if (!s || depth > 10) return [];
+  const out: Schema[] = [s];
+  for (const key of ["allOf", "oneOf", "anyOf"]) {
+    if (Array.isArray(s[key])) for (const b of s[key]) out.push(...branches(doc, b, depth + 1));
+  }
+  return out;
 }

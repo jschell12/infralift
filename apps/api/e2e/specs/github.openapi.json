@@ -14,7 +14,11 @@
    "url": "https://support.github.com/contact?tags=dotcom-rest-api"
   },
   "x-github-plan": "api.github.com",
-  "x-infralift-subset": "operations infralift calls, from github/rest-api-description@53fd7d2ea1380eabdcfcc9ab9a043a56ef444fd6/descriptions/api.github.com/api.github.com.json"
+  "x-infralift-subset": "operations infralift calls, from github/rest-api-description@53fd7d2ea1380eabdcfcc9ab9a043a56ef444fd6/descriptions/api.github.com/api.github.com.json",
+  "x-infralift-notice": [
+   "Copyright (c) 2020 GitHub. Licensed under MIT: https://github.com/github/rest-api-description/blob/53fd7d2ea1380eabdcfcc9ab9a043a56ef444fd6/LICENSE.md",
+   "A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE."
+  ]
  },
  "x-infralift-source": {
   "repo": "github/rest-api-description",

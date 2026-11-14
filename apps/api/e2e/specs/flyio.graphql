@@ -1,0 +1,81 @@
+# The part of superfly/fly-go@84b82d65ccb067218680ddb4b6a5c10d3e05078d/schema.graphql (sha256 eed95d75e6bda16031277463df4e5b3aad8d70c3e08e58248ede140f06f34abf)
+# that infralift's queries select (sources.ts). Written by e2e/specs/extract.ts; do not edit.
+# Fly.io, Inc. (repository owner; the LICENSE file has no copyright line). Licensed under Apache-2.0: https://github.com/superfly/fly-go/blob/84b82d65ccb067218680ddb4b6a5c10d3e05078d/LICENSE
+# A subset of the original, extracted and modified by infralift (apps/api/e2e/specs/extract.ts). See NOTICE.
+
+schema {
+  query: Queries
+}
+
+type Macaroon implements Principal {
+  id: ID @deprecated(reason: "Use User fragment on Viewer instead")
+}
+
+interface Principal {
+  id: ID @deprecated(reason: "Use User fragment on Viewer instead")
+}
+
+type User implements Principal {
+  id: ID!
+}
+
+type Queries {
+  """List apps"""
+  apps(
+    active: Boolean
+
+    """Returns the elements in the list that come after the specified cursor."""
+    after: String
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+
+    """Returns the first _n_ elements from the list."""
+    first: Int
+    ids: [String!]
+
+    """Returns the last _n_ elements from the list."""
+    last: Int
+    organizationId: ID
+    platform: String
+    role: String
+    type: String
+  ): AppConnection!
+  viewer: Principal!
+}
+
+"""The connection type for App."""
+type AppConnection {
+  """A list of nodes."""
+  nodes: [App]
+}
+
+type App {
+  """Unique application ID"""
+  id: ID!
+
+  """The unique application name"""
+  name: String!
+
+  """Organization that owns this app"""
+  organization: Organization!
+  regions: [Region!]!
+
+  """Application status"""
+  status: String!
+}
+
+type Organization {
+  """Unique organization slug"""
+  slug: String!
+}
+
+type Region {
+  """The IATA airport code for this region"""
+  code: String!
+
+  """The name of this region"""
+  name: String!
+}

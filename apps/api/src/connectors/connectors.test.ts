@@ -369,7 +369,7 @@ describe("netlify", () => {
           },
         },
       ],
-      "/dns_zones": [{ id: "z1", name: "example.com", records: [1, 2] }],
+      "/dns_zones": [{ id: "z1", name: "example.com", records: [{ id: "r1" }, { id: "r2" }] }],
       "/forms?": [{ id: "f1", name: "contact", submission_count: 42 }],
       "/build_hooks": [{ id: "h1" }],
     });
@@ -624,7 +624,7 @@ describe("digitalocean", () => {
         apps: [
           {
             id: "app1",
-            spec: { name: "my-do-app", services: [{}], static_sites: [] },
+            spec: { name: "my-do-app", services: [{ name: "web" }], static_sites: [] },
             tier_slug: "basic",
             region: { slug: "nyc" },
           },

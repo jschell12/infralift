@@ -7,6 +7,20 @@ export const STACK = {
   databaseUrl: "postgresql://postgres:postgres@127.0.0.1:55432/infralift_e2e",
   moto: "http://127.0.0.1:55000",
   cloudflare: "http://127.0.0.1:54010",
+  /** Prism, one per description (docker-compose.e2e.yml, profile "mocks"). */
+  mocks: {
+    digitalocean: "http://127.0.0.1:54011",
+    render: "http://127.0.0.1:54012",
+    vercel: "http://127.0.0.1:54013",
+    heroku: "http://127.0.0.1:54014",
+    netlify: "http://127.0.0.1:54015",
+    flyioMachines: "http://127.0.0.1:54016",
+    azure: "http://127.0.0.1:54017",
+    google: "http://127.0.0.1:54018",
+  },
+  /** GraphQL and OAuth token fakes (provider-fakes/server.ts). */
+  providerFakesPort: 54030,
+  providerFakes: "http://127.0.0.1:54030",
   githubFakePort: 54020,
   githubFake: "http://127.0.0.1:54020",
   apiPort: 54400,
