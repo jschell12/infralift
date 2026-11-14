@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { HTTP_TIMEOUTS_MS } from "../lib/http.js";
+import { LlmBudget, LlmBudgetExceeded, estimateTokens } from "./budget.js";
 
 // The SDK's default timeout is ten minutes; a classification is 60 tokens.
 const client = new Anthropic({ timeout: HTTP_TIMEOUTS_MS.llm, maxRetries: 2 });
@@ -19,20 +20,28 @@ export interface Classification {
   confidence: "high" | "medium" | "low";
 }
 
+const MAX_OUTPUT_TOKENS = 60;
+
+/** Classifies one post. Throws LlmBudgetExceeded, before calling the model,
+ *  when the day's token budget would be passed (scanner/budget.ts); every
+ *  other failure is logged and reads as irrelevant. */
 export async function classify(
   title: string,
-  body: string
+  body: string,
+  budget: LlmBudget
 ): Promise<Classification> {
   const truncatedBody = body.slice(0, 500);
   const prompt = `Post title: ${title}\nPost body: ${truncatedBody}`;
+  await budget.assertRoomFor(estimateTokens(SYSTEM_PROMPT + prompt) + MAX_OUTPUT_TOKENS);
 
   try {
     const response = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 60,
+      max_tokens: MAX_OUTPUT_TOKENS,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: prompt }],
     });
+    await budget.record((response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0));
 
     const text =
       response.content[0]?.type === "text" ? response.content[0].text : "";
@@ -55,6 +64,7 @@ export async function classify(
 
     return { classification: "irrelevant", confidence: "low" };
   } catch (err) {
+    if (err instanceof LlmBudgetExceeded) throw err;
     console.warn(`Classification failed: ${err}`);
     return { classification: "irrelevant", confidence: "low" };
   }

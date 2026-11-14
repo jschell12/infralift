@@ -173,6 +173,11 @@ function json(body: unknown, status: number): Response {
   });
 }
 
+/** How long a proxied intake call waits for the API. A Worker otherwise waits
+ *  as long as the visitor's connection stays open; past this the visitor gets
+ *  the same 502 as an unreachable API and can try again. */
+export const INTAKE_UPSTREAM_TIMEOUT_MS = 10_000;
+
 /** Headers every proxied intake call needs. The visitor IP matters: the API
  * rate-limits on it, so sending the Worker's egress address would put every
  * visitor in the world into one bucket. */
@@ -218,6 +223,7 @@ async function submitLead(request: Request, env: Env): Promise<Response> {
   try {
     const upstream = await fetch(`${env.LEAD_INTAKE_URL}/intake/lead`, {
       method: "POST",
+      signal: AbortSignal.timeout(INTAKE_UPSTREAM_TIMEOUT_MS),
       headers,
       body: JSON.stringify(payload),
     });
@@ -281,6 +287,7 @@ async function runEstimate(request: Request, env: Env): Promise<Response> {
   try {
     const upstream = await fetch(`${env.LEAD_INTAKE_URL}/intake/estimate`, {
       method: "POST",
+      signal: AbortSignal.timeout(INTAKE_UPSTREAM_TIMEOUT_MS),
       headers: upstreamHeaders(request, env),
       body: JSON.stringify(payload),
     });
