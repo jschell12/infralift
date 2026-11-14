@@ -26,6 +26,8 @@ import {
   type StoredInput,
   type TfcCredential,
 } from "../lib/tf/extensions.js";
+import { RATE_LIMITS, rateLimit } from "../lib/rate-limit.js";
+import { log } from "../lib/log.js";
 
 export const workspacesRouter = Router();
 
@@ -72,7 +74,7 @@ function tfcFailure(err: unknown): never {
     // the body, which can echo request detail.
     throw new Upstream(`Terraform Cloud returned ${err.statusCode} for ${err.method} ${err.path}`);
   }
-  console.error("terraform cloud call failed:", err);
+  log.error({ err }, "terraform cloud call failed");
   throw new Upstream("could not complete the request to Terraform Cloud");
 }
 
@@ -125,7 +127,7 @@ const connectionSchema = z.object({
   token: z.string().min(1),
 });
 
-workspacesRouter.post("/connections", handle(async (req, res) => {
+workspacesRouter.post("/connections", rateLimit(RATE_LIMITS.connectionVerify), handle(async (req, res) => {
   const parsed = connectionSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new InvalidBody(parsed.error.flatten());
@@ -229,7 +231,7 @@ const adoptSchema = z
     message: "give exactly one of projectId or projectName",
   });
 
-workspacesRouter.post("/adopt", handle(async (req, res) => {
+workspacesRouter.post("/adopt", rateLimit(RATE_LIMITS.importCreate), handle(async (req, res) => {
   const parsed = adoptSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new InvalidBody(parsed.error.flatten());
@@ -647,18 +649,18 @@ workspacesRouter.get("/:id/runs", handle(async (req, res) => {
 
 const queueSchema = z.object({ message: z.string().max(200).optional(), planOnly: z.boolean().optional() });
 
-workspacesRouter.post("/:id/runs", handle(async (req, res) => {
+workspacesRouter.post("/:id/runs", rateLimit(RATE_LIMITS.workspaceRun), handle(async (req, res) => {
   res.status(201).json(await runs.queueRun(req.user!.orgId, req.params.id, parseBody(queueSchema, req.body ?? {})));
 }));
 
 const applySchema = z.object({ confirm: z.string(), comment: z.string().max(200).optional() });
 
-workspacesRouter.post("/:id/runs/:runId/apply", handle(async (req, res) => {
+workspacesRouter.post("/:id/runs/:runId/apply", rateLimit(RATE_LIMITS.workspaceRun), handle(async (req, res) => {
   const body = parseBody(applySchema, req.body);
   res.status(202).json(await runs.applyRun(req.user!.orgId, req.params.id, req.params.runId, body));
 }));
 
-workspacesRouter.post("/:id/runs/:runId/discard", handle(async (req, res) => {
+workspacesRouter.post("/:id/runs/:runId/discard", rateLimit(RATE_LIMITS.workspaceRun), handle(async (req, res) => {
   const body = parseBody(z.object({ comment: z.string().max(200).optional() }), req.body ?? {});
   res.status(202).json(await runs.discardRun(req.user!.orgId, req.params.id, req.params.runId, body));
 }));

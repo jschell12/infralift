@@ -32,6 +32,11 @@ export class AppError extends Error {
   body(): Record<string, unknown> {
     return { error: this.message, ...this.details };
   }
+
+  /** Response headers this error sets, such as Retry-After on a 429. */
+  headers(): Record<string, string> {
+    return {};
+  }
 }
 
 export class InvalidInput extends AppError {
@@ -76,9 +81,18 @@ export class ServiceUnavailable extends AppError {
   }
 }
 
+/** 429. `retryAfterSeconds`, when known, is sent as Retry-After and as
+ *  `retryAfterSeconds` in the body, so the dashboard can say when. */
 export class TooManyRequests extends AppError {
-  constructor(message: string) {
-    super(429, message);
+  constructor(
+    message: string,
+    readonly retryAfterSeconds?: number
+  ) {
+    super(429, message, retryAfterSeconds ? { retryAfterSeconds } : {});
+  }
+
+  override headers(): Record<string, string> {
+    return this.retryAfterSeconds ? { "Retry-After": String(this.retryAfterSeconds) } : {};
   }
 }
 
@@ -96,9 +110,15 @@ export function handle(fn: (req: Request, res: Response) => Promise<unknown>) {
     } catch (err) {
       // A response already sent cannot be replaced; let Express close it.
       if (!(err instanceof AppError) || res.headersSent) throw err;
-      res.status(err.status).json(err.body());
+      sendAppError(res, err);
     }
   };
+}
+
+/** Writes an AppError as the response: its headers, status and body. */
+export function sendAppError(res: Response, err: AppError): void {
+  for (const [name, value] of Object.entries(err.headers())) res.setHeader(name, value);
+  res.status(err.status).json(err.body());
 }
 
 /** A request body that failed its schema: 400 with zod's flattened errors as

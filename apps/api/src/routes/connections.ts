@@ -21,6 +21,7 @@ import {
   adoptSelected,
   listUnmanaged,
 } from "../services/unmanaged.js";
+import { RATE_LIMITS, rateLimit } from "../lib/rate-limit.js";
 
 export const connectionsRouter = Router();
 
@@ -100,7 +101,7 @@ connectionsRouter.get("/aws-setup", handle(async (req, res) => {
 }));
 
 // Register a read-only token. Verified immediately against the provider.
-connectionsRouter.post("/", handle(async (req, res) => {
+connectionsRouter.post("/", rateLimit(RATE_LIMITS.connectionVerify), handle(async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new InvalidInput("Invalid request", { detail: parsed.error.message });
@@ -118,13 +119,13 @@ connectionsRouter.post("/check-stale", handle(async (req, res) => {
 }));
 
 // Re-verify an existing connection, Terraform Cloud included.
-connectionsRouter.post("/:id/verify", handle(async (req, res) => {
+connectionsRouter.post("/:id/verify", rateLimit(RATE_LIMITS.connectionVerify), handle(async (req, res) => {
   res.json(await verifyConnection(req.user!.orgId, String(req.params.id)));
 }));
 
 // Replace the credential. Verified first; a failure keeps the old one (400
 // with the provider's reason). The credential is never sent back.
-connectionsRouter.patch("/:id", handle(async (req, res) => {
+connectionsRouter.patch("/:id", rateLimit(RATE_LIMITS.connectionVerify), handle(async (req, res) => {
   const input = parseBody(rotateSchema, req.body);
   res.json(await rotateConnection(req.user!.orgId, String(req.params.id), input));
 }));
@@ -150,7 +151,7 @@ connectionsRouter.get("/:id/unmanaged", handle(async (req, res) => {
 // Adopt the picked resources into a new project: an import-block pull request
 // that applies by saved plan on merge (ADR 0008). 202 when accepted; 200 with
 // replayed: true when this exact request was already accepted.
-connectionsRouter.post("/:id/adopt", handle(async (req, res) => {
+connectionsRouter.post("/:id/adopt", rateLimit(RATE_LIMITS.importCreate), handle(async (req, res) => {
   const input = parseBody(adoptSchema, req.body);
   const result = await adoptSelected(req.user!.orgId, String(req.params.id), input);
   res.status(result.replayed ? 200 : 202).json(result);

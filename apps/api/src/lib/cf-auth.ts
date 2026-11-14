@@ -16,6 +16,7 @@ import type { Request, Response, NextFunction } from "express";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { prisma } from "./db.js";
 import { isUniqueViolation } from "./prisma-errors.js";
+import { log } from "./log.js";
 
 const CF_TEAM_DOMAIN = process.env.CF_ACCESS_TEAM_DOMAIN; // e.g. "<team>.cloudflareaccess.com"
 const CF_AUD = process.env.CF_ACCESS_AUD; // Application Audience (AUD) tag from Access app
@@ -64,7 +65,7 @@ const ADMIN_EMAILS = new Set(
 export async function cfAuth(req: Request, res: Response, next: NextFunction) {
   // Production never falls back: fail closed if Access is not configured.
   if (process.env.NODE_ENV === "production" && (!CF_TEAM_DOMAIN || !CF_AUD)) {
-    console.error("cfAuth: CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD must be set in production; refusing requests");
+    log.error("cfAuth: CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD must be set in production; refusing requests");
     return res.status(503).json({ error: "authentication is not configured" });
   }
   // Dev mode: no Cloudflare Access configured
@@ -120,9 +121,9 @@ export async function cfAuth(req: Request, res: Response, next: NextFunction) {
   // mismatch, ERR_JWKS_NO_MATCHING_KEY, ...) — return it so the browser shows
   // something more actionable than a bare "Invalid access token".
   const code = errorCode(lastError);
-  console.error(
-    `CF Access JWT verification failed (${candidates.length} candidate token(s), aud=${CF_AUD ?? "unset"}):`,
-    lastError
+  log.warn(
+    { err: lastError, candidates: candidates.length, aud: CF_AUD ?? "unset" },
+    "CF Access JWT verification failed"
   );
   return res
     .status(401)
@@ -202,7 +203,7 @@ export async function getOrCreateUser(rawEmail: string, name: string | null): Pr
         const org = await tx.org.create({ data: { name: `${email.split("@")[0] || "My org"}'s workspace` } });
         return tx.user.create({ data: { email, name, orgId: org.id } });
       });
-      console.log(`Provisioned new user: ${email} (org: ${user.orgId})`);
+      log.info({ email, orgId: user.orgId }, "provisioned new user");
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
       user = await prisma.user.findUniqueOrThrow({ where: { email } });

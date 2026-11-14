@@ -18,6 +18,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import type { CreatedWorkspace } from "./workspace.js";
+import { log } from "../log.js";
 
 export interface RecordJobWorkspaceInput {
   orgId: string;
@@ -105,7 +106,7 @@ export async function recordJobWorkspaceNote(input: RecordJobWorkspaceInput): Pr
     }
     return `listed under Workspaces as ${r.kind}`;
   } catch (err) {
-    console.error(`could not record workspace ${input.ws.workspaceName} for org ${input.orgId}:`, err);
+    log.error({ err, workspace: input.ws.workspaceName, orgId: input.orgId }, "could not record workspace");
     return "not listed under Workspaces: recording it failed, rerun the job to retry";
   }
 }

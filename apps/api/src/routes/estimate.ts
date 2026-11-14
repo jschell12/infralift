@@ -10,7 +10,7 @@
 
 import { Router } from "express";
 import { z } from "zod";
-import { clientKey, createRateLimiter } from "../lib/rate-limit.js";
+import { RATE_LIMITS, RateLimiter, clientKey, resetRateLimits, retryAfterSeconds } from "../lib/rate-limit.js";
 import { estimate, DEFAULT_HOURLY_RATE_USD } from "../lib/estimate.js";
 import { PRICES_VERIFIED_AT } from "../lib/pricing.js";
 
@@ -38,17 +38,17 @@ const estimateSchema = z.object({
   website: z.string().max(300).optional(),
 });
 
-// Twenty an hour. More generous than the lead form's five because running the
-// calculator repeatedly with different numbers is the intended behaviour, not
-// a symptom of one.
-const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20 });
+// Per client IP: RATE_LIMITS.intakeEstimate (lib/rate-limit.ts), more generous
+// than the lead form because running the calculator repeatedly with different
+// numbers is the intended behaviour, not a symptom of one.
+const limiter = new RateLimiter(RATE_LIMITS.intakeEstimate);
 
 /** Exported for tests. */
-export function resetRateLimit(): void {
-  limiter.reset();
+export function resetRateLimit(): Promise<void> {
+  return resetRateLimits();
 }
 
-estimateRouter.post("/", (req, res) => {
+estimateRouter.post("/", async (req, res) => {
   const parsed = estimateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res
@@ -68,10 +68,10 @@ estimateRouter.post("/", (req, res) => {
     });
   }
 
-  if (limiter.limited(clientKey(req), Date.now())) {
-    return res
-      .status(429)
-      .json({ error: "Too many estimates. Try again in a little while." });
+  const decision = await limiter.decide({ ip: clientKey(req) });
+  if (!decision.allowed) {
+    res.setHeader("Retry-After", String(retryAfterSeconds(decision.retryAfterMs)));
+    return res.status(429).json({ error: RATE_LIMITS.intakeEstimate.message });
   }
 
   const result = estimate({

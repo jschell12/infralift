@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { ProviderConnection } from "@prisma/client";
 import type {
   AdoptBackendDefaults,
@@ -12,14 +11,15 @@ import type {
 import { prisma } from "../lib/db.js";
 import { decryptToken } from "../lib/crypto.js";
 import { getConnector } from "../connectors/index.js";
-import { AppError, Conflict, InvalidInput, NotFound, TooManyRequests, Upstream } from "../lib/errors.js";
+import { AppError, Conflict, InvalidInput, NotFound, Upstream } from "../lib/errors.js";
 import { CredentialFormatError } from "../connectors/types.js";
-import { createRateLimiter } from "../lib/rate-limit.js";
+import { RATE_LIMITS, RateLimiter, resetRateLimits } from "../lib/rate-limit.js";
 import { adoptionTarget, isUsageLine, type AdoptBackend } from "../lib/import/adopt.js";
 import { connectionSecret } from "./aws-access.js";
 import { authFailureStatus, markInvalid, markInvalidOnAuthFailure, providerLabel } from "./connections.js";
 import { openAdoption } from "./imports.js";
 import { ledgerKey, managedKeys, projectConnection, type LedgerKey } from "./managed-resources.js";
+import { currentRequestId, log } from "../lib/log.js";
 
 // ---------------------------------------------------------------------------
 // "Adopt from an account" (ADR 0010, starting point 1): what is in a
@@ -36,7 +36,7 @@ import { ledgerKey, managedKeys, projectConnection, type LedgerKey } from "./man
 //
 // The inventory is cached per connection for INVENTORY_TTL_MS, so paging and
 // reloading do not call the provider again; ?refresh=1 skips the cache. Reads
-// that do reach the provider are limited per org (CLOUD_READS_PER_WINDOW),
+// that do reach the provider are limited per org (RATE_LIMITS.cloudInventory),
 // in-process like every limiter here (lib/rate-limit.ts): a second API
 // replica would mean a second bucket and a second cache.
 // ---------------------------------------------------------------------------
@@ -54,10 +54,8 @@ export const ADOPT_MAX_RESOURCES = 200;
 // A provider inventory is the slowest call a page load can make, and it is
 // rate limited by the provider. It never includes cost data (assess with
 // costs: false), so AWS Cost Explorer, which bills per request, is not called.
-// Cache hits are free.
-const CLOUD_READS_PER_WINDOW = 10;
-const CLOUD_READ_WINDOW_MS = 10 * 60 * 1000;
-const cloudReads = createRateLimiter({ windowMs: CLOUD_READ_WINDOW_MS, max: CLOUD_READS_PER_WINDOW });
+// Cache hits are free. The limit is RATE_LIMITS.cloudInventory (lib/rate-limit.ts).
+const cloudReads = new RateLimiter(RATE_LIMITS.cloudInventory);
 
 // -- inventory cache ------------------------------------------------------------
 
@@ -80,7 +78,7 @@ const cacheKey = (c: Pick<ProviderConnection, "id" | "updatedAt">) => `${c.id}:$
 export function resetUnmanagedState(): void {
   cache.clear();
   inFlight.clear();
-  cloudReads.reset();
+  void resetRateLimits();
 }
 
 function remember(key: string, entry: CachedInventory, now: number): void {
@@ -138,14 +136,13 @@ async function readInventory(connection: ProviderConnection): Promise<ResourceIn
   } catch (err) {
     if (err instanceof CredentialFormatError) {
       await markInvalid(connection.id, `the saved credential isn't ${err.expected}; replace it`).catch((markErr) =>
-        console.error(`could not mark connection ${connection.id} invalid:`, markErr)
+        log.error({ err: markErr, connectionId: connection.id }, "could not mark connection invalid")
       );
     } else {
       await markInvalidOnAuthFailure(connection, err, "connector", "an inventory of the account");
     }
-    const requestId = randomUUID();
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`inventory of connection ${connection.id} failed (${connection.provider}) [request ${requestId}]: ${message}`);
+    const requestId = currentRequestId();
+    log.error({ err, requestId, connectionId: connection.id, provider: connection.provider }, "inventory of connection failed");
     throw inventoryFailure(connection, err, requestId);
   }
 }
@@ -163,10 +160,12 @@ export async function accountInventory(
 
   const pending = inFlight.get(key);
   if (pending) return pending;
-  if (cloudReads.limited(connection.orgId, now)) {
-    throw new TooManyRequests("Too many reads of your cloud accounts. Wait a few minutes and try again.");
-  }
-  const read = readInventory(connection)
+  // The limit check is inside the shared promise, so requests that arrive
+  // together still share one read (and one count) rather than racing past
+  // the in-flight check while the limiter answers.
+  const read = cloudReads
+    .check({ orgId: connection.orgId }, now)
+    .then(() => readInventory(connection))
     .then((items) => {
       const entry = { orgId: connection.orgId, fetchedAt: now, items };
       remember(key, entry, now);

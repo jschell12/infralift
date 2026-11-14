@@ -9,7 +9,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
-import { clientKey, createRateLimiter } from "../lib/rate-limit.js";
+import { RATE_LIMITS, RateLimiter, clientKey, resetRateLimits, retryAfterSeconds } from "../lib/rate-limit.js";
+import { log } from "../lib/log.js";
 
 export const intakeRouter = Router();
 
@@ -36,14 +37,12 @@ const leadSchema = z.object({
 // Rate limiting
 // ---------------------------------------------------------------------------
 
-const limiter = createRateLimiter({
-  windowMs: 60 * 60 * 1000,
-  max: 5,
-});
+// Per client IP: RATE_LIMITS.intakeLead (lib/rate-limit.ts).
+const limiter = new RateLimiter(RATE_LIMITS.intakeLead);
 
 /** Exported for tests. */
-export function resetRateLimit(): void {
-  limiter.reset();
+export function resetRateLimit(): Promise<void> {
+  return resetRateLimits();
 }
 
 // ---------------------------------------------------------------------------
@@ -65,10 +64,10 @@ intakeRouter.post("/", async (req, res) => {
     return res.status(202).json({ ok: true });
   }
 
-  if (limiter.limited(clientKey(req), Date.now())) {
-    return res
-      .status(429)
-      .json({ error: "Too many submissions. Try again later, or email us." });
+  const decision = await limiter.decide({ ip: clientKey(req) });
+  if (!decision.allowed) {
+    res.setHeader("Retry-After", String(retryAfterSeconds(decision.retryAfterMs)));
+    return res.status(429).json({ error: RATE_LIMITS.intakeLead.message });
   }
 
   const country = req.headers["cf-ipcountry"];
@@ -93,10 +92,10 @@ intakeRouter.post("/", async (req, res) => {
     });
     // The id is deliberately not returned: it is a database identifier and the
     // submitter has no use for it.
-    console.log(`inbound lead ${lead.id} from ${input.email}`);
+    log.info({ leadId: lead.id, email: input.email }, "inbound lead recorded");
     return res.status(202).json({ ok: true });
   } catch (err) {
-    console.error("inbound lead write failed:", err);
+    log.error({ err }, "inbound lead write failed");
     return res
       .status(500)
       .json({ error: "Could not record that. Please try again." });

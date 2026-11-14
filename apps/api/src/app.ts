@@ -15,6 +15,9 @@ import { intakeRouter } from "./routes/intake.js";
 import { estimateRouter } from "./routes/estimate.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { catchAsyncErrors, errorHandler } from "./lib/async-errors.js";
+import { bindUserToRequestContext, requestContext, restoreRequestContext } from "./lib/request-context.js";
+import { JSON_BODY_LIMIT, requireJsonBody } from "./lib/json-body.js";
+import { checkReadiness } from "./lib/readiness.js";
 
 export const app = express();
 
@@ -24,10 +27,22 @@ const corsOrigins = (process.env.CORS_ORIGINS ??
   .map((s) => s.trim())
   .filter(Boolean);
 
+// First: every request gets an id (echoed as X-Request-Id), a log context and
+// an access line (lib/request-context.ts), including requests refused below.
+app.use(requestContext());
 app.use(cors({ origin: corsOrigins, credentials: true }));
-app.use(express.json({ limit: "1mb" }));
+// Bodies are JSON (415 otherwise) and at most JSON_BODY_LIMIT (413).
+app.use(requireJsonBody);
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
+app.use(restoreRequestContext);
 
+// Liveness: the process answers. Readiness: it can reach the database
+// (lib/readiness.ts). Neither needs authentication.
 app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/ready", async (_req, res) => {
+  const readiness = await checkReadiness();
+  res.status(readiness.ok ? 200 : 503).json(readiness);
+});
 
 // Public lead intake, deliberately registered above cfAuth. Registration
 // order is the only mechanism for a public route here — cfAuth has no
@@ -48,6 +63,7 @@ app.use("/intake/estimate", estimateRouter);
 // All routes below require Cloudflare Access authentication.
 // In dev mode (no CF_ACCESS_TEAM_DOMAIN), a dev user is auto-created.
 app.use(cfAuth);
+app.use(bindUserToRequestContext);
 
 // Current user info — the dashboard calls this on load.
 app.get("/auth/me", (req, res) => {

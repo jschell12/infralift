@@ -11,6 +11,7 @@ import { HttpTimeoutError } from "../lib/http.js";
 import { TfcClient, TfcClientError, tfcBaseUrl } from "../lib/tf/tfc-client.js";
 import { TFC_PROVIDER } from "../lib/tf/tfc-connection.js";
 import { UnsafeHostError, assertPublicHost, tfcCredentialSchema } from "../lib/tf/extensions.js";
+import { log } from "../lib/log.js";
 
 // ---------------------------------------------------------------------------
 // A connection's life after it is added: verify it again, replace its
@@ -405,7 +406,7 @@ export async function markInvalidOnAuthFailure(
     await markInvalid(connection.id, `${providerLabel(connection.provider)} refused the credential (${status}) during ${during}`);
     return true;
   } catch (markErr) {
-    console.error(`could not mark connection ${connection.id} invalid:`, markErr);
+    log.error({ err: markErr, connectionId: connection.id }, "could not mark connection invalid");
     return false;
   }
 }

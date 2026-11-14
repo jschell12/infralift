@@ -1,7 +1,7 @@
 import { prisma } from "../lib/db.js";
-import { TooManyRequests } from "../lib/errors.js";
-import { createRateLimiter } from "../lib/rate-limit.js";
+import { RATE_LIMITS, RateLimiter, resetRateLimits } from "../lib/rate-limit.js";
 import { CHECK_CLAIM_MS, claimCheck, runCheck, runClaimedCheck } from "./connections.js";
+import { log } from "../lib/log.js";
 
 // ---------------------------------------------------------------------------
 // Connections are checked again on their own, so a credential that stopped
@@ -37,9 +37,8 @@ export const ORG_BATCH = 20;
 /** Provider verify calls this process makes at once, sweep and pages together. */
 export const CHECK_CONCURRENCY = 4;
 
-const ON_DEMAND_PER_WINDOW = 6;
-const ON_DEMAND_WINDOW_MS = 10 * 60 * 1000;
-const onDemand = createRateLimiter({ windowMs: ON_DEMAND_WINDOW_MS, max: ON_DEMAND_PER_WINDOW });
+/** On-demand checks per org: RATE_LIMITS.connectionCheck (lib/rate-limit.ts). */
+const onDemand = new RateLimiter(RATE_LIMITS.connectionCheck);
 
 // -- the slot pool ------------------------------------------------------------------
 
@@ -89,7 +88,7 @@ export async function dueForCheck(now = new Date(), limit = SWEEP_BATCH, orgId?:
 
 function logFailure(id: string, err: unknown): void {
   // Only the error's class and our own message: never a provider body.
-  console.error(`connection check ${id} failed: ${err instanceof Error ? err.message : String(err)}`);
+  log.error({ connectionId: id, err: err instanceof Error ? err.message : String(err) }, "connection check failed");
 }
 
 // -- the sweep ------------------------------------------------------------------
@@ -122,9 +121,9 @@ export function startConnectionCheckSweep(random: () => number = Math.random): v
     setTimeout(() => {
       void sweepConnectionChecks()
         .then((n) => {
-          if (n) console.log(`connection checks: checked ${n} connection(s)`);
+          if (n) log.info({ count: n }, "connection checks: checked connections");
         })
-        .catch((err) => console.error("connection check sweep failed:", err))
+        .catch((err) => log.error({ err }, "connection check sweep failed"))
         .finally(() => schedule(SWEEP_EVERY_MS));
     }, base + Math.floor(random() * SWEEP_JITTER_MS)).unref();
   };
@@ -135,11 +134,9 @@ export function startConnectionCheckSweep(random: () => number = Math.random): v
 
 /** Claims every due connection of the org and checks them in the background.
  *  Returns the ids it claimed, which already read checking: true. 429 past
- *  ON_DEMAND_PER_WINDOW calls in ON_DEMAND_WINDOW_MS for one org. */
+ *  RATE_LIMITS.connectionCheck for one org. */
 export async function checkStaleForOrg(orgId: string, now = new Date()): Promise<string[]> {
-  if (onDemand.limited(orgId, now.getTime())) {
-    throw new TooManyRequests("Connections were checked a moment ago. They are checked again on their own every day.");
-  }
+  await onDemand.check({ orgId }, now.getTime());
   const claimed = [];
   for (const connection of await dueForCheck(now, ORG_BATCH, orgId)) {
     if (await claimCheck(connection.id, now)) claimed.push(connection);
@@ -151,6 +148,6 @@ export async function checkStaleForOrg(orgId: string, now = new Date()): Promise
 }
 
 /** For tests. */
-export function resetConnectionCheckState(): void {
-  onDemand.reset();
+export function resetConnectionCheckState(): Promise<void> {
+  return resetRateLimits();
 }

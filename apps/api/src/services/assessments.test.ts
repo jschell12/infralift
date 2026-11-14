@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { captureLogs } from "../lib/log.js";
 import type { InventoryItem } from "@prisma/client";
 import type { ResourceInventoryItem } from "@infralift/shared";
 import {
@@ -169,15 +170,15 @@ describe("assessmentSavings", () => {
   });
 
   it("is null rather than throwing when the comparison fails", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const error = captureLogs();
     h.recommend.mockRejectedValueOnce(new Error("catalog unavailable"));
 
     const { currentSpend, netMonthlySavingsCents } = await assessmentSavings(herokuRow, herokuRows);
 
     expect(netMonthlySavingsCents).toBeNull();
     expect(currentSpend.monthlyCents).toBe(322900);
-    expect(error).toHaveBeenCalled();
-    error.mockRestore();
+    expect(error.lines.some((l) => l.level === "error")).toBe(true);
+    error.restore();
   });
 });
 

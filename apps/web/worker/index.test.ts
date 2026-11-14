@@ -198,6 +198,14 @@ describe("lead intake", () => {
     expect(res.status).toBe(400);
   });
 
+  it("gives the API call a deadline, and answers 502 when it passes", async () => {
+    fetchMock.mockRejectedValueOnce(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+    const res = await worker.fetch(leadRequest(VALID), env() as never);
+    expect(res.status).toBe(502);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("does not swallow a network failure the way the analytics beacon does", async () => {
     fetchMock.mockRejectedValueOnce(new Error("upstream unreachable"));
     const res = await worker.fetch(leadRequest(VALID), env() as never);

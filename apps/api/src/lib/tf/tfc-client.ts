@@ -3,6 +3,7 @@
 // All TFC responses use JSON:API format ({ data: { id, type, attributes } }).
 
 import { httpFetch } from "../http.js";
+import { log } from "../log.js";
 
 const TFC_BASE = process.env.TFC_API_URL ?? "https://app.terraform.io/api/v2";
 
@@ -242,7 +243,7 @@ export class TfcClient {
   async listWorkspaces(): Promise<TfcWorkspace[]> {
     const { workspaces, truncated } = await this.listWorkspacesCapped();
     if (truncated) {
-      console.warn(`TFC workspace listing for ${this.org} stopped after ${workspaces.length} workspaces (${TFC_WORKSPACE_PAGES} pages)`);
+      log.warn({ tfcOrganization: this.org, workspaces: workspaces.length, pages: TFC_WORKSPACE_PAGES }, "TFC workspace listing truncated");
     }
     return workspaces;
   }

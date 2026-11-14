@@ -4,6 +4,7 @@ import { AppError, Conflict, InvalidInput, NotFound, Unprocessable, Upstream } f
 import { TfcClient, TfcClientError, tfcBaseUrl, type TfcRun } from "../lib/tf/tfc-client.js";
 import { TfcConnectionError, loadTfcConnectionRow } from "../lib/tf/tfc-connection.js";
 import { markInvalid } from "./connections.js";
+import { log } from "../lib/log.js";
 
 // ---------------------------------------------------------------------------
 // Terraform Cloud runs for an org's workspaces, and the VCS link that makes a
@@ -48,7 +49,7 @@ async function tfc<T>(conn: { id: string }, during: string, fn: () => Promise<T>
         try {
           await markInvalid(conn.id, `Terraform Cloud refused the credential (401) during ${during}`);
         } catch (markErr) {
-          console.error(`could not mark connection ${conn.id} invalid:`, markErr);
+          log.error({ err: markErr, connectionId: conn.id }, "could not mark connection invalid");
         }
         throw new Upstream("Terraform Cloud refused this connection's token. Replace it under Connections.", {
           connectionId: conn.id,
@@ -57,7 +58,7 @@ async function tfc<T>(conn: { id: string }, during: string, fn: () => Promise<T>
       // Not the body: it can echo request detail.
       throw new Upstream(`Terraform Cloud returned ${err.statusCode} for ${err.method} ${err.path}`);
     }
-    console.error("terraform cloud call failed:", err);
+    log.error({ err }, "terraform cloud call failed");
     throw new Upstream("could not complete the request to Terraform Cloud");
   }
 }

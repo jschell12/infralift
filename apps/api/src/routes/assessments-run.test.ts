@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { captureLogs } from "../lib/log.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { collect as collectHeroku } from "@infralift/collectors/heroku";
 
@@ -68,6 +69,7 @@ const connection = { id: "conn_1", orgId: "org_1", provider: "netlify", encrypte
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 let logged: string[];
+let logs: ReturnType<typeof captureLogs> | undefined;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -76,15 +78,15 @@ beforeEach(() => {
   h.assessmentFindFirst.mockResolvedValue(null);
   h.assessmentCreate.mockResolvedValue({ id: "asm_new" });
   h.assessmentUpdate.mockResolvedValue({});
-  logged = [];
-  vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
-    logged.push(args.map(String).join(" "));
-  });
+  logs?.restore();
+  logs = captureLogs();
+  logged = logs.raw;
   // Netlify answers 500 to everything, with a body worth not repeating.
   vi.stubGlobal("fetch", vi.fn(async () => new Response("internal upstream trace id=abc", { status: 500 })));
 });
 
 afterEach(() => {
+  logs?.restore();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });

@@ -5,6 +5,7 @@ import { scrapeDevTo } from "./scrapers/devto.js";
 import { scrapeStackExchange } from "./scrapers/stackexchange.js";
 import { scrapeLobsters } from "./scrapers/lobsters.js";
 import { classify } from "./classify.js";
+import { LlmBudget, LlmBudgetExceeded, dailyTokenCapFromEnv } from "./budget.js";
 
 export interface ScrapedPost {
   sourceId: string;
@@ -70,6 +71,7 @@ async function scrape(
 
 async function main() {
   const since = new Date(Date.now() - LOOKBACK_MS);
+  const budget = new LlmBudget(dailyTokenCapFromEnv());
   console.log(`Community scanner starting. Looking back to ${since.toISOString()}`);
 
   const communities = await prisma.communitySource.findMany({
@@ -127,7 +129,7 @@ async function main() {
       // Classify and store
       for (const post of newPosts) {
         totalClassified++;
-        const result = await classify(post.title, post.body);
+        const result = await classify(post.title, post.body, budget);
 
         if (result.classification === "irrelevant") continue;
 
@@ -166,10 +168,16 @@ async function main() {
       // Rate limiting between communities
       await new Promise((r) => setTimeout(r, 2000));
     } catch (err) {
+      if (err instanceof LlmBudgetExceeded) {
+        // Posts not yet classified are not stored, so tomorrow's run sees them again.
+        console.error(err.message);
+        break;
+      }
       console.error(`  ${community.slug} failed: ${err}`);
     }
   }
 
+  console.log(`LLM tokens used today by this run: ${await budget.usedToday()} of ${budget.dailyTokenCap}`);
   console.log(
     `\nDone. Scraped ${totalScraped} posts, classified ${totalClassified}, stored ${totalStored} leads.`
   );
