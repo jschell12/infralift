@@ -207,6 +207,14 @@ describe("the cleanup step in the import check", () => {
     expect(renderImportCheck(repo).content).not.toContain(CLEANUP_STEP_NAME);
   });
 
+  it("says in the generated commit that attributes were removed, only when the step exists", () => {
+    const withStep = renderImportCheck(adoption(["arn:aws:s3:::assets"])).content;
+    const without = renderImportCheck(adoption([`arn:aws:lambda:us-east-1:123456789012:function:resize`])).content;
+    expect(withStep).toContain("as they run, minus attributes the provider rejects in its own output");
+    expect(without).toContain("as they run. Edit freely");
+    expect(without).not.toContain("minus attributes");
+  });
+
   it("is never in the drift job, which does not generate", () => {
     const wf = parse(renderImportCheck(adoption(["arn:aws:s3:::assets"])).content);
     expect(wf.jobs.drift.steps.map((s: { name?: string }) => s.name)).not.toContain(CLEANUP_STEP_NAME);
