@@ -169,6 +169,16 @@ describe("Terraform Cloud connections re-verify through the org read", () => {
     });
   });
 
+  it("invalid, saying the token lacks access, when it answers 403", async () => {
+    statefulRow(tfc);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ errors: [{ status: "403", title: "forbidden" }] }), { status: 403 }));
+    const out = await svc.verifyConnection("org_mine", "conn_1");
+    expect(out).toMatchObject({
+      status: "invalid",
+      lastError: `Terraform Cloud accepted this token but will not let it read organization "acme" (403); check the token's permissions and any SSO or IP policy on the organization`,
+    });
+  });
+
   it("invalid, naming the organization, when it answers 404", async () => {
     statefulRow(tfc);
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ errors: [{ status: "404", title: "not found" }] }), { status: 404 }));

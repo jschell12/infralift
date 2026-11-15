@@ -91,6 +91,13 @@ async function checkTfc(secret: string): Promise<VerifyResult> {
   if (access === "token-rejected") {
     return { valid: false, reason: "Terraform Cloud rejected this token (401); it may be mistyped, expired or revoked", expiresAt: null };
   }
+  if (access === "token-forbidden") {
+    return {
+      valid: false,
+      reason: `Terraform Cloud accepted this token but will not let it read organization "${cred.organization}" (403); check the token's permissions and any SSO or IP policy on the organization`,
+      expiresAt: null,
+    };
+  }
   return {
     valid: false,
     reason: `Terraform Cloud has no organization "${cred.organization}" that this token can read (404); check the name and the token's team access`,
