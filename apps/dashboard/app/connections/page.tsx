@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { ProviderConnectionSummary } from "@infralift/shared";
 import { api, errorText } from "../../lib/api";
-import { connectionName, connectionTypeInfo, isCloudAccount, TFC } from "../../lib/connections";
+import { connectionName, connectionTypeInfo, isCloudAccount, legacyAddConnectionUrl, TFC } from "../../lib/connections";
 import { CONNECTION_GRID, ConnectionTile } from "../../components/connection-tile";
 import { ActionMenu } from "../../components/action-menu";
 import { checkingText, useConnectionChecks } from "../../lib/connection-checks";
@@ -255,6 +256,14 @@ export default function ConnectionsPage() {
     setReplaceId(replaceRequested());
     void load();
   }, [load]);
+
+  // Old links opened the add form here: /connections?provider=heroku. Adding
+  // is its own page now, so send them there with the same type.
+  const router = useRouter();
+  useEffect(() => {
+    const target = legacyAddConnectionUrl(window.location.search);
+    if (target) router.replace(target);
+  }, [router]);
 
   const checking = useConnectionChecks(connections, load);
 

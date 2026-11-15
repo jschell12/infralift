@@ -391,15 +391,17 @@ export class TfcClient {
     return out;
   }
 
-  /** True when the token can read the organization. Used to verify a connection. */
-  async canReadOrganization(): Promise<boolean> {
+  /** Whether the token can read the organization, and if not, which of the
+   *  two refusals it was. Used to verify a connection. TFC answers 401 for a
+   *  token it does not accept, and 404 for an organization the token cannot
+   *  see, which includes one that does not exist. Anything else is thrown. */
+  async organizationAccess(): Promise<"readable" | "token-rejected" | "organization-not-found"> {
     try {
       await this.request("GET", `/organizations/${encodeURIComponent(this.org)}`);
-      return true;
+      return "readable";
     } catch (err) {
-      if (err instanceof TfcClientError && (err.statusCode === 401 || err.statusCode === 404)) {
-        return false;
-      }
+      if (err instanceof TfcClientError && err.statusCode === 401) return "token-rejected";
+      if (err instanceof TfcClientError && err.statusCode === 404) return "organization-not-found";
       throw err;
     }
   }

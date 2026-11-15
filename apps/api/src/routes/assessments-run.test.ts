@@ -148,6 +148,29 @@ describe("a failed run does not send the provider's message", () => {
     );
   });
 
+  it("stores our own sentence, not the provider's, when the provider's error is not written for a customer", async () => {
+    // Cloudflare answers 200 with success: false and its own errors; the
+    // connector throws a plain Error quoting them (connectors/cloudflare.ts).
+    const envelope = JSON.parse(
+      readFileSync(new URL("../connectors/__fixtures__/cloudflare-token-verify.json", import.meta.url), "utf8")
+    ).refused as unknown;
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(envelope)));
+    h.connectionFindFirst.mockResolvedValue({ ...connection, provider: "cloudflare" });
+
+    const res = await call("/run", { body: { connectionId: "conn_1" }, user });
+
+    expect(res.status).toBe(502);
+    const stored = h.assessmentUpdate.mock.calls[0][0].data as { status: string; error: string };
+    expect(stored.status).toBe("failed");
+    expect(stored.error).toBe(
+      "The assessment could not finish. Run it again; if it fails the same way, contact support and quote assessment asm_new."
+    );
+    expect(stored.error).not.toMatch(/Invalid API Token|code|Cloudflare API/);
+    // The provider's own text is in the log, under the same assessment id.
+    const line = logged.find((l) => l.includes("Invalid API Token"));
+    expect(line).toContain('"assessmentId":"asm_new"');
+  });
+
   it("answers a failed snapshot analysis with a sentence, not the analyzer's error", async () => {
     const heroku = JSON.parse(
       readFileSync(new URL("../connectors/__fixtures__/heroku-api.json", import.meta.url), "utf8")
@@ -170,5 +193,9 @@ describe("a failed run does not send the provider's message", () => {
     expect(logged.find((l) => l.includes(String(body.requestId)))).toContain(
       "Cannot read properties of undefined"
     );
+    // Stored for the dashboard as our sentence, not the TypeError's.
+    const stored = h.assessmentUpdate.mock.calls[0][0].data as { error: string };
+    expect(stored.error).toMatch(/^The assessment could not finish\. .*quote assessment asm_new\.$/);
+    expect(stored.error).not.toContain("Cannot read properties");
   });
 });

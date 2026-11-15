@@ -238,6 +238,14 @@ export function isStale(
   return now - new Date(c.lastCheckedAt).getTime() > CHECK_STALE_MS;
 }
 
+/** The add-connection URL for an old /connections?provider=<type> link, which
+ *  opened the add form there before adding moved to /connections/new. Null
+ *  for a type the dashboard does not know, so that link shows the list. */
+export function legacyAddConnectionUrl(search: string): string | null {
+  const info = connectionTypeInfo(new URLSearchParams(search).get("provider"));
+  return info ? `/connections/new?type=${encodeURIComponent(info.type)}` : null;
+}
+
 /** Where to replace a connection's credential: /connections opens its
  *  Replace drawer from ?replace=<id>. */
 export function replaceHref(connectionId: string): string {

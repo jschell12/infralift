@@ -86,9 +86,16 @@ async function checkTfc(secret: string): Promise<VerifyResult> {
     throw err;
   }
   const client = new TfcClient(cred.token, cred.organization, tfcBaseUrl(cred.hostname));
-  return (await client.canReadOrganization())
-    ? { valid: true, reason: null, expiresAt: null }
-    : { valid: false, reason: `this token cannot read the organization ${cred.organization}`, expiresAt: null };
+  const access = await client.organizationAccess();
+  if (access === "readable") return { valid: true, reason: null, expiresAt: null };
+  if (access === "token-rejected") {
+    return { valid: false, reason: "Terraform Cloud rejected this token (401); it may be mistyped, expired or revoked", expiresAt: null };
+  }
+  return {
+    valid: false,
+    reason: `Terraform Cloud has no organization "${cred.organization}" that this token can read (404); check the name and the token's team access`,
+    expiresAt: null,
+  };
 }
 
 /** httpFetch's deadline (HttpTimeoutError), a body read past it, or an AWS
