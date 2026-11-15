@@ -6,6 +6,7 @@ import { prisma } from "../lib/db.js";
 import { encryptToken, decryptToken } from "../lib/crypto.js";
 import { isSafePath } from "../lib/import/check.js";
 import * as runs from "../services/workspace-runs.js";
+import { checkCredential } from "../services/connections.js";
 import { TfcClient, TfcClientError, tfcBaseUrl } from "../lib/tf/tfc-client.js";
 import {
   DependencyCycleError,
@@ -147,13 +148,10 @@ workspacesRouter.post("/connections", rateLimit(RATE_LIMITS.connectionVerify), h
     if (!(err instanceof UnsafeHostError)) throw err;
     throw new InvalidInput(err.message);
   }
-  const client = new TfcClient(cred.token, cred.organization, tfcBaseUrl(cred.hostname));
-  let valid = false;
-  try {
-    valid = await client.canReadOrganization();
-  } catch {
-    valid = false;
-  }
+  // The same check, and the same reason on failure, as every other connection
+  // type and as "Verify now" (services/connections.ts). A timeout says nothing
+  // about the token, so the connection is saved unverified, not invalid.
+  const outcome = await checkCredential(TFC_PROVIDER, JSON.stringify(cred));
   let conn;
   try {
     conn = await prisma.providerConnection.create({
@@ -162,9 +160,10 @@ workspacesRouter.post("/connections", rateLimit(RATE_LIMITS.connectionVerify), h
         provider: TFC_PROVIDER,
         label: parsed.data.label,
         encryptedToken: encryptToken(JSON.stringify(cred)),
-        status: valid ? "valid" : "invalid",
-        lastVerifiedAt: valid ? new Date() : null,
+        status: outcome.valid ? "valid" : outcome.timedOut ? "unverified" : "invalid",
+        lastVerifiedAt: outcome.valid ? new Date() : null,
         lastCheckedAt: new Date(),
+        lastError: outcome.reason,
       },
     });
   } catch (err) {

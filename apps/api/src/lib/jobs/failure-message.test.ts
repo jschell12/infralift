@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { jobFailureMessage } from "./failure-message.js";
+import { customerSafeMessage, jobFailureMessage } from "./failure-message.js";
 import { GitCommitError } from "../git/errors.js";
 import { HttpTimeoutError } from "../http.js";
 import { TfcClientError } from "../tf/tfc-client.js";
@@ -45,5 +45,25 @@ describe("jobFailureMessage", () => {
     expect(jobFailureMessage(err, ctx)).toBe(
       "Something went wrong at the commit step. Start the job again; if it fails the same way, contact support and quote job job_123."
     );
+  });
+});
+
+describe("customerSafeMessage", () => {
+  it("words the retry for its caller, so an assessment is not told to start a job", () => {
+    const again = "run the assessment again";
+    expect(customerSafeMessage(new TfcClientError("GET", "/x", 429, "{}"), again)).toBe(
+      "Terraform Cloud is rate limiting requests (429). Run the assessment again in a few minutes."
+    );
+    expect(customerSafeMessage(new CredentialFormatError("Unexpected token", "a service account key"), again)).toBe(
+      "The stored credential is not a service account key. Replace it under Connections, then run the assessment again."
+    );
+  });
+
+  it("is null for an error not written for a customer, so the caller supplies its own sentence", () => {
+    // connectors/cloudflare.ts throws this for a success: false envelope.
+    const cloudflare = new Error('Cloudflare API /accounts -> [{"code":1000,"message":"Invalid API Token"}]');
+    expect(customerSafeMessage(cloudflare, "x")).toBeNull();
+    expect(customerSafeMessage(new TypeError("Cannot read properties of undefined"), "x")).toBeNull();
+    expect(customerSafeMessage("boom", "x")).toBeNull();
   });
 });

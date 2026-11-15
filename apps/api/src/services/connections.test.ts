@@ -159,11 +159,24 @@ describe("Terraform Cloud connections re-verify through the org read", () => {
     expect(out).toMatchObject({ status: "valid", lastError: null });
   });
 
-  it("invalid with a reason when it answers 401", async () => {
+  it("invalid, saying the token was rejected, when it answers 401", async () => {
     statefulRow(tfc);
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ errors: [{ status: "401", title: "unauthorized" }] }), { status: 401 }));
     const out = await svc.verifyConnection("org_mine", "conn_1");
-    expect(out).toMatchObject({ status: "invalid", lastError: "this token cannot read the organization acme" });
+    expect(out).toMatchObject({
+      status: "invalid",
+      lastError: "Terraform Cloud rejected this token (401); it may be mistyped, expired or revoked",
+    });
+  });
+
+  it("invalid, naming the organization, when it answers 404", async () => {
+    statefulRow(tfc);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ errors: [{ status: "404", title: "not found" }] }), { status: 404 }));
+    const out = await svc.verifyConnection("org_mine", "conn_1");
+    expect(out).toMatchObject({
+      status: "invalid",
+      lastError: `Terraform Cloud has no organization "acme" that this token can read (404); check the name and the token's team access`,
+    });
   });
 });
 

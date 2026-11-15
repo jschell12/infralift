@@ -233,7 +233,9 @@ export function retryAfterSeconds(ms: number): number {
 }
 
 /** Route middleware: the caller's org (after cfAuth) and IP against `policy`.
- *  A refusal reaches the app's errorHandler as TooManyRequests. */
+ *  A refusal reaches the app's errorHandler as TooManyRequests.
+ *  Runs before body validation, so a malformed call counts too, on purpose: a
+ *  client looping on bad requests is slowed like any other. */
 export function rateLimit(policy: RateLimitPolicy, store?: RateLimitStore): RequestHandler {
   const limiter = new RateLimiter(policy, store);
   return (req, _res, next) => {

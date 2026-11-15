@@ -15,12 +15,15 @@ const TFC_TOKEN = "Xk3pQ9rT2vLm8w" + ".atlasv1." + "aB3dE5fG7hJ9kL1mN3pQ5rS7tV9w
 // DigitalOcean: "dop_v1_" and 64 hex characters (doo_ for OAuth, dor_ for refresh).
 const DO_TOKEN = "dop_v1_" + "4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6a";
 const DO_OAUTH = "doo_v1_" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const DO_REFRESH = "dor_v1_" + "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
 // Fly.io: older "fo1_" personal tokens, and macaroons sent as "FlyV1 fm2_...".
 const FLY_TOKEN = "fo1_" + "Zx9Yw8Vu7Ts6Rq5Po4Nm3Lk2Ji1Hg0FeDcBa98765";
 const FLY_MACAROON = "fm2_" + "lJPECAAAAAAAAPpTxBDU9pK0QzUuWWgIwFMd6QK3wrVodHRwczovL2FwaS5mbHkuaW8vdjGWAJLOAAWGBR8Lk7lwcmd";
 // Stripe: secret, restricted and webhook signing keys.
 const STRIPE_SECRET = "sk_live_" + "51Hq2xYAbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
 const STRIPE_RESTRICTED = "rk_test_" + "51Hq2xYZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210";
+const STRIPE_SECRET_TEST = "sk_test_" + "51Hq2xYQwErTyUiOpAsDfGhJkLzXcVbNm0987654321";
+const STRIPE_RESTRICTED_LIVE = "rk_live_" + "51Hq2xYMnBvCxZaSdFgHjKlPoIuYtReWq1234567890";
 const STRIPE_WEBHOOK = "whsec_" + "5f3c9a1e7b2d4f6a8c0e2b4d6f8a0c2e";
 
 let logs: ReturnType<typeof captureLogs> | undefined;
@@ -50,15 +53,21 @@ describe("secrets never reach the log", () => {
   });
 
   it("scrubs Terraform Cloud, DigitalOcean, Fly.io and Stripe tokens out of message text", () => {
-    const secrets = [TFC_TOKEN, DO_TOKEN, DO_OAUTH, FLY_TOKEN, FLY_MACAROON, STRIPE_SECRET, STRIPE_RESTRICTED, STRIPE_WEBHOOK];
+    const secrets = [
+      TFC_TOKEN, DO_TOKEN, DO_OAUTH, DO_REFRESH, FLY_TOKEN, FLY_MACAROON,
+      STRIPE_SECRET, STRIPE_SECRET_TEST, STRIPE_RESTRICTED, STRIPE_RESTRICTED_LIVE, STRIPE_WEBHOOK,
+    ];
     logs = captureLogs();
-    log.error(`TFC refused ${TFC_TOKEN}; DO ${DO_TOKEN} and ${DO_OAUTH}`);
+    log.error(`TFC refused ${TFC_TOKEN}; DO ${DO_TOKEN} and ${DO_OAUTH}, refresh ${DO_REFRESH}`);
     log.error({ detail: `Authorization: FlyV1 ${FLY_MACAROON}, legacy ${FLY_TOKEN}` }, `stripe ${STRIPE_SECRET} ${STRIPE_RESTRICTED} ${STRIPE_WEBHOOK}`);
+    log.error(`stripe test ${STRIPE_SECRET_TEST}, restricted live ${STRIPE_RESTRICTED_LIVE}`);
     const out = logs.raw.join("\n");
     for (const secret of secrets) expect(out).not.toContain(secret);
     expect(out).toContain("TFC refused [redacted]");
     // The prefixes alone, or one too short to be a token, are ordinary text.
-    for (const text of ["dop_v1_ is the prefix", "sk_live_ keys", "fo1_short", "abc.atlasv1.def", "whsec_123"]) expect(scrubSecrets(text)).toBe(text);
+    for (const text of ["dop_v1_ is the prefix", "dor_v1_ too", "sk_live_ keys", "rk_test_ keys", "fo1_short", "FlyV1 header", "abc.atlasv1.def", "whsec_123"]) {
+      expect(scrubSecrets(text)).toBe(text);
+    }
   });
 
   it("logs an error as name, message, stack and status, never its other fields", () => {

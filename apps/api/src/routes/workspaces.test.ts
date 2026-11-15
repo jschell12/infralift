@@ -365,6 +365,63 @@ describe("TFE hosts are re-checked when a stored connection is used", () => {
   });
 });
 
+describe("POST /connections stores why a Terraform Cloud connection did not verify", () => {
+  // Bodies are the JSON:API error documents HCP Terraform answers with.
+  const answer = (status: number, body: unknown) => async () =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/vnd.api+json" } });
+  const body = { label: "prod", organization: "acme", token: "t" };
+  const stored = () => db.providerConnection.create.mock.calls[0][0].data as { status: string; lastError: string | null };
+
+  beforeEach(() => {
+    db.providerConnection.create.mockImplementation(async (args: { data: Record<string, unknown> }) => ({ id: "conn_new", ...args.data }));
+  });
+
+  it("valid, with no reason, when the organization reads", async () => {
+    vi.stubGlobal("fetch", answer(200, { data: { id: "org-acme", type: "organizations", attributes: { name: "acme" } } }));
+    const res = await call(workspacesRouter, "post", "/connections", { user, body });
+    expect(res.status).toBe(201);
+    expect(stored()).toMatchObject({ status: "valid", lastError: null });
+  });
+
+  it("invalid, saying the token was rejected, on a 401", async () => {
+    vi.stubGlobal("fetch", answer(401, { errors: [{ status: "401", title: "unauthorized" }] }));
+    const res = await call(workspacesRouter, "post", "/connections", { user, body });
+    expect(res.status).toBe(201);
+    expect((res.body as { status: string }).status).toBe("invalid");
+    expect(stored().status).toBe("invalid");
+    expect(stored().lastError).toMatch(/^Terraform Cloud rejected this token \(401\)/);
+  });
+
+  it("invalid, naming the organization, on a 404", async () => {
+    vi.stubGlobal("fetch", answer(404, { errors: [{ status: "404", title: "not found" }] }));
+    await call(workspacesRouter, "post", "/connections", { user, body });
+    expect(stored().status).toBe("invalid");
+    expect(stored().lastError).toMatch(/no organization "acme" that this token can read \(404\)/);
+  });
+
+  it("invalid with the status alone on a 5xx, never the response body", async () => {
+    vi.stubGlobal("fetch", answer(503, { errors: [{ status: "503", title: "upstream trace id=abc" }] }));
+    await call(workspacesRouter, "post", "/connections", { user, body });
+    expect(stored()).toMatchObject({ status: "invalid", lastError: "Terraform Cloud answered 503" });
+  });
+
+  it("invalid, saying it could not reach the host, on a network error", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("fetch failed");
+    });
+    await call(workspacesRouter, "post", "/connections", { user, body });
+    expect(stored()).toMatchObject({ status: "invalid", lastError: "could not reach Terraform Cloud to verify this credential" });
+  });
+
+  it("unverified on a timeout, which says nothing about the token", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    });
+    await call(workspacesRouter, "post", "/connections", { user, body });
+    expect(stored()).toMatchObject({ status: "unverified", lastError: "Terraform Cloud did not answer in time; try again" });
+  });
+});
+
 describe("a TFC failure never escapes the handler", () => {
   // Express 4 does not catch a rejected async handler: an escaped throw kills
   // the API process for every tenant. Seen live on 2026-10-08.

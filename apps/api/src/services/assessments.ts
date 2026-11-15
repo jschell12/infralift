@@ -6,6 +6,7 @@ import { Conflict, NotFound } from "../lib/errors.js";
 import { buildMigrationOptions, resolveCurrentSpend } from "../lib/options.js";
 import { headlineNetSavings } from "../lib/report-extras.js";
 import { log } from "../lib/log.js";
+import { customerSafeMessage } from "../lib/jobs/failure-message.js";
 
 /** How long an assessment may sit at "running". A token assessment runs
  *  inside its HTTP request, so one still running after this belonged to a
@@ -15,6 +16,18 @@ export const ASSESSMENT_TIME_LIMIT_MS = 30 * 60 * 1000;
 
 export const ASSESSMENT_TIMED_OUT =
   "timed out: this assessment did not finish within 30 minutes, possibly because infralift restarted while it ran; run it again";
+
+/** The sentence stored as a failed assessment's `error`. Never the error's
+ *  own message, which for a connector can quote a provider's response body:
+ *  the same rule as a failed job's (lib/jobs/failure-message.ts). The caller
+ *  logs the full error under the assessment id, which this sentence quotes,
+ *  so support can find one from the other. */
+export function assessmentFailureMessage(err: unknown, assessmentId: string): string {
+  return (
+    customerSafeMessage(err, "run the assessment again") ??
+    `The assessment could not finish. Run it again; if it fails the same way, contact support and quote assessment ${assessmentId}.`
+  );
+}
 
 /** Marks assessments stuck at "running" past the limit as failed, so the
  *  dashboard stops showing a spinner for them. Conditional on the status

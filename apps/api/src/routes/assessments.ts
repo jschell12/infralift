@@ -24,6 +24,7 @@ import { buildMigrationPlan } from "../lib/migration-plan.js";
 import { InvalidInput, NotFound, Upstream, handle, parseBody } from "../lib/errors.js";
 import {
   ASSESSMENT_PAGE_SIZE,
+  assessmentFailureMessage,
   listAssessmentSummaries,
   refuseConcurrentRun,
   setReportedSpend,
@@ -145,10 +146,9 @@ assessmentsRouter.post("/run", rateLimit(RATE_LIMITS.assessmentRun), handle(asyn
 
     await persistAssessmentResult(assessment.id, result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
     await prisma.assessment.update({
       where: { id: assessment.id },
-      data: { status: "failed", completedAt: new Date(), error: message },
+      data: { status: "failed", completedAt: new Date(), error: assessmentFailureMessage(err, assessment.id) },
     });
     // A 401/403 means the stored credential no longer works; say so on the
     // connection, where the customer can replace it. A 5xx does not.
@@ -205,10 +205,9 @@ assessmentsRouter.post("/from-bundle", handle(async (req, res) => {
     const result = analyzeBundle(parsedBundle);
     await persistAssessmentResult(assessment.id, result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
     await prisma.assessment.update({
       where: { id: assessment.id },
-      data: { status: "failed", completedAt: new Date(), error: message },
+      data: { status: "failed", completedAt: new Date(), error: assessmentFailureMessage(err, assessment.id) },
     });
     // Sent by hand on purpose: a failed bundle assessment is our fault (500),
     // and the body carries the assessment id the dashboard links to. The

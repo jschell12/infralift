@@ -9,6 +9,7 @@ import {
   createConnection,
   isCloudAccount,
   isStale,
+  legacyAddConnectionUrl,
   replaceHref,
 } from "./connections";
 
@@ -170,5 +171,33 @@ describe("isStale", () => {
 describe("replaceHref", () => {
   it("points at the Connections page's Replace drawer for that connection", () => {
     expect(replaceHref("fb conn/1")).toBe("/connections?replace=fb%20conn%2F1");
+  });
+});
+
+describe("legacyAddConnectionUrl", () => {
+  // The links that used to open the add form on /connections, as the
+  // dashboard wrote them before ADR 0010 (git show f347c7a^).
+  it.each([
+    ["?provider=heroku", "/connections/new?type=heroku"],
+    ["?provider=github", "/connections/new?type=github"],
+    ["?provider=gitlab", "/connections/new?type=gitlab"],
+    ["?provider=aws&label=x", "/connections/new?type=aws"],
+    ["?provider=tfc", "/connections/new?type=tfc"],
+  ])("sends %s to the add page for that type", (search, url) => {
+    expect(legacyAddConnectionUrl(search)).toBe(url);
+  });
+
+  it.each([
+    ["an unknown provider", "?provider=nimbus"],
+    ["an empty provider", "?provider="],
+    ["no provider", ""],
+    ["a replace link", "?replace=conn_1"],
+    ["a provider in the wrong case", "?provider=Heroku"],
+  ])("leaves %s on the list", (_what, search) => {
+    expect(legacyAddConnectionUrl(search)).toBeNull();
+  });
+
+  it("covers every type the picker offers", () => {
+    for (const t of CONNECTION_TYPES) expect(legacyAddConnectionUrl(`?provider=${t.type}`)).toBe(`/connections/new?type=${t.type}`);
   });
 });
