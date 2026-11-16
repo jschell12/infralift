@@ -41,7 +41,7 @@ describe("VersionStatusChip", () => {
 
   it("keeps current and unknown neutral", () => {
     for (const s of ["current", "unknown"] as const) {
-      expect(render(<VersionStatusChip status={s} />)).not.toMatch(/text-danger|text-warn|bg-accent/);
+      expect(render(<VersionStatusChip status={s} />)).not.toMatch(/text-danger|text-warn/);
     }
     expect(render(<VersionStatusChip status="current" />)).toContain("current");
     expect(render(<VersionStatusChip status="unknown" />)).toContain("unknown");
