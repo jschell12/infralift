@@ -201,8 +201,19 @@ export async function checkProjectVersions(project: ReadableProject, now = new D
     const branch = ref ?? (await client.defaultBranch(project.destRepo));
     await record(await readRepoVersions(client, project.destRepo, branch, root));
   } catch (err) {
-    if (!(err instanceof GitCommitError)) throw err;
-    if (err.rateLimited) return true;
+    // Past the claim, every failure is recorded: a timeout or network error
+    // that escaped would leave a never-read project marked read with nothing
+    // stored for a whole interval, and turn Check now into a 500.
+    if (!(err instanceof GitCommitError)) {
+      log.error({ err: err instanceof Error ? err.message : String(err), projectId: project.id }, "version read failed");
+      await problem(`${hostName} could not be read just now. infralift tries again on its next check.`);
+      return true;
+    }
+    if (err.rateLimited) {
+      // Keep the last facts; a project with none says why it has none.
+      if (project.versionCheckedAt === null) await problem(`${hostName} asked infralift to slow down. It tries again on its next check.`);
+      return true;
+    }
     if (await markInvalidOnAuthFailure(conn, err, "git", "the version check")) {
       await problem(`${hostName} refused the connection; reconnect it under Connections to read versions.`);
       return true;

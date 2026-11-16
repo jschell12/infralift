@@ -154,9 +154,22 @@ describe("checkProjectVersions", () => {
 
   it("backs off on a rate-limited 403 without marking the connection or overwriting the last facts", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => json({ message: "API rate limit exceeded" }, 403, { "x-ratelimit-remaining": "0" })));
-    expect(await svc.checkProjectVersions({ ...PROJECT }, NOW)).toBe(true);
+    const readBefore = new Date("2026-11-15T09:00:00Z");
+    expect(await svc.checkProjectVersions({ ...PROJECT, versionCheckedAt: readBefore }, NOW)).toBe(true);
     expect(writes()).toHaveLength(1); // the claim only
     expect(connUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("records a timeout or network failure as a problem instead of throwing past the claim", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("fetch failed"); }));
+    expect(await svc.checkProjectVersions({ ...PROJECT }, NOW)).toBe(true);
+    expect(writes()[1]!.data.versionFacts).toMatchObject({ ok: false, problem: "GitHub could not be read just now. infralift tries again on its next check." });
+  });
+
+  it("says why a never-read project has no facts after a rate limit", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ message: "API rate limit exceeded" }, 403, { "x-ratelimit-remaining": "0" })));
+    await svc.checkProjectVersions({ ...PROJECT, versionCheckedAt: null }, NOW);
+    expect(writes()[1]!.data.versionFacts).toMatchObject({ ok: false, problem: expect.stringContaining("slow down") });
   });
 
   it("marks the connection invalid on a 401 and records the problem in words", async () => {

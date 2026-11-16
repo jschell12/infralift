@@ -110,7 +110,9 @@ export function VersionCard({
         </ul>
       ) : (
         <p className="text-sm text-muted">
-          {v.checkedAt ? "No Terraform version or provider pins found." : "Not read yet. infralift reads each repository once a day."}
+          {v.checkedAt && v.terraform
+            ? "No Terraform version or provider pins found."
+            : "Not read yet. infralift reads each repository once a day."}
         </p>
       )}
       {v.notes.length ? <p className="text-sm text-muted mt-2 break-words">{v.notes.join(" ")}</p> : null}
