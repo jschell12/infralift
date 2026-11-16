@@ -9,6 +9,8 @@ import { listProjects } from "../services/projects.js";
 import { createStackProject, listStackSummaries, previewStack, updateStackSettings } from "../services/stacks.js";
 import { createTemplateProject, listRenderings, listTemplates, previewTemplate, publishTemplate } from "../services/templates.js";
 import { getJob, listJobs, queueProjectJob } from "../services/jobs.js";
+import { checkProjectVersionsNow, getProjectVersions, listProjectVersions, VERSION_PAGE_SIZE, versionBaseline } from "../services/versions.js";
+import { intQuery } from "../lib/query.js";
 import {
   approveMigration,
   generateFromAssessment,
@@ -54,6 +56,41 @@ tfRouter.get("/tfc-status", requireAdmin, async (_req, res) => {
     });
   }
 });
+
+// -- versions (services/versions.ts, ADR 0012) --------------------------------
+
+// The version baseline infralift writes (lib/tf/baseline.ts), so the
+// dashboard can default a new project's pin to it instead of its own copy.
+tfRouter.get("/baseline", (_req, res) => {
+  res.json(versionBaseline());
+});
+
+// The org's projects with how far each is behind, by name, one page at a
+// time: GET /tf/versions?cursor=<nextCursor>.
+tfRouter.get(
+  "/versions",
+  handle(async (req, res) => {
+    const limit = intQuery(req.query.limit, { name: "limit", fallback: VERSION_PAGE_SIZE, min: 1, max: VERSION_PAGE_SIZE });
+    const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : undefined;
+    res.json(await listProjectVersions(req.user!.orgId, { limit, cursor }));
+  })
+);
+
+tfRouter.get(
+  "/projects/:id/versions",
+  handle(async (req, res) => {
+    res.json(await getProjectVersions(req.user!.orgId, req.params.id));
+  })
+);
+
+// Reads the project's repository now. Rate limited per org inside the
+// service, after the project is found, so a typo does not spend the budget.
+tfRouter.post(
+  "/projects/:id/versions/check",
+  handle(async (req, res) => {
+    res.json(await checkProjectVersionsNow(req.user!.orgId, req.params.id));
+  })
+);
 
 // -- templates (services/templates.ts) ---------------------------------------
 

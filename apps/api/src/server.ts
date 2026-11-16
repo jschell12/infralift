@@ -3,6 +3,7 @@ import { startAnalyticsRollup } from "./analytics/rollup.js";
 import { drainJobs, startJobWorker } from "./lib/jobs/queue.js";
 import { startConnectionCheckSweep } from "./services/connection-checks.js";
 import { startDriftSweep } from "./services/drift.js";
+import { startVersionSweep } from "./services/versions.js";
 import { resolveRuntimeEndpointsAtBoot } from "./lib/endpoints.js";
 import { log } from "./lib/log.js";
 
@@ -23,6 +24,7 @@ const server = app.listen(port, () => {
   void startJobWorker().catch((err) => log.error({ err }, "job worker failed to start"));
   startDriftSweep();
   startConnectionCheckSweep();
+  startVersionSweep();
 });
 
 let shuttingDown = false;

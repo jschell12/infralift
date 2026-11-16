@@ -52,6 +52,8 @@ export interface ProjectVersions {
   path: string | null;
   /** Why the last read failed, in words; null when it worked. */
   problem: string | null;
+  /** What a read that worked skipped or could not parse. */
+  notes: string[];
 }
 
 export interface VersionsPage {
