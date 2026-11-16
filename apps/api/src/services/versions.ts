@@ -184,10 +184,13 @@ export async function checkProjectVersions(project: ReadableProject, now = new D
   const problem = (message: string) => record({ ok: false, ref, path: root ?? "", problem: message });
   // Read again rather than taken from `project`, which was selected before
   // the claim. Facts stored before readAt existed were read at the previous
-  // claim, so that time stands in for it.
-  const keepLastFacts = async (message: string) => {
+  // claim, so that time stands in for it. A rate limit leaves a stored
+  // problem alone, as it did before readings were kept: "reconnect it" or
+  // "was not found" is still the thing to act on.
+  const keepLastFacts = async (message: string, opts: { replaceStoredProblem: boolean } = { replaceStoredProblem: true }) => {
     const current = await prisma.tfProject.findFirst({ where: { id: project.id, orgId: project.orgId }, select: { versionFacts: true } });
     const last = current && isFacts(current.versionFacts) ? (current.versionFacts as unknown as StoredVersionFacts) : null;
+    if (last && !last.ok && !opts.replaceStoredProblem) return;
     if (!last?.ok) return problem(message);
     await record({
       ...last,
@@ -229,7 +232,7 @@ export async function checkProjectVersions(project: ReadableProject, now = new D
       return true;
     }
     if (err.rateLimited) {
-      await keepLastFacts(`${hostName} asked infralift to slow down. It tries again on its next check.`);
+      await keepLastFacts(`${hostName} asked infralift to slow down. It tries again on its next check.`, { replaceStoredProblem: false });
       return true;
     }
     if (await markInvalidOnAuthFailure(conn, err, "git", "the version check")) {

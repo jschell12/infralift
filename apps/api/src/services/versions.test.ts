@@ -227,6 +227,14 @@ describe("checkProjectVersions", () => {
       expect(writes()[1]!.data.versionFacts).toEqual({ ok: false, ref: "main", path: "infra", problem: "GitHub could not be read just now (502). infralift tries again on its next check." });
     });
 
+    it("leaves a stored problem alone on a rate limit, so its advice stays on screen", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => json({ message: "API rate limit exceeded" }, 403, { "x-ratelimit-remaining": "0" })));
+      projectFindFirst.mockResolvedValueOnce({ versionFacts: { ok: false, ref: "main", path: "infra", problem: "acme/web@main was not found. Check the repository and branch in the project's settings." } });
+      await svc.checkProjectVersions({ ...PROJECT, versionCheckedAt: readBefore }, NOW);
+      expect(writes()).toHaveLength(1); // the claim only
+      expect(connUpdateMany).not.toHaveBeenCalled();
+    });
+
     it("dates facts stored before readAt existed by the claim they were read at", async () => {
       vi.stubGlobal("fetch", badGateway);
       projectFindFirst.mockResolvedValueOnce({ versionFacts: { ...FACTS } });
