@@ -5,7 +5,7 @@
 # what the Resource Groups Tagging API returns.
 #
 # This provider only stands in for the person who built them, so its version
-# is not adoption's (adoption pins ~> 6.73.0 in lib/tf/codegen.ts). It stays on
+# is not adoption's (adoption takes its pin from lib/tf/baseline.ts). It stays on
 # 5.x because 6.x sends a bucket's tags inside CreateBucket, which moto 5.2.5
 # drops (measured 2026-11-14): the bucket would be untagged, and the Tagging
 # API, which is how the connector finds it, would not list it.

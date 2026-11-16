@@ -9,7 +9,9 @@ import {
   type ImportedProject,
   type MigrationSummary,
   type Project,
+  type ProjectVersions,
   type StackProject,
+  type VersionsPage,
 } from "@infralift/shared";
 import { api, errorText, siteUrl } from "../../lib/api";
 import {
@@ -24,6 +26,7 @@ import {
 import { legacyNewProjectUrl } from "../../lib/new-project";
 import { ImportCheckStatus } from "../../components/import-panel";
 import { MigrationCard } from "../../components/migration-card";
+import { VersionSummary } from "../../components/version-table";
 import { BackendPicker, SettingsFields } from "../../components/stack-settings";
 import {
   CARD,
@@ -177,6 +180,9 @@ export default function ProjectsPage() {
   const [jobs, setJobs] = useState<Record<string, Job[]>>({});
   const [migrations, setMigrations] = useState<MigrationSummary[]>([]);
   const [editing, setEditing] = useState<StackProject | null>(null);
+  // Version lag per project id (GET /tf/versions). Optional: a page whose
+  // versions fail to load still lists its projects.
+  const [versions, setVersions] = useState<Record<string, ProjectVersions>>({});
   const [error, setError] = useState<string | null>(null);
   // False until the first load answers, so "No projects yet" is never shown
   // to a customer whose projects are still on their way.
@@ -198,6 +204,9 @@ export default function ProjectsPage() {
     );
     setJobs(Object.fromEntries(entries));
     setLoaded(true);
+    api<VersionsPage>("/tf/versions")
+      .then((v) => setVersions(Object.fromEntries(v.projects.map((x) => [x.projectId, x]))))
+      .catch(() => {});
   }, []);
 
   const firstLoad = useCallback(() => {
@@ -238,7 +247,12 @@ export default function ProjectsPage() {
             repository. Every change arrives as a pull request you review and merge.
           </p>
         </div>
-        <PrimaryButton href="/projects/new">New project</PrimaryButton>
+        <div className="flex flex-wrap items-center gap-2">
+          <a className={SMALL_BTN} href="/projects/versions">
+            Versions
+          </a>
+          <PrimaryButton href="/projects/new">New project</PrimaryButton>
+        </div>
       </div>
 
       {error && (
@@ -326,6 +340,7 @@ export default function ProjectsPage() {
                 {p.destPath && ` · ${p.destPath}`}
               </div>
               <DriftBadge drift={p.drift} />
+              <VersionSummary v={versions[p.id]} />
               {/* Once the pull request exists, the check is what matters; the
                   job row stays only while it is running or if it failed. */}
               {latest && (!pr || latest.status !== "success") && (
@@ -384,6 +399,7 @@ export default function ProjectsPage() {
               {siteUrl(p.providerConfig) && ` · ${siteUrl(p.providerConfig)}`}
             </div>
             <DriftBadge drift={p.drift} />
+              <VersionSummary v={versions[p.id]} />
             {latest ? (
               <div className="flex items-center gap-2 text-sm">
                 <Chip tone={STATUS_TONE[latest.status] ?? "muted"}>

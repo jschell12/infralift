@@ -472,6 +472,14 @@ model TfProject {
   driftCheckUrl     String?
   driftRanAt        DateTime?
   driftCheckedAt    DateTime?
+  // Version lag (ADR 0012): what the repository's root module pins (lock
+  // file providers, required_providers, required_version), read by
+  // services/versions.ts at most once per interval, or a problem in words
+  // (lib/tf/versions.ts StoredVersionFacts). Classified against the baseline
+  // when read, so the stored facts never go stale when a pin moves. CheckedAt
+  // is also the sweep's claim. See migration 0032.
+  versionFacts      Json?
+  versionCheckedAt  DateTime?
   // Where destRepo lives (github | gitlab), and which of the org's
   // connections to use there. Null connection = the org's first one.
   gitHost           String   @default("github")
@@ -508,6 +516,7 @@ model TfProject {
   @@unique([orgId, name])
   @@index([assessmentId])
   @@index([providerConnectionId])
+  @@index([versionCheckedAt])
 }
 
 // The ledger of cloud resources infralift's projects manage, one row per

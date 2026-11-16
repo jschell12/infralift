@@ -227,7 +227,10 @@ function githubClient(token: string, apiBase: string): GitHostClient {
 
     async listFiles({ repo, ref }) {
       const res = await gh("GET", `/repos/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
-      if (!res.ok) throw new GitCommitError(`GitHub tree listing failed (${res.status}) for ${repo}@${ref}`);
+      // githubError, not a bare GitCommitError: the version sweep lists trees
+      // unattended, and a rate-limited 403 must read as a back-off rather
+      // than a refused credential (services/versions.ts).
+      if (!res.ok) throw await githubError(res, `GitHub tree listing failed (${res.status}) for ${repo}@${ref}`);
       const body = (await res.json()) as { tree: { path: string; type: string }[]; truncated: boolean };
       return { paths: body.tree.filter((t) => t.type === "blob").map((t) => t.path), truncated: body.truncated };
     },
@@ -268,7 +271,7 @@ function githubClient(token: string, apiBase: string): GitHostClient {
         gitTimeout
       );
       if (res.status === 404) return null;
-      if (!res.ok) throw new GitCommitError(`GitHub file read failed (${res.status}) for ${repo}/${path}`);
+      if (!res.ok) throw await githubError(res, `GitHub file read failed (${res.status}) for ${repo}/${path}`);
       return readCapped(res, path, maxBytes);
     },
 

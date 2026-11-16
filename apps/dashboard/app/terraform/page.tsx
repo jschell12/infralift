@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Project, TemplateProject } from "@infralift/shared";
+import type { Project, TemplateProject, VersionBaseline } from "@infralift/shared";
 import { api, errorText } from "../../lib/api";
 import { Drawer, SMALL_BTN } from "../../components/ui";
 
@@ -165,6 +165,10 @@ export default function TerraformPage() {
   const [pDestPath, setPDestPath] = useState("terraform");
   const [pDestBranch, setPDestBranch] = useState("main");
   const [pRegion, setPRegion] = useState("us-east-1");
+  // The AWS pin a new project starts with, from the API's version baseline
+  // (lib/tf/baseline.ts) rather than a copy here that drifts. Null until it
+  // loads; the form will not create a project without it.
+  const [awsPin, setAwsPin] = useState<string | null>(null);
 
   // Run-job form
   const [argValues, setArgValues] = useState<ArgValues>({});
@@ -172,6 +176,11 @@ export default function TerraformPage() {
 
   const loadTemplates = useCallback(async () => {
     setTemplates(await api<TfTemplate[]>("/tf/templates"));
+  }, []);
+
+  const loadBaseline = useCallback(async () => {
+    const baseline = await api<VersionBaseline>("/tf/baseline");
+    setAwsPin(baseline.providers["hashicorp/aws"] ?? null);
   }, []);
 
   const loadProjects = useCallback(async () => {
@@ -186,10 +195,10 @@ export default function TerraformPage() {
   }, []);
 
   useEffect(() => {
-    Promise.all([loadTemplates(), loadProjects()]).catch((e) =>
+    Promise.all([loadTemplates(), loadProjects(), loadBaseline()]).catch((e) =>
       setError(errorText(e))
     );
-  }, [loadTemplates, loadProjects]);
+  }, [loadTemplates, loadProjects, loadBaseline]);
 
   useEffect(() => {
     loadJobs(selectedProjectId).catch(() => {});
@@ -223,6 +232,7 @@ export default function TerraformPage() {
 
   async function createProject(e: React.FormEvent) {
     e.preventDefault();
+    if (!awsPin) return;
     setBusy(true);
     setFormError(null);
     try {
@@ -238,7 +248,7 @@ export default function TerraformPage() {
           providerConfig: {
             name: "aws",
             source: "hashicorp/aws",
-            version: "~> 5.0",
+            version: awsPin,
             region: pRegion,
           },
         }),
@@ -530,7 +540,7 @@ export default function TerraformPage() {
             />
             <button
               className="inline-block mt-4 px-7 py-3 rounded-lg text-base font-semibold cursor-pointer border border-transparent bg-accent text-on-accent hover:brightness-95 active:brightness-90 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={busy}
+              disabled={busy || !awsPin}
             >
               {busy ? "Creating..." : "Create project"}
             </button>

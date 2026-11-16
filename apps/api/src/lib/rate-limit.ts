@@ -162,6 +162,13 @@ export const RATE_LIMITS = {
     perOrg: { max: 6, windowMs: 10 * MINUTE },
     message: "Connections were checked a moment ago. They are checked again on their own every day.",
   },
+  /** POST /tf/projects/:id/versions/check (services/versions.ts): reads a
+   *  project's Terraform files from its repository on the git host. */
+  versionCheck: {
+    name: "version-check",
+    perOrg: { max: 10, windowMs: 10 * MINUTE },
+    message: "Versions were checked a moment ago. They are checked again on their own every day.",
+  },
   /** Codegen previews and jobs (services/codegen.ts): CPU-bound renders. */
   codegen: {
     name: "codegen",
