@@ -98,6 +98,9 @@ const writes = () => projectUpdateMany.mock.calls.map((c) => c[0] as { where: Re
 beforeEach(async () => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  // clearAllMocks keeps queued once-values; a test that fails before using
+  // its stored facts must not hand them to the next test.
+  projectFindFirst.mockReset();
   projectUpdateMany.mockResolvedValue({ count: 1 });
   connFindFirst.mockResolvedValue({ ...CONN });
   stackVersionFindMany.mockResolvedValue([]);
