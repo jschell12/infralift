@@ -91,6 +91,7 @@ export function toProjectView(row: ProjectRow): Project {
         ...common,
         kind: "stack",
         stackSlug: need(row.stackSlug, "stack slug"),
+        stackRelease: row.stackRelease,
         providerConfig: settings(row.providerConfig),
         drift: driftOf(row),
       };

@@ -1,6 +1,7 @@
 {
   "slug": "postgres-with-backups",
   "name": "PostgreSQL with backups (AWS)",
+  "version": "1.0.0",
   "description": "RDS PostgreSQL in private subnets: encrypted, deletion protection on, automated backups with retention, TLS required, reachable only from one CIDR or security group, password kept by RDS in Secrets Manager. Plus an encrypted S3 bucket with lifecycle rules for exported snapshots. Estimated cost at the defaults: about $16/month (db.t4g.micro, us-east-1 list prices, 2026-11-14).",
   "target": {
     "slug": "aws",

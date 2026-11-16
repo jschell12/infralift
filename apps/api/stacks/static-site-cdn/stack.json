@@ -1,6 +1,7 @@
 {
   "slug": "static-site-cdn",
   "name": "Static site behind a CDN (AWS)",
+  "version": "1.0.0",
   "description": "A private S3 bucket served by CloudFront on your domain: origin access control, an ACM certificate validated in your Route 53 zone, HTTPS only, DNS alias records, and index.html for directory paths. Estimated cost for a small site: under $1/month within CloudFront's free tier (list prices, 2026-11-14).",
   "target": {
     "slug": "aws",

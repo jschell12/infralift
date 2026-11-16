@@ -29,6 +29,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { listStacks, renderStack, type StackManifest } from "../src/lib/stacks/index.js";
 import type { TfArguments } from "../src/lib/tf/render.js";
+import { providerVersion } from "../src/lib/tf/baseline.js";
 
 const endpoint = process.env.MOTO_ENDPOINT;
 if (!endpoint) {
@@ -169,7 +170,7 @@ try {
       mkdirSync(zoneDir, { recursive: true });
       writeFileSync(
         join(zoneDir, "main.tf"),
-        `terraform {\n  required_providers {\n    aws = { source = "hashicorp/aws", version = "~> 6.73.0" }\n  }\n}\n` +
+        `terraform {\n  required_providers {\n    aws = { source = "hashicorp/aws", version = "${providerVersion("hashicorp/aws")}" }\n  }\n}\n` +
           `provider "aws" {\n  region = "us-east-1"\n}\nresource "aws_route53_zone" "site" {\n  name = "${zone}"\n}\n`
       );
       writeFileSync(join(zoneDir, "moto_override.tf"), providerOverride());

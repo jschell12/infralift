@@ -451,6 +451,10 @@ model TfProject {
   migrationTarget   String?
   // Set for stack projects: the directory under apps/api/stacks.
   stackSlug         String?
+  // The catalog stack release (stack.json `version`) the project was created
+  // from (ADR 0012). Null = unknown: projects made before migration 0031, and
+  // team-stack projects, which pin stackVersionId instead.
+  stackRelease      String?
   // Set for projects made from a team stack (ADR 0009): the version, pinned
   // to one commit, they render from. Null for catalog stacks, which keep
   // stackSlug. See migration 0026.

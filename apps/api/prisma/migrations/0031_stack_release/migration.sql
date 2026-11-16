@@ -1,0 +1,13 @@
+-- A project made from a catalog stack records the stack release it was
+-- created from (ADR 0012), beside stackSlug. createStackProject sets it from
+-- the stack's stack.json `version`.
+--
+-- Add-column only. Existing rows stay null, which means unknown: they were
+-- created before catalog stacks had releases, and nothing stored says which
+-- files they rendered. Filling in 1.0.0 for them would claim a starting point
+-- that an upgrade could later be planned from. Team-stack projects also stay
+-- null; they pin a commit through stackVersionId instead (ADR 0009).
+--
+-- Reverse, if this has to be undone:
+--   ALTER TABLE "TfProject" DROP COLUMN "stackRelease";
+ALTER TABLE "TfProject" ADD COLUMN "stackRelease" TEXT;

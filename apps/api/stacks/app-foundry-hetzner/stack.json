@@ -1,6 +1,7 @@
 {
   "slug": "app-foundry-hetzner",
   "name": "app-foundry on Hetzner",
+  "version": "1.0.0",
   "description": "The app-foundry template on one Hetzner server behind a Cloudflare tunnel: production, a preview per pull request, nightly backups that are restored to prove them, and SSH only through Cloudflare Access. OpenTofu with encrypted R2 state, or Terraform Cloud.",
   "template": {
     "slug": "app-foundry",

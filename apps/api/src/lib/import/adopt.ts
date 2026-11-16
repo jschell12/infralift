@@ -1,5 +1,6 @@
 import type { Provider, ResourceInventoryItem } from "@infralift/shared";
 import { providerSource } from "../tf/codegen.js";
+import { REQUIRED_VERSION } from "../tf/baseline.js";
 import { PROVIDER_ENV, type RootModule } from "./scan.js";
 import { adopterFor, isSkip, providerBlocks, providerSettings, regionAlias, type AdoptTarget, type ProviderSettings } from "./adopters/index.js";
 import { attr, blank, block, comment, expr, file as hcl } from "../hcl/write.js";
@@ -166,7 +167,7 @@ export function renderAdoption(opts: {
         comment("Managed by infralift."),
         block("terraform", [], [
           // use_lockfile (S3-native state locking) arrived in 1.10 of both.
-          attr("required_version", ">= 1.10"),
+          attr("required_version", REQUIRED_VERSION.s3Lockfile),
           block("required_providers", [], [attr(src.name, { source: src.source, version: src.version })]),
           block("backend", ["s3"], backendBody),
         ]),
