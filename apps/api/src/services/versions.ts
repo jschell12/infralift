@@ -43,9 +43,14 @@ import { markInvalidOnAuthFailure } from "./connections.js";
 //   claim     a conditional UPDATE on versionCheckedAt, as the drift sweep
 //             claims, so a sweep and a click never read one project twice
 //
-// A GitHub rate limit is a back-off: the claim already moved
-// versionCheckedAt, so the last facts stay and the next try is an interval
-// away. A 401 or 403 marks the connection invalid, as a job would.
+// A failure that says nothing about the repository (a GitHub rate limit, a
+// timeout or network error, a 5xx) keeps the last good facts, as the drift
+// sweep keeps its last state, and records the failure and its time beside
+// them (lastFailure). The claim already moved versionCheckedAt, so the next
+// try is an interval away. A project with no good facts yet records the
+// problem instead, and stays unknown. A 401 or 403 that is not a rate limit
+// marks the connection invalid, as a job would; that and a 404 replace the
+// facts, since the repository as read is no longer reachable.
 // ---------------------------------------------------------------------------
 
 export const VERSION_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -177,6 +182,22 @@ export async function checkProjectVersions(project: ReadableProject, now = new D
     });
   };
   const problem = (message: string) => record({ ok: false, ref, path: root ?? "", problem: message });
+  // Read again rather than taken from `project`, which was selected before
+  // the claim. Facts stored before readAt existed were read at the previous
+  // claim, so that time stands in for it. A rate limit leaves a stored
+  // problem alone, as it did before readings were kept: "reconnect it" or
+  // "was not found" is still the thing to act on.
+  const keepLastFacts = async (message: string, opts: { replaceStoredProblem: boolean } = { replaceStoredProblem: true }) => {
+    const current = await prisma.tfProject.findFirst({ where: { id: project.id, orgId: project.orgId }, select: { versionFacts: true } });
+    const last = current && isFacts(current.versionFacts) ? (current.versionFacts as unknown as StoredVersionFacts) : null;
+    if (last && !last.ok && !opts.replaceStoredProblem) return;
+    if (!last?.ok) return problem(message);
+    await record({
+      ...last,
+      readAt: last.readAt ?? project.versionCheckedAt?.toISOString(),
+      lastFailure: { problem: message, at: now.toISOString() },
+    });
+  };
   const hostName = project.gitHost === "gitlab" ? "GitLab" : "GitHub";
 
   if (root === null) {
@@ -199,31 +220,35 @@ export async function checkProjectVersions(project: ReadableProject, now = new D
   try {
     const client = clientFor(conn.provider, decryptToken(conn.encryptedToken));
     const branch = ref ?? (await client.defaultBranch(project.destRepo));
-    await record(await readRepoVersions(client, project.destRepo, branch, root));
+    const facts = await readRepoVersions(client, project.destRepo, branch, root);
+    await record({ ...facts, readAt: now.toISOString() });
   } catch (err) {
     // Past the claim, every failure is recorded: a timeout or network error
     // that escaped would leave a never-read project marked read with nothing
     // stored for a whole interval, and turn Check now into a 500.
     if (!(err instanceof GitCommitError)) {
       log.error({ err: err instanceof Error ? err.message : String(err), projectId: project.id }, "version read failed");
-      await problem(`${hostName} could not be read just now. infralift tries again on its next check.`);
+      await keepLastFacts(`${hostName} could not be read just now. infralift tries again on its next check.`);
       return true;
     }
     if (err.rateLimited) {
-      // Keep the last facts; a project with none says why it has none.
-      if (project.versionCheckedAt === null) await problem(`${hostName} asked infralift to slow down. It tries again on its next check.`);
+      await keepLastFacts(`${hostName} asked infralift to slow down. It tries again on its next check.`, { replaceStoredProblem: false });
       return true;
     }
     if (await markInvalidOnAuthFailure(conn, err, "git", "the version check")) {
       await problem(`${hostName} refused the connection; reconnect it under Connections to read versions.`);
       return true;
     }
-    // GitHub down, a 404 on the branch: keep the message to the status.
-    await problem(
-      err.hostStatus === 404
-        ? `${project.destRepo}@${ref ?? "default branch"} was not found. Check the repository and branch in the project's settings.`
-        : `${hostName} could not be read just now${err.hostStatus ? ` (${err.hostStatus})` : ""}. infralift tries again on its next check.`
-    );
+    if (err.hostStatus === 404) {
+      await problem(`${project.destRepo}@${ref ?? "default branch"} was not found. Check the repository and branch in the project's settings.`);
+      return true;
+    }
+    // Keep the message to the status, never the host's body.
+    const message = `${hostName} could not be read just now${err.hostStatus ? ` (${err.hostStatus})` : ""}. infralift tries again on its next check.`;
+    // GitHub down, or no status at all: passing. Any other 4xx is an answer
+    // about this repository, so it replaces the facts.
+    if (err.hostStatus === null || err.hostStatus >= 500) await keepLastFacts(message);
+    else await problem(message);
   }
   return true;
 }
@@ -310,7 +335,18 @@ function stackItem(row: ListRow, newestBySource: Map<string, NewestVersion>): Ve
     return { name: "stack release", have: manifestVersion(pinned.manifest), want: null, status: "unknown", note: "Not compared: the stack belongs to another organization." };
   }
   const newest = newestBySource.get(pinned.stackSourceId);
-  if (!newest || newest.id === pinned.id) {
+  // No valid version at all (the pinned one was later marked invalid, say):
+  // nothing to compare with, so unknown, never current.
+  if (!newest) {
+    return {
+      name: "stack release",
+      have: manifestVersion(pinned.manifest),
+      want: null,
+      status: "unknown",
+      note: "Not compared: this stack has no valid version to compare with.",
+    };
+  }
+  if (newest.id === pinned.id) {
     return { name: "stack release", have: manifestVersion(pinned.manifest), want: manifestVersion(pinned.manifest), status: "current", note: null };
   }
   return classifyRelease(
@@ -342,10 +378,13 @@ function toProjectVersions(row: ListRow, newestBySource: Map<string, NewestVersi
     stack,
     terraform,
     providers,
-    checkedAt: row.versionCheckedAt?.toISOString() ?? null,
+    // The facts' own read time when they have one: after a passing failure
+    // versionCheckedAt is the failed try, not the read these rows came from.
+    checkedAt: facts?.readAt ?? row.versionCheckedAt?.toISOString() ?? null,
     ref: stored?.ref ?? null,
     path: stored?.path ?? null,
     problem,
+    lastFailure: facts?.lastFailure ?? null,
     notes: facts?.notes ?? [],
   };
 }

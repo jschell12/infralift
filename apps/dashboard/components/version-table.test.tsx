@@ -28,6 +28,7 @@ const base: ProjectVersions = {
   ref: "main",
   path: "infra/network-baseline",
   problem: null,
+  lastFailure: null,
   notes: [],
 };
 
@@ -109,6 +110,23 @@ describe("VersionCard", () => {
     );
     expect(html).toContain("GitHub refused the connection");
     expect(html).toMatch(/role="alert"[^>]*>Versions were checked a moment ago\./);
+  });
+
+  it("keeps the last readings after a passing failure and says when the newer check failed", () => {
+    const html = render(
+      <VersionCard
+        v={{
+          ...base,
+          lastFailure: { problem: "GitHub could not be read just now (502). infralift tries again on its next check.", at: "2026-11-16T12:00:00.000Z" },
+          checkedAt: "2026-11-15T09:00:00.000Z",
+        }}
+      />
+    );
+    expect(html).toContain("did not finish: GitHub could not be read just now (502).");
+    expect(html).toContain(`The check at ${new Date("2026-11-16T12:00:00.000Z").toLocaleString()}`);
+    expect(html).toContain(`Read ${new Date("2026-11-15T09:00:00.000Z").toLocaleString()}`);
+    expect(html).toContain("cloudflare/cloudflare");
+    expect(render(<VersionCard v={base} />)).not.toContain("did not finish");
   });
 
   it("offers Check now as a full-height button, and Checking... while it runs", () => {

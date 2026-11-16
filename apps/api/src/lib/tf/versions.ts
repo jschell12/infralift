@@ -113,6 +113,13 @@ export interface RepoVersionFacts {
   /** What was skipped or could not be parsed, so a partial read never reads
    *  as a full one. */
   notes: string[];
+  /** When this read happened (ISO). Set by the version check as it stores
+   *  the facts; absent on facts stored before it was recorded. */
+  readAt?: string;
+  /** A later read that failed for a passing reason (a rate limit, a timeout,
+   *  a 5xx), with when it failed. The facts above are kept as they were;
+   *  the next read that works drops this. */
+  lastFailure?: { problem: string; at: string };
 }
 
 /** A read that failed, in words a customer can act on. */

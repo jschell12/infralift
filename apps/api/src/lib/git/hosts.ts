@@ -212,16 +212,19 @@ function githubClient(token: string, apiBase: string): GitHostClient {
     host: "github",
     changeRequestNoun: "pull request",
 
+    // githubError for both: a git job calls repoExists and the version check
+    // and imports call defaultBranch, and a rate-limited 403 from either must
+    // read as a back-off rather than as the credential failing.
     async repoExists(repo) {
       const res = await gh("GET", `/repos/${repo}`);
       if (res.status === 404) return false;
-      if (!res.ok) throw new GitCommitError(`GitHub repo lookup failed (${res.status}) for ${repo}`);
+      if (!res.ok) throw await githubError(res, `GitHub repo lookup failed (${res.status}) for ${repo}`);
       return true;
     },
 
     async defaultBranch(repo) {
       const res = await gh("GET", `/repos/${repo}`);
-      if (!res.ok) throw new GitCommitError(`GitHub repo lookup failed (${res.status}) for ${repo}`);
+      if (!res.ok) throw await githubError(res, `GitHub repo lookup failed (${res.status}) for ${repo}`);
       return ((await res.json()) as { default_branch: string }).default_branch;
     },
 

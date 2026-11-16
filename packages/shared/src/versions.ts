@@ -50,8 +50,13 @@ export interface ProjectVersions {
   /** The branch that was read, and the directory in it ("" = the root). */
   ref: string | null;
   path: string | null;
-  /** Why the last read failed, in words; null when it worked. */
+  /** Why the last read failed, in words, when there are no readings to show;
+   *  null when it worked. */
   problem: string | null;
+  /** A later read that failed for a passing reason (a rate limit, a timeout,
+   *  the host down) while the readings above, from checkedAt, were kept.
+   *  `at` is when it failed. Null when the newest read worked. */
+  lastFailure: { problem: string; at: string } | null;
   /** What a read that worked skipped or could not parse. */
   notes: string[];
 }

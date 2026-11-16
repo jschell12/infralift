@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GitCommitError } from "./errors.js";
 import { GITLAB_TREE_PAGES, gitBlobSha, gitHostClient, REPO_READY } from "./hosts.js";
 
 // The GitLab client and GitHub's create-from-template, against fakes that
@@ -355,5 +356,69 @@ describe("bounded reads for team stacks", () => {
     }
     expect(await gl.readFile({ repo: "acme/stacks", path: "small", ref: "c", maxBytes: 999 })).toBe("ok");
     expect(await gl.readFile({ repo: "acme/stacks", path: "declared", ref: "c" })).toBe(big);
+  });
+});
+
+describe("GitHub repo lookups and rate limits", () => {
+  // Bodies and headers as GitHub documents them for the REST API
+  // (docs.github.com, "Rate limits for the REST API"): the primary limit is a
+  // 403 with x-ratelimit-remaining 0, the secondary one names itself in the
+  // message and may send retry-after. A token missing a permission is a 403
+  // with neither.
+  const primary = () =>
+    json(
+      {
+        message: "API rate limit exceeded for user ID 1.",
+        documentation_url: "https://docs.github.com/rest/overview/rate-limits-for-the-rest-api",
+      },
+      403,
+      { "x-ratelimit-limit": "5000", "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1794820000" }
+    );
+  const secondary = () =>
+    json(
+      {
+        message: "You have exceeded a secondary rate limit. Please wait a few minutes before you try again.",
+        documentation_url: "https://docs.github.com/rest/overview/rate-limits-for-the-rest-api#about-secondary-rate-limits",
+      },
+      403,
+      { "retry-after": "60", "x-ratelimit-remaining": "4990" }
+    );
+  const refused = () =>
+    json(
+      { message: "Resource not accessible by personal access token", documentation_url: "https://docs.github.com/rest/repos/repos#get-a-repository" },
+      403,
+      { "x-ratelimit-remaining": "4990" }
+    );
+
+  type Client = ReturnType<typeof gitHostClient>;
+  const lookups = [
+    ["defaultBranch", (gh: Client) => gh.defaultBranch("acme/web")],
+    ["repoExists", (gh: Client) => gh.repoExists("acme/web")],
+  ] as const;
+
+  it.each(lookups)("%s: a rate-limited 403 is a rate limit, primary or secondary", async (_name, call) => {
+    for (const answer of [primary, secondary]) {
+      fake("https://api.github.com", [(c) => (c.path === "/repos/acme/web" ? answer() : undefined)]);
+      const err = await call(gitHostClient("github", "t")).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(GitCommitError);
+      expect(err).toMatchObject({ hostStatus: 403, rateLimited: true });
+      expect((err as Error).message).not.toMatch(/rate limit/i);
+    }
+  });
+
+  it.each(lookups)("%s: a 403 that is not a rate limit is still the credential refusing", async (_name, call) => {
+    fake("https://api.github.com", [(c) => (c.path === "/repos/acme/web" ? refused() : undefined)]);
+    await expect(call(gitHostClient("github", "t"))).rejects.toMatchObject({ hostStatus: 403, rateLimited: false });
+  });
+
+  it("answers the default branch and whether the repository exists", async () => {
+    fake("https://api.github.com", [
+      (c) => (c.path === "/repos/acme/web" ? json({ full_name: "acme/web", default_branch: "trunk", private: true }) : undefined),
+      (c) => (c.path === "/repos/acme/gone" ? json({ message: "Not Found", documentation_url: "https://docs.github.com/rest/repos/repos#get-a-repository" }, 404) : undefined),
+    ]);
+    const gh = gitHostClient("github", "t");
+    expect(await gh.defaultBranch("acme/web")).toBe("trunk");
+    expect(await gh.repoExists("acme/web")).toBe(true);
+    expect(await gh.repoExists("acme/gone")).toBe(false);
   });
 });
