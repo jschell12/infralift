@@ -155,8 +155,13 @@ describe("checkProjectVersions", () => {
   it("backs off on a rate-limited 403 without marking the connection or overwriting the last facts", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => json({ message: "API rate limit exceeded" }, 403, { "x-ratelimit-remaining": "0" })));
     const readBefore = new Date("2026-11-15T09:00:00Z");
+    projectFindFirst.mockResolvedValueOnce({ versionFacts: { ...FACTS, readAt: readBefore.toISOString() } });
     expect(await svc.checkProjectVersions({ ...PROJECT, versionCheckedAt: readBefore }, NOW)).toBe(true);
-    expect(writes()).toHaveLength(1); // the claim only
+    expect(writes()[1]!.data.versionFacts).toEqual({
+      ...FACTS,
+      readAt: readBefore.toISOString(),
+      lastFailure: { problem: "GitHub asked infralift to slow down. It tries again on its next check.", at: NOW.toISOString() },
+    });
     expect(connUpdateMany).not.toHaveBeenCalled();
   });
 
@@ -164,6 +169,91 @@ describe("checkProjectVersions", () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("fetch failed"); }));
     expect(await svc.checkProjectVersions({ ...PROJECT }, NOW)).toBe(true);
     expect(writes()[1]!.data.versionFacts).toMatchObject({ ok: false, problem: "GitHub could not be read just now. infralift tries again on its next check." });
+  });
+
+  it("stamps a read that works with its time, which drops an earlier failure", async () => {
+    vi.stubGlobal("fetch", github({ "infra/main.tf": MAIN_TF }));
+    await svc.checkProjectVersions({ ...PROJECT, versionCheckedAt: new Date("2026-11-15T09:00:00Z") }, NOW);
+    const facts = writes()[1]!.data.versionFacts as Record<string, unknown>;
+    expect(facts).toMatchObject({ ok: true, readAt: NOW.toISOString() });
+    expect(facts).not.toHaveProperty("lastFailure");
+    expect(projectFindFirst).not.toHaveBeenCalled();
+  });
+
+  describe("a passing failure keeps the last good readings", () => {
+    const readBefore = new Date("2026-11-15T09:00:00Z");
+    const timeout = vi.fn(async () => {
+      // What httpFetch throws when the git host's deadline passes.
+      const { HttpTimeoutError } = await import("../lib/http.js");
+      throw new HttpTimeoutError("api.github.com", 15_000);
+    });
+    const badGateway = vi.fn(async () => new Response("<html><body><h1>502 Bad Gateway</h1></body></html>", { status: 502, headers: { "content-type": "text/html" } }));
+
+    it.each([
+      ["a timeout", timeout, "GitHub could not be read just now. infralift tries again on its next check."],
+      ["a 502", badGateway, "GitHub could not be read just now (502). infralift tries again on its next check."],
+    ])("on %s: the facts stay, the failure and its time are recorded beside them", async (_name, fetchImpl, problem) => {
+      vi.stubGlobal("fetch", fetchImpl);
+      projectFindFirst.mockResolvedValueOnce({ versionFacts: { ...FACTS, readAt: readBefore.toISOString() } });
+      await svc.checkProjectVersions({ ...PROJECT, versionCheckedAt: readBefore }, NOW);
+      expect(projectFindFirst.mock.calls[0]![0]).toEqual({ where: { id: "proj_1", orgId: "org_mine" }, select: { versionFacts: true } });
+      expect(writes()[1]!.data.versionFacts).toEqual({ ...FACTS, readAt: readBefore.toISOString(), lastFailure: { problem, at: NOW.toISOString() } });
+      expect(connUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["a timeout", timeout],
+      ["a 502", badGateway],
+    ])("on %s: a project never read before records the problem and stays unknown", async (_name, fetchImpl) => {
+      vi.stubGlobal("fetch", fetchImpl);
+      projectFindFirst.mockResolvedValueOnce({ versionFacts: null });
+      await svc.checkProjectVersions({ ...PROJECT, versionCheckedAt: null }, NOW);
+      const stored = writes()[1]!.data.versionFacts;
+      expect(stored).toMatchObject({ ok: false, problem: expect.stringContaining("could not be read just now") });
+
+      projectFindMany.mockResolvedValueOnce([row({ versionFacts: stored, versionCheckedAt: NOW })]);
+      const [p] = (await svc.listProjectVersions("org_mine", { limit: 10 })).projects;
+      expect(p).toMatchObject({ status: "unknown", terraform: null, providers: [], lastFailure: null });
+      expect(p!.problem).toContain("could not be read just now");
+    });
+
+    it("replaces a stored problem rather than keeping it as readings", async () => {
+      vi.stubGlobal("fetch", badGateway);
+      projectFindFirst.mockResolvedValueOnce({ versionFacts: { ok: false, ref: "main", path: "infra", problem: "No GitHub connection to read the repository with." } });
+      await svc.checkProjectVersions({ ...PROJECT, versionCheckedAt: readBefore }, NOW);
+      expect(writes()[1]!.data.versionFacts).toEqual({ ok: false, ref: "main", path: "infra", problem: "GitHub could not be read just now (502). infralift tries again on its next check." });
+    });
+
+    it("dates facts stored before readAt existed by the claim they were read at", async () => {
+      vi.stubGlobal("fetch", badGateway);
+      projectFindFirst.mockResolvedValueOnce({ versionFacts: { ...FACTS } });
+      await svc.checkProjectVersions({ ...PROJECT, versionCheckedAt: readBefore }, NOW);
+      expect(writes()[1]!.data.versionFacts).toMatchObject({ readAt: readBefore.toISOString() });
+    });
+
+    it("still replaces the facts on a 404, which is an answer about the repository", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => json({ message: "Not Found" }, 404)));
+      await svc.checkProjectVersions({ ...PROJECT, versionCheckedAt: readBefore }, NOW);
+      expect(projectFindFirst).not.toHaveBeenCalled();
+      expect(writes()[1]!.data.versionFacts).toMatchObject({ ok: false, problem: expect.stringContaining("was not found") });
+    });
+  });
+
+  it("does not mark the connection when the default-branch lookup is rate limited", async () => {
+    // destBranch empty: the check asks GitHub for the default branch first.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (new URL(url).pathname === "/repos/acme/web") {
+          return json({ message: "API rate limit exceeded for user ID 1.", documentation_url: "https://docs.github.com/rest/overview/rate-limits-for-the-rest-api" }, 403, { "x-ratelimit-remaining": "0" });
+        }
+        return json({ message: "Not Found" }, 404);
+      })
+    );
+    projectFindFirst.mockResolvedValueOnce({ versionFacts: { ...FACTS } });
+    await svc.checkProjectVersions({ ...PROJECT, destBranch: "", versionCheckedAt: new Date("2026-11-15T09:00:00Z") }, NOW);
+    expect(connUpdateMany).not.toHaveBeenCalled();
+    expect(writes()[1]!.data.versionFacts).toMatchObject({ ok: true, lastFailure: { problem: expect.stringContaining("slow down") } });
   });
 
   it("says why a never-read project has no facts after a rate limit", async () => {
@@ -337,6 +427,42 @@ describe("listProjectVersions", () => {
     });
     expect(a!.stack).toMatchObject({ have: "1.0.0", want: "2.0.0", status: "behind-major" });
     expect(b!.stack).toMatchObject({ status: "unknown", note: "Not compared: the stack belongs to another organization." });
+  });
+
+  it("is unknown, never current, for a team stack whose source has no valid version", async () => {
+    // The pinned version was later marked invalid, and no other is valid, so
+    // the newest-valid query finds nothing for the source.
+    const pinned = { id: "sv_1", manifest: { version: "1.0.0" }, stackSourceId: "src_1", source: { orgId: "org_mine" } };
+    projectFindMany.mockResolvedValueOnce([row({ source: "stack", stackVersionId: "sv_1", stackVersion: pinned })]);
+    stackVersionFindMany.mockResolvedValueOnce([]);
+    const [p] = (await svc.listProjectVersions("org_mine", { limit: 10 })).projects;
+    expect(p!.stack).toEqual({
+      name: "stack release",
+      have: "1.0.0",
+      want: null,
+      status: "unknown",
+      note: "Not compared: this stack has no valid version to compare with.",
+    });
+    expect(p!.status).not.toBe("current");
+  });
+
+  it("is current for a team stack pinned to its source's newest valid version", async () => {
+    const pinned = { id: "sv_2", manifest: { version: "2.0.0" }, stackSourceId: "src_1", source: { orgId: "org_mine" } };
+    projectFindMany.mockResolvedValueOnce([row({ source: "stack", stackVersionId: "sv_2", stackVersion: pinned })]);
+    stackVersionFindMany.mockResolvedValueOnce([{ id: "sv_2", stackSourceId: "src_1", manifest: { version: "2.0.0" } }]);
+    const [p] = (await svc.listProjectVersions("org_mine", { limit: 10 })).projects;
+    expect(p!.stack).toMatchObject({ have: "2.0.0", want: "2.0.0", status: "current" });
+  });
+
+  it("dates kept readings by their own read and shows the later failure beside them", async () => {
+    const readAt = "2026-11-15T09:00:00.000Z";
+    const lastFailure = { problem: "GitHub could not be read just now (502). infralift tries again on its next check.", at: NOW.toISOString() };
+    projectFindMany.mockResolvedValueOnce([row({ versionFacts: { ...FACTS, readAt, lastFailure }, versionCheckedAt: NOW }), row({ id: "proj_2", versionCheckedAt: NOW })]);
+    const [a, b] = (await svc.listProjectVersions("org_mine", { limit: 10 })).projects;
+    expect(a).toMatchObject({ checkedAt: readAt, lastFailure, problem: null, status: "behind-minor" });
+    expect(a!.providers).toHaveLength(2);
+    // Facts stored before readAt existed fall back to the claim time.
+    expect(b).toMatchObject({ checkedAt: NOW.toISOString(), lastFailure: null });
   });
 });
 

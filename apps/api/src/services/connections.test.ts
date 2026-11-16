@@ -221,6 +221,30 @@ describe("markInvalidOnAuthFailure", () => {
     expect(svc.authFailureStatus(new GitCommitError("x (401)"), "connector")).toBeNull();
     expect(svc.authFailureStatus(new ProviderHttpError("x", 401), "git")).toBeNull();
   });
+
+  it("never marks on GitHub's rate-limited 403, for every caller, and still marks a refused 403", async () => {
+    // Through githubError, as the git host client builds them. The git jobs
+    // (pipeline.ts) mark on whatever they catch, so the guard has to be here.
+    const { githubError } = await import("../lib/git/hosts.js");
+    const gh = { id: "conn_1", provider: "github" };
+    const limited = await githubError(
+      new Response(JSON.stringify({ message: "API rate limit exceeded for user ID 1.", documentation_url: "https://docs.github.com/rest/overview/rate-limits-for-the-rest-api" }), {
+        status: 403,
+        headers: { "x-ratelimit-remaining": "0" },
+      }),
+      "GitHub repo lookup failed (403) for a/b"
+    );
+    expect(limited.rateLimited).toBe(true);
+    expect(svc.authFailureStatus(limited, "git")).toBeNull();
+    expect(await svc.markInvalidOnAuthFailure(gh, limited, "git", "a git job")).toBe(false);
+    expect(updateMany).not.toHaveBeenCalled();
+
+    const refused = await githubError(
+      new Response(JSON.stringify({ message: "Resource not accessible by personal access token" }), { status: 403, headers: { "x-ratelimit-remaining": "4990" } }),
+      "GitHub repo lookup failed (403) for a/b"
+    );
+    expect(await svc.markInvalidOnAuthFailure(gh, refused, "git", "a git job")).toBe(true);
+  });
 });
 
 describe("deleteConnection", () => {

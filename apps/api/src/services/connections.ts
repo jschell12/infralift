@@ -402,13 +402,16 @@ export async function markInvalid(connectionId: string, reason: string): Promise
 }
 
 /** Which errors count as the provider refusing the credential: a 401 or 403
- *  from the provider the connection is for. A 5xx, a 404, a network error or
- *  an error from some other system (TFC inside a git job) does not. */
+ *  from the provider the connection is for. A 5xx, a 404, a network error,
+ *  GitHub's rate limit (a 403 that is a back-off, see githubError) or an
+ *  error from some other system (TFC inside a git job) does not. */
 export type AuthSource = "connector" | "git";
 
 export function authFailureStatus(err: unknown, source: AuthSource): number | null {
   let status: unknown = null;
-  if (source === "git" && err instanceof GitCommitError) status = err.hostStatus;
+  // Checked here rather than at each caller: the git jobs in pipeline.ts mark
+  // on any error they catch, and a rate limit there is not a dead credential.
+  if (source === "git" && err instanceof GitCommitError && !err.rateLimited) status = err.hostStatus;
   // ProviderHttpError, or a collectors Error carrying the same field.
   // AppError.status is our own response code, not the provider's.
   if (source === "connector" && err instanceof Error && !(err instanceof AppError)) {

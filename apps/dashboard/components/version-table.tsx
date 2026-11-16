@@ -102,6 +102,11 @@ export function VersionCard({
         </p>
       ) : null}
       {v.problem ? <p className="text-sm text-text mb-2 break-words">{v.problem}</p> : null}
+      {v.lastFailure ? (
+        <p className="text-sm text-text mb-2 break-words">
+          {`The check at ${new Date(v.lastFailure.at).toLocaleString()} did not finish: ${v.lastFailure.problem} These are the readings from before.`}
+        </p>
+      ) : null}
       {items.length ? (
         <ul className="list-none p-0 m-0">
           {items.map((item) => (
