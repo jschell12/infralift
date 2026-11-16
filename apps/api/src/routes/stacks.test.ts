@@ -101,6 +101,9 @@ describe("POST /stacks/:slug/projects", () => {
     expect(out.status).toBe(202);
     const data = h.projectCreate.mock.calls[0][0].data;
     expect(data).toMatchObject({ orgId: "org-a", source: "stack", stackSlug: "app-foundry-hetzner" });
+    // The release it starts from, read from the stack's own manifest (ADR 0012).
+    expect(data.stackRelease).toBe(getStack("app-foundry-hetzner")!.version);
+    expect(data.stackRelease).toMatch(/^\d+\.\d+\.\d+$/);
     expect(data.providerConfig).toMatchObject({ ...example, server_type: "cx23", backend: "r2" });
     expect(h.jobCreate.mock.calls[0][0].data.kind).toBe("stack");
     expect(h.runJob).toHaveBeenCalledWith("job1");
@@ -228,6 +231,8 @@ describe("PUT /stacks/projects/:id/settings", () => {
       server_type: "cx33",
       max_previews: 3,
     });
+    // A settings change is not an upgrade: the recorded release stays put.
+    expect(h.projectUpdate.mock.calls[0][0].data).not.toHaveProperty("stackRelease");
     expect(h.jobCreate.mock.calls[0][0].data).toMatchObject({
       kind: "stack",
       argumentsJson: expect.objectContaining({ server_type: "cx33" }),
@@ -344,7 +349,7 @@ describe("infrastructure stacks (ADR 0010)", () => {
     });
     expect(out.status).toBe(202);
     const data = h.projectCreate.mock.calls[0][0].data;
-    expect(data).toMatchObject({ source: "stack", stackSlug: "network-baseline", createRepo: false });
+    expect(data).toMatchObject({ source: "stack", stackSlug: "network-baseline", createRepo: false, stackRelease: network.version });
     expect(data.providerConfig).toEqual({
       ...network.example,
       single_nat: false,

@@ -140,6 +140,20 @@ describe("checkManifest", () => {
     expect(checkManifest(withModules, paths)).toEqual([]);
   });
 
+  it("takes a MAJOR.MINOR.PATCH version, and a team manifest may leave it out (ADR 0012)", () => {
+    const teamLegal = { ...catalog, inputSchema: withoutPatterns(catalog.inputSchema) };
+    expect(catalog.version).toBe("1.0.0");
+    expect(checkManifest(teamLegal, paths)).toEqual([]);
+    const { version: _v, ...unversioned } = teamLegal;
+    expect(checkManifest(unversioned, paths)).toEqual([]);
+    for (const good of ["0.0.0", "1.2.3", "10.20.30", "999999999.0.1"]) {
+      expect(checkManifest({ ...teamLegal, version: good }, paths), good).toEqual([]);
+    }
+    for (const bad of ["", "1", "1.0", "v1.0.0", "1.0.0-rc.1", "1.0.0+build", "01.0.0", "1.00.0", " 1.0.0", "1.0.0\n", "1000000000.0.0", 1]) {
+      expect(checkManifest({ ...teamLegal, version: bad }, paths).join(), JSON.stringify(bad)).toMatch(/stack\.json\/version/);
+    }
+  });
+
   it("refuses a manifest missing what rendering needs", () => {
     const { deliveries: _d, ...noDeliveries } = catalog;
     expect(checkManifest(noDeliveries, paths).join()).toMatch(/must have required property 'deliveries'/);

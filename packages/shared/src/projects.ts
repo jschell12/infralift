@@ -73,6 +73,10 @@ export interface CodegenProject extends ProjectCommon {
 export interface StackProject extends ProjectCommon {
   kind: "stack";
   stackSlug: string;
+  /** The catalog stack release the project was created from (ADR 0012).
+   *  Null when unknown: created before releases were recorded, or from a
+   *  team stack. */
+  stackRelease: string | null;
   /** The stack's settings, with its defaults filled in. */
   providerConfig: Record<string, unknown>;
   /** Null until infralift has read the drift check. */

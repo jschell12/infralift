@@ -2,7 +2,7 @@ import type { Adopter } from "./types.js";
 import { tfName } from "./types.js";
 
 // Resource names and import ids are those of the cloudflare/cloudflare v5
-// provider, which codegen pins ("~> 5.0"). v4 named DNS records
+// provider, which the version baseline pins (lib/tf/baseline.ts). v4 named DNS records
 // cloudflare_record and Workers cloudflare_worker_script; neither exists in v5.
 //
 //   cloudflare_zone            <zone_id>

@@ -41,6 +41,10 @@ type When = Record<string, string>;
 export interface StackManifest {
   slug: string;
   name: string;
+  /** The stack's release, MAJOR.MINOR.PATCH (ADR 0012). Every catalog stack
+   *  has one and a project made from it records it (TfProject.stackRelease).
+   *  Team stacks are pinned by commit instead and may leave it out. */
+  version?: string;
   description: string;
   /** The app this stack deploys, and the GitHub template a new repo comes
    *  from. Only app stacks have one; infrastructure stacks (ADR 0010) do not,

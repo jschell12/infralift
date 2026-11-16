@@ -15,3 +15,4 @@ One page per decision that shaped infralift: what was decided, why, and what it 
 | [0009](0009-stacks-modules-and-team-stacks.md) | Stacks are made of modules, and teams bring their own from git | 2026-11-10 |
 | [0010](0010-a-project-is-one-accounts-infrastructure.md) | A project is one cloud account's infrastructure, not an app | 2026-11-11 |
 | [0011](0011-one-owner-per-cloud-resource.md) | Each cloud resource has one owning project, recorded in a ledger | 2026-11-11 |
+| [0012](0012-versioned-stacks-and-upgrades.md) | Catalog stacks are released by version, and upgrades arrive as pull requests | 2026-11-16 |

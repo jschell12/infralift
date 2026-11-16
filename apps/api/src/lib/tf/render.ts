@@ -1,4 +1,5 @@
 import { Ajv2020 as Ajv } from "ajv/dist/2020.js";
+import { REQUIRED_VERSION } from "./baseline.js";
 
 // ---------------------------------------------------------------------------
 // Terraform template rendering.
@@ -90,7 +91,7 @@ export function renderProviderFile(cfg: ProviderConfig): string {
     `}`,
     ``,
     `terraform {`,
-    `  required_version = ">= 1.5"`,
+    `  required_version = "${REQUIRED_VERSION.generated}"`,
     ``,
     `  required_providers {`,
     `    ${cfg.name} = {`,

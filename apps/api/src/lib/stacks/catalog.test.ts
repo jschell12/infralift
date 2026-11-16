@@ -1,9 +1,12 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { TfInputValidationError, type TfArguments } from "../tf/render.js";
+import { PROVIDER_VERSIONS, REQUIRED_VERSION } from "../tf/baseline.js";
 import { DRIFT, DRIFT_JOB_NAME } from "../import/contract.js";
-import { getStack, listStacks, renderStack, resolveStackInputs, type StackManifest } from "./index.js";
+import { diskTree, getStack, listStacks, renderStack, resolveStackInputs, type StackManifest } from "./index.js";
+import { isStackRelease } from "./manifest-schema.js";
 import { checkManifest } from "./team.js";
 
 // The infrastructure stacks (ADR 0010): one cloud account's modules, no app.
@@ -78,16 +81,13 @@ describe("infrastructure catalog stacks", () => {
     }
   });
 
-  it.each(INFRA)("%s: pins hashicorp/aws as adoption does (lib/tf/codegen.ts), in the root and every module", (slug) => {
+  it.each(INFRA)("%s: pins hashicorp/aws from the baseline, as adoption does, in the root and every module", (slug) => {
     const files = render(slug);
     const versionFiles = [...files].filter(([p, c]) => p.endsWith(".tf") && c.includes('source  = "hashicorp/aws"'));
     expect(versionFiles.length).toBe((stack(slug).modules ?? []).length + 1);
-    // Read from codegen's own table, so moving adoption's pin fails here
-    // until the stacks move with it.
-    const codegen = readFileSync(new URL("../tf/codegen.ts", import.meta.url), "utf8");
-    const pin = codegen.match(/aws: \{ name: "aws", source: "hashicorp\/aws", version: "([^"]+)" \}/)?.[1];
-    expect(pin).toBeTruthy();
-    for (const [path, content] of versionFiles) expect(content, path).toContain(`version = "${pin}"`);
+    for (const [path, content] of versionFiles) {
+      expect(content, path).toContain(`version = "${PROVIDER_VERSIONS["hashicorp/aws"]}"`);
+    }
   });
 
   it.each(INFRA)("%s: r2 encrypts state and keeps its bucket credentials apart from AWS's", (slug) => {
@@ -232,6 +232,128 @@ describe("static-site-cdn", () => {
     for (const bad of <TfArguments[]>[{ domain: "https://www.example.com" }, { zone: "example" }, { price_class: "PriceClass_50" }]) {
       expect(() => renderStack(s, { ...s.example, ...bad }), JSON.stringify(bad)).toThrow(TfInputValidationError);
     }
+  });
+});
+
+// -- releases and the version baseline (ADR 0012) ------------------------------
+
+const STACKS_DIR = fileURLToPath(new URL("../../../stacks/", import.meta.url));
+
+/** Every Terraform file a catalog stack carries on disk, rendered or copied:
+ *  files/, deliveries/<d>/files/ and templates/. Read raw, so a pin behind a
+ *  delivery or a backend the examples do not render is still checked. */
+function terraformFiles(slug: string): { path: string; content: string }[] {
+  const tree = diskTree(`${STACKS_DIR}${slug}`);
+  return tree
+    .list(".")
+    .map((f) => f.path)
+    .filter((path) => /\.tf(\.tmpl)?$/.test(path))
+    .map((path) => ({ path, content: tree.read(path) }));
+}
+
+/**
+ * What a stack file says that the baseline does not. A provider entry is a
+ * `name = { ... }` map with a registry `source`; one without a `version`
+ * takes its pin from another file in the same module (app-foundry's main.tf
+ * and generated/versions.tf), but its source must still be in the baseline.
+ * The R2 backend file needs a newer floor than the rest of a stack, because
+ * of its encryption block.
+ */
+function baselineProblems(path: string, content: string): string[] {
+  const problems: string[] = [];
+  for (const m of content.matchAll(/\b([a-z0-9_-]+)\s*=\s*\{([^{}]*)\}/g)) {
+    const source = m[2].match(/\bsource\s*=\s*"([^"]+)"/)?.[1];
+    if (!source || !/^[a-z0-9-]+\/[a-z0-9-]+$/.test(source)) continue;
+    const pinned = PROVIDER_VERSIONS[source];
+    if (!pinned) {
+      problems.push(`${path}: ${source} is not in the baseline`);
+      continue;
+    }
+    const version = m[2].match(/\bversion\s*=\s*"([^"]+)"/)?.[1];
+    if (version !== undefined && version !== pinned) problems.push(`${path}: ${source} ${version}, baseline ${pinned}`);
+  }
+  const floor = /^\s*encryption\s*\{/m.test(content) ? REQUIRED_VERSION.stateEncryption : REQUIRED_VERSION.stack;
+  for (const m of content.matchAll(/\brequired_version\s*=\s*"([^"]+)"/g)) {
+    if (m[1] !== floor) problems.push(`${path}: required_version ${m[1]}, baseline ${floor}`);
+  }
+  return problems;
+}
+
+const pinCount = (content: string) => [...content.matchAll(/\bversion\s*=\s*"~>/g)].length;
+const floorCount = (content: string) => [...content.matchAll(/\brequired_version\s*=/g)].length;
+
+describe("stack releases", () => {
+  const catalog = listStacks();
+
+  it("covers every catalog stack", () => {
+    expect(catalog.map((s) => s.slug)).toEqual(expect.arrayContaining(["app-foundry-hetzner", ...INFRA]));
+  });
+
+  it.each(catalog.map((s) => s.slug))("%s: has a MAJOR.MINOR.PATCH version", (slug) => {
+    expect(isStackRelease(stack(slug).version), String(stack(slug).version)).toBe(true);
+  });
+
+  it.each(catalog.map((s) => s.slug))("%s: CHANGELOG.md starts at the version stack.json names, newest first", (slug) => {
+    const path = `${STACKS_DIR}${slug}/CHANGELOG.md`;
+    expect(existsSync(path), path).toBe(true);
+    const headings = [...readFileSync(path, "utf8").matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+    expect(headings.length).toBeGreaterThan(0);
+    const releases = headings.map((h) => {
+      const m = h.match(/^(\d+\.\d+\.\d+) \((\d{4}-\d{2}-\d{2})\)$/);
+      expect(m, `heading "${h}"`).not.toBeNull();
+      return m![1];
+    });
+    expect(releases[0]).toBe(stack(slug).version);
+    const order = (v: string) => v.split(".").map(Number);
+    for (let i = 1; i < releases.length; i++) {
+      const [a, b] = [order(releases[i - 1]), order(releases[i])];
+      const newer = a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+      expect(newer, `${releases[i - 1]} before ${releases[i]}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("does not render CHANGELOG.md into the customer's repository", () => {
+    for (const slug of INFRA) {
+      expect([...render(slug).keys()].some((p) => p.endsWith("CHANGELOG.md")), slug).toBe(false);
+    }
+  });
+});
+
+describe("version baseline (lib/tf/baseline.ts)", () => {
+  const slugs = listStacks().map((s) => s.slug);
+
+  it.each(slugs)("%s: every provider pin and required_version on disk agrees with the baseline", (slug) => {
+    const files = terraformFiles(slug);
+    // Guard the other boundary: a walk that found nothing would pass.
+    expect(files.length).toBeGreaterThan(0);
+    expect(files.reduce((n, f) => n + pinCount(f.content), 0), "provider pins found").toBeGreaterThan(0);
+    expect(files.reduce((n, f) => n + floorCount(f.content), 0), "required_version found").toBeGreaterThan(0);
+    expect(files.flatMap((f) => baselineProblems(f.path, f.content))).toEqual([]);
+  });
+
+  it("catches a moved pin, an unlisted provider and a wrong floor in a real stack file", () => {
+    // The checker above is only worth something if it can fail. These are
+    // the stacks' own files with one thing changed each.
+    const vpc = terraformFiles("network-baseline").find((f) => f.path.endsWith("modules/vpc/versions.tf"))!;
+    expect(baselineProblems(vpc.path, vpc.content)).toEqual([]);
+    const moved = vpc.content.replace(PROVIDER_VERSIONS["hashicorp/aws"], "~> 6.80.0");
+    expect(baselineProblems(vpc.path, moved)).toEqual([`${vpc.path}: hashicorp/aws ~> 6.80.0, baseline ~> 6.73.0`]);
+    const unlisted = vpc.content.replace('"hashicorp/aws"', '"hashicorp/random"');
+    expect(baselineProblems(vpc.path, unlisted)).toEqual([`${vpc.path}: hashicorp/random is not in the baseline`]);
+    const floor = vpc.content.replace(`"${REQUIRED_VERSION.stack}"`, '">= 1.5"');
+    expect(baselineProblems(vpc.path, floor)).toEqual([`${vpc.path}: required_version >= 1.5, baseline ${REQUIRED_VERSION.stack}`]);
+
+    // The R2 backend's floor is the encryption one, and the stack floor there is wrong.
+    const backend = terraformFiles("network-baseline").find((f) => f.path === "templates/backend-r2.tf.tmpl")!;
+    expect(baselineProblems(backend.path, backend.content)).toEqual([]);
+    const lowered = backend.content.replace(`"${REQUIRED_VERSION.stateEncryption}"`, `"${REQUIRED_VERSION.stack}"`);
+    expect(baselineProblems(backend.path, lowered)).toHaveLength(1);
+
+    // A versionless entry (app-foundry's main.tf) is checked for its source only.
+    const main = terraformFiles("app-foundry-hetzner").find((f) => f.path === "templates/main.tf.tmpl")!;
+    expect(main.content).toContain('source = "hetznercloud/hcloud"');
+    expect(baselineProblems(main.path, main.content)).toEqual([]);
+    expect(baselineProblems(main.path, main.content.replace("hetznercloud/hcloud", "hetznercloud/hcloud2"))).toHaveLength(1);
   });
 });
 

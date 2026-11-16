@@ -5,10 +5,25 @@
 //
 // `modules` is optional and descriptive for now. A module manages one important
 // resource (a database, a server) plus what exists only to serve it.
+//
+// `version` is the stack's release (ADR 0012). Every catalog stack has one,
+// with a CHANGELOG.md beside its stack.json (catalog.test.ts holds both to
+// it). It is optional here because a team stack is pinned by commit (ADR 0009)
+// and registered team stacks predate the field.
 
 const slug = { type: "string", pattern: "^[a-z0-9][a-z0-9-]{0,62}$" };
 const text = { type: "string", minLength: 1, maxLength: 2000 };
 const when = { type: "object", additionalProperties: { type: "string" } };
+// MAJOR.MINOR.PATCH, digits only. A release is immutable and ordered, so
+// pre-release and build suffixes are not accepted. Bounded and free of nested
+// quantifiers, because team manifests are checked against this schema too.
+export const STACK_RELEASE_PATTERN = "^(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$";
+
+/** True for a stack release such as "1.4.0". */
+export function isStackRelease(value: unknown): value is string {
+  return typeof value === "string" && new RegExp(STACK_RELEASE_PATTERN).test(value);
+}
+
 const named = {
   type: "object",
   required: ["slug", "name"],
@@ -24,6 +39,7 @@ export const STACK_MANIFEST_SCHEMA = {
   properties: {
     slug,
     name: text,
+    version: { type: "string", pattern: STACK_RELEASE_PATTERN },
     description: text,
     template: {
       type: "object",

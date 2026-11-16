@@ -10,6 +10,7 @@ const base = {
   assessmentId: null,
   migrationTarget: null,
   stackSlug: "app-foundry-hetzner",
+  stackRelease: "1.0.0",
   importJson: null,
   importCheckJson: null,
   gitHost: "github",
@@ -26,9 +27,19 @@ const base = {
 } as unknown as ProjectRow;
 
 describe("toProjectView", () => {
+  it("gives a stack project its recorded release, and null when none was recorded", () => {
+    // Null is "unknown" (made before migration 0031), not an error: a stack
+    // project without a release is still a valid stack project.
+    expect(toProjectView(base)).toMatchObject({ kind: "stack", stackRelease: "1.0.0" });
+    expect(toProjectView({ ...base, stackRelease: null } as ProjectRow)).toMatchObject({ kind: "stack", stackRelease: null });
+    expect(toProjectView({ ...base, source: "imported", importJson: { path: "infra" } } as ProjectRow)).not.toHaveProperty(
+      "stackRelease"
+    );
+  });
+
   it("gives each kind only its own fields", () => {
     const stack = toProjectView(base);
-    expect(stack).toMatchObject({ kind: "stack", stackSlug: "app-foundry-hetzner", providerConfig: { name: "acme" } });
+    expect(stack).toMatchObject({ kind: "stack", stackSlug: "app-foundry-hetzner", stackRelease: "1.0.0", providerConfig: { name: "acme" } });
     expect(stack).not.toHaveProperty("importJson");
     expect(stack).not.toHaveProperty("templateVersion");
 

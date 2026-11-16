@@ -18,6 +18,7 @@
 
 import type { ResourceInventoryItem } from "@infralift/shared";
 import type { TargetPlan } from "../sizing.js";
+import { providerVersion } from "./baseline.js";
 
 export type MigrationTarget = "cloudflare" | "hetzner";
 
@@ -41,21 +42,21 @@ export function targetProviders(
     reqs.push({
       name: "cloudflare",
       source: "cloudflare/cloudflare",
-      version: "~> 5.0",
+      version: providerVersion("cloudflare/cloudflare"),
     });
   } else {
     reqs.push({
       name: "hcloud",
       source: "hetznercloud/hcloud",
-      version: "~> 1.68",
+      version: providerVersion("hetznercloud/hcloud"),
     });
   }
 
   if (plan.postgres) {
-    reqs.push({ name: "neon", source: "kislerdm/neon", version: "~> 0.15" });
+    reqs.push({ name: "neon", source: "kislerdm/neon", version: providerVersion("kislerdm/neon") });
   }
   if (plan.redis) {
-    reqs.push({ name: "upstash", source: "upstash/upstash", version: "~> 2.1" });
+    reqs.push({ name: "upstash", source: "upstash/upstash", version: providerVersion("upstash/upstash") });
   }
 
   return reqs;

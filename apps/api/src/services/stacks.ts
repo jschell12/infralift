@@ -174,6 +174,10 @@ export async function createStackProject(orgId: string, slug: string, input: Sta
         name: input.name,
         source: "stack",
         stackSlug: stack.slug,
+        // The release the project starts from (ADR 0012). Settings changes
+        // re-render from whatever is on disk and do not move it; recording an
+        // upgrade is the upgrade pull request's job, which does not exist yet.
+        stackRelease: stack.version ?? null,
         gitHost: input.gitHost,
         gitConnectionId: connection.id,
         createRepo: input.createRepo,

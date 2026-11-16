@@ -1,6 +1,7 @@
 {
   "slug": "network-baseline",
   "name": "Network baseline (AWS)",
+  "version": "1.0.0",
   "description": "A VPC with public and private subnets across 2 or 3 zones, NAT (one shared gateway by default), flow logs to CloudWatch with retention, and the default security group locked down. Estimated cost at the defaults: about $37/month plus traffic, mostly the NAT gateway (us-east-1 list prices, 2026-11-14).",
   "target": {
     "slug": "aws",
